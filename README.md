@@ -2,11 +2,13 @@
 
 ![OpenClaw Publisher：从发布准备到增长验证的 ClawHub 产品线](assets/openclaw-publisher-hero.svg)
 
+[![Metrics Tools CI](https://github.com/bonniegeng-max/openclaw-publisher/actions/workflows/metrics-tools-ci.yml/badge.svg)](https://github.com/bonniegeng-max/openclaw-publisher/actions/workflows/metrics-tools-ci.yml)
+
 Ship ClawHub skills with evidence, not guesswork.
 
 这里是一组围绕 ClawHub 发布、排障、验证和增长的 Skill，也是一条可复用的 GitHub → ClawHub 自动发布链路。每个产品都来自真实发布问题，并经过公开 registry 检查与独立安装验证。
 
-[ClawHub Publisher](https://clawhub.ai/user/bonniegeng-max) · [Growth Monitor](skill_growth_monitor.md) · [Idea Backlog](skill_idea_backlog.md) · [Contributing](CONTRIBUTING.md)
+[ClawHub Publisher](https://clawhub.ai/user/bonniegeng-max) · [Growth Monitor](skill_growth_monitor.md) · [Automation Protocol](AGENTS.md) · [Idea Backlog](skill_idea_backlog.md) · [Contributing](CONTRIBUTING.md)
 
 ## 当前状态
 

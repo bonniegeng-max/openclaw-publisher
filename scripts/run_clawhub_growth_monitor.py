@@ -8,11 +8,13 @@ import json
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
+DEFAULT_MIN_INTERVAL_HOURS = 144
 
 
 def run_child(
@@ -76,6 +78,59 @@ def load_existing_snapshot(path: Path) -> dict[str, Any] | None:
     return read_json_object(path)
 
 
+def parse_collected_at(snapshot: dict[str, Any], source: str) -> datetime:
+    value = snapshot.get("collectedAt")
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{source}：collectedAt 必须是非空 ISO 8601 字符串")
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"{source}：collectedAt 不是有效的 ISO 8601 时间") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{source}：collectedAt 必须包含时区")
+    return parsed
+
+
+def evaluate_run_guard(
+    old_metrics: dict[str, Any] | None,
+    old_search: dict[str, Any] | None,
+    now: datetime,
+    min_interval_hours: float,
+    force: bool,
+) -> dict[str, Any]:
+    if min_interval_hours <= 0:
+        raise ValueError("min-interval-hours 必须大于 0")
+    if now.tzinfo is None:
+        raise ValueError("当前时间必须包含时区")
+    if force:
+        return {"skip": False, "reason": "显式强制运行", "ageHours": None}
+    if old_metrics is None or old_search is None:
+        return {"skip": False, "reason": "至少缺少一类历史快照", "ageHours": None}
+
+    latest_time = max(
+        parse_collected_at(old_metrics, "指标 latest"),
+        parse_collected_at(old_search, "搜索 latest"),
+    )
+    age_hours = (now - latest_time).total_seconds() / 3600
+    if age_hours < 0:
+        raise ValueError("现有 latest 快照时间晚于当前时间")
+    if age_hours < min_interval_hours:
+        return {
+            "skip": True,
+            "reason": (
+                f"距最近成功采集仅 {age_hours:.2f} 小时，"
+                f"小于默认门槛 {min_interval_hours:g} 小时"
+            ),
+            "ageHours": age_hours,
+        }
+    return {
+        "skip": False,
+        "reason": f"距最近成功采集 {age_hours:.2f} 小时",
+        "ageHours": age_hours,
+    }
+
+
 def promote_snapshot(
     staged_payload: dict[str, Any],
     existing_payload: dict[str, Any] | None,
@@ -94,6 +149,9 @@ def run_monitor(
     python_bin: str,
     clawhub_bin: str,
     timeout: int,
+    min_interval_hours: float = DEFAULT_MIN_INTERVAL_HOURS,
+    force: bool = False,
+    now: datetime | None = None,
     runner: RunCommand = subprocess.run,
 ) -> dict[str, Any]:
     root = root.resolve()
@@ -111,6 +169,21 @@ def run_monitor(
 
     old_metrics = load_existing_snapshot(metrics_latest)
     old_search = load_existing_snapshot(search_latest)
+    guard = evaluate_run_guard(
+        old_metrics,
+        old_search,
+        now or datetime.now(timezone.utc),
+        min_interval_hours,
+        force,
+    )
+    if guard["skip"]:
+        return {
+            "skipped": True,
+            "skipReason": guard["reason"],
+            "ageHours": guard["ageHours"],
+            "metricsCompared": False,
+            "searchCompared": False,
+        }
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(
@@ -221,6 +294,9 @@ def run_monitor(
             write_text_atomic(search_report, search_report_text)
 
     return {
+        "skipped": False,
+        "skipReason": None,
+        "ageHours": guard["ageHours"],
         "metricsCollectedAt": new_metrics.get("collectedAt"),
         "searchCollectedAt": new_search.get("collectedAt"),
         "metricsCompared": old_metrics is not None,
@@ -250,6 +326,17 @@ def parse_args() -> argparse.Namespace:
         default=30,
         help="单个 ClawHub 请求的超时秒数。",
     )
+    parser.add_argument(
+        "--min-interval-hours",
+        type=float,
+        default=DEFAULT_MIN_INTERVAL_HOURS,
+        help="非强制运行之间的最短间隔小时数。",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="忽略最短间隔并立即执行一次采集。",
+    )
     return parser.parse_args()
 
 
@@ -261,6 +348,8 @@ def main() -> int:
             python_bin=args.python_bin,
             clawhub_bin=args.clawhub_bin,
             timeout=args.timeout,
+            min_interval_hours=args.min_interval_hours,
+            force=args.force,
         )
     except (
         OSError,
@@ -272,11 +361,14 @@ def main() -> int:
         print(f"被动监控失败，现有快照未更新：{exc}", file=sys.stderr)
         return 1
 
-    print(
-        "被动监控完成："
-        f"指标对比={'是' if result['metricsCompared'] else '首次采集'}，"
-        f"搜索对比={'是' if result['searchCompared'] else '首次采集'}"
-    )
+    if result["skipped"]:
+        print(f"被动监控已跳过：{result['skipReason']}")
+    else:
+        print(
+            "被动监控完成："
+            f"指标对比={'是' if result['metricsCompared'] else '首次采集'}，"
+            f"搜索对比={'是' if result['searchCompared'] else '首次采集'}"
+        )
     return 0
 
 

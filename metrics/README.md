@@ -126,3 +126,17 @@ python3 scripts/run_clawhub_growth_monitor.py
 4. 全部步骤成功后，才轮换正式 latest、previous 和报告。
 
 任何子命令失败都会中止本轮，保留上一次完整输出。首次运行只生成 latest；第二次开始才会生成 previous 和差异报告。
+
+为防止同日重跑覆盖有效基线，统一入口默认要求距离两类 latest 中较新的采集时间至少 144 小时。不满足时会在发起任何 ClawHub 请求前退出：
+
+```bash
+python3 scripts/run_clawhub_growth_monitor.py
+```
+
+只有在版本或审核异常需要提前重新采样时，才显式强制运行：
+
+```bash
+python3 scripts/run_clawhub_growth_monitor.py --force
+```
+
+`--force` 只绕过采样间隔，不会改变快照中的 `activeInstall`，也不会绕过离线对比器的 7 天证据门槛。

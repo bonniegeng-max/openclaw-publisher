@@ -3,6 +3,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 
@@ -11,6 +12,10 @@ SPEC = importlib.util.spec_from_file_location("run_clawhub_growth_monitor", SCRI
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
+
+OLD_TIME = "2026-08-20T00:00:00+00:00"
+NEW_TIME = "2026-09-05T00:00:00+00:00"
+NOW = datetime.fromisoformat("2026-09-05T01:00:00+00:00")
 
 
 def metrics_snapshot(label):
@@ -56,9 +61,9 @@ class FakeRunner:
 
         output = Path(command[command.index("--output") + 1])
         if script == "collect_clawhub_metrics.py":
-            write_json(output, metrics_snapshot("new"))
+            write_json(output, metrics_snapshot(NEW_TIME))
         elif script == "collect_clawhub_search_visibility.py":
-            write_json(output, search_snapshot("new"))
+            write_json(output, search_snapshot(NEW_TIME))
         elif script == "compare_clawhub_metrics.py":
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(f"report for {output.name}\n", encoding="utf-8")
@@ -83,17 +88,18 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                 python_bin="python3",
                 clawhub_bin="clawhub",
                 timeout=10,
+                now=NOW,
                 runner=runner,
             )
 
             metrics = root / "metrics"
             self.assertEqual(
                 json.loads((metrics / "clawhub-latest.json").read_text()),
-                metrics_snapshot("new"),
+                metrics_snapshot(NEW_TIME),
             )
             self.assertEqual(
                 json.loads((metrics / "clawhub-search-latest.json").read_text()),
-                search_snapshot("new"),
+                search_snapshot(NEW_TIME),
             )
             self.assertFalse((metrics / "clawhub-previous.json").exists())
             self.assertFalse((metrics / "clawhub-search-previous.json").exists())
@@ -109,8 +115,8 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             metrics = root / "metrics"
-            old_metrics = metrics_snapshot("old")
-            old_search = search_snapshot("old")
+            old_metrics = metrics_snapshot(OLD_TIME)
+            old_search = search_snapshot(OLD_TIME)
             write_json(metrics / "clawhub-latest.json", old_metrics)
             write_json(metrics / "clawhub-search-latest.json", old_search)
             runner = FakeRunner()
@@ -120,6 +126,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                 python_bin="python3",
                 clawhub_bin="clawhub",
                 timeout=10,
+                now=NOW,
                 runner=runner,
             )
 
@@ -135,11 +142,11 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             )
             self.assertEqual(
                 json.loads((metrics / "clawhub-latest.json").read_text()),
-                metrics_snapshot("new"),
+                metrics_snapshot(NEW_TIME),
             )
             self.assertEqual(
                 json.loads((metrics / "clawhub-search-latest.json").read_text()),
-                search_snapshot("new"),
+                search_snapshot(NEW_TIME),
             )
             self.assertTrue((metrics / "clawhub-change-report.md").exists())
             self.assertTrue(
@@ -153,8 +160,8 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             metrics = root / "metrics"
-            old_metrics = metrics_snapshot("old")
-            old_search = search_snapshot("old")
+            old_metrics = metrics_snapshot(OLD_TIME)
+            old_search = search_snapshot(OLD_TIME)
             write_json(metrics / "clawhub-latest.json", old_metrics)
             write_json(metrics / "clawhub-search-latest.json", old_search)
             metrics_report = metrics / "clawhub-change-report.md"
@@ -171,6 +178,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                     python_bin="python3",
                     clawhub_bin="clawhub",
                     timeout=10,
+                    now=NOW,
                     runner=runner,
                 )
 
@@ -192,6 +200,75 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             )
             self.assertFalse((metrics / "clawhub-previous.json").exists())
             self.assertFalse((metrics / "clawhub-search-previous.json").exists())
+
+    def test_recent_complete_run_is_skipped_without_child_commands(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(NEW_TIME))
+            write_json(
+                metrics / "clawhub-search-latest.json",
+                search_snapshot(NEW_TIME),
+            )
+            runner = FakeRunner()
+
+            result = MODULE.run_monitor(
+                root,
+                python_bin="python3",
+                clawhub_bin="clawhub",
+                timeout=10,
+                now=NOW,
+                runner=runner,
+            )
+
+            self.assertTrue(result["skipped"])
+            self.assertIn("小于默认门槛 144 小时", result["skipReason"])
+            self.assertEqual(runner.commands, [])
+
+    def test_force_bypasses_recent_run_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(NEW_TIME))
+            write_json(
+                metrics / "clawhub-search-latest.json",
+                search_snapshot(NEW_TIME),
+            )
+            runner = FakeRunner()
+
+            result = MODULE.run_monitor(
+                root,
+                python_bin="python3",
+                clawhub_bin="clawhub",
+                timeout=10,
+                force=True,
+                now=NOW,
+                runner=runner,
+            )
+
+            self.assertFalse(result["skipped"])
+            self.assertEqual(len(runner.commands), 4)
+
+    def test_future_snapshot_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            future = "2026-09-06T00:00:00+00:00"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(future))
+            write_json(
+                metrics / "clawhub-search-latest.json",
+                search_snapshot(future),
+            )
+
+            with self.assertRaisesRegex(ValueError, "晚于当前时间"):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=FakeRunner(),
+                )
 
 
 if __name__ == "__main__":

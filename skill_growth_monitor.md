@@ -82,6 +82,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 ## 巡检采样规则
 
 - 完整周检优先运行 `python3 scripts/run_clawhub_growth_monitor.py`，避免两类快照只更新一半。
+- 默认 144 小时防重复门槛不得在常规周检中绕过；`--force` 仅用于明确的版本或审核异常复核。
 - 常规采样优先运行 `python3 scripts/collect_clawhub_metrics.py`，生成只读 JSON 快照。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。
 - 只有对比结果的 `evidenceQuality.decisionReady` 为 `true` 时，才进入加码、合并或停更判断。

@@ -5,12 +5,14 @@ on:
     paths:
       - "skills/**"
       - ".github/workflows/clawhub-skill-publish.yml"
+      - ".github/workflows/clawhub-skill-publish-local.yml"
   push:
     branches:
       - main
     paths:
       - "skills/**"
       - ".github/workflows/clawhub-skill-publish.yml"
+      - ".github/workflows/clawhub-skill-publish-local.yml"
   workflow_dispatch:
 
 permissions:
@@ -24,7 +26,7 @@ concurrency:
 jobs:
   dry-run:
     if: github.event_name == 'pull_request'
-    uses: openclaw/clawhub/.github/workflows/skill-publish.yml@v0.23.3
+    uses: ./.github/workflows/clawhub-skill-publish-local.yml
     with:
       owner: ${{ vars.CLAWHUB_OWNER }}
       root: skills
@@ -32,7 +34,7 @@ jobs:
 
   publish:
     if: github.event_name != 'pull_request'
-    uses: openclaw/clawhub/.github/workflows/skill-publish.yml@v0.23.3
+    uses: ./.github/workflows/clawhub-skill-publish-local.yml
     with:
       owner: ${{ vars.CLAWHUB_OWNER }}
       root: skills

@@ -81,6 +81,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 巡检采样规则
 
+- 常规采样优先运行 `python3 scripts/collect_clawhub_metrics.py`，生成只读 JSON 快照。
 - 周检先读取 `inspect` 和搜索结果，不重复安装未变化的版本。
 - 只有 latest 变化、moderation 异常、公开文件缺失或用户明确要求时，才执行一次隔离安装。
 - 主动 dry-run、inspect、install 和工作流核验都要记录时间，避免与自然指标混为一谈。

@@ -174,9 +174,29 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 ├── skills/
 │   └── 7 个已发布 Skill
 ├── plugins/
+├── scripts/
+│   └── collect_clawhub_metrics.py
+├── metrics/
+│   └── README.md
 ├── skill_growth_monitor.md
 ├── skill_growth_roadmap.md
 └── skill_idea_backlog.md
+```
+
+## 被动指标采集
+
+常规观察不再安装未变化版本。使用只读采集器从 catalog 自动发现所有 Skill，并通过 `clawhub inspect --json` 生成统一快照：
+
+```bash
+python3 scripts/collect_clawhub_metrics.py
+```
+
+默认输出到 `metrics/clawhub-latest.json`。脚本会记录采集方法、`activeInstall: false` 和数据边界，任何一个 Skill 查询失败时都不会写入不完整快照。
+
+运行离线测试：
+
+```bash
+python3 -m unittest tests/test_collect_clawhub_metrics.py
 ```
 
 ## 增长原则

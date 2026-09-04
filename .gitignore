@@ -1,3 +1,5 @@
 .trae/
 .clawhub-*-install/
 context:/
+__pycache__/
+*.py[cod]

@@ -175,7 +175,8 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 │   └── 7 个已发布 Skill
 ├── plugins/
 ├── scripts/
-│   └── collect_clawhub_metrics.py
+│   ├── collect_clawhub_metrics.py
+│   └── compare_clawhub_metrics.py
 ├── metrics/
 │   └── README.md
 ├── skill_growth_monitor.md
@@ -191,12 +192,23 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 python3 scripts/collect_clawhub_metrics.py
 ```
 
-默认输出到 `metrics/clawhub-latest.json`。脚本会记录采集方法、`activeInstall: false` 和数据边界，任何一个 Skill 查询失败时都不会写入不完整快照。
+默认输出到 `metrics/clawhub-latest.json`，并在下一次成功采集时将旧快照保留为 `metrics/clawhub-previous.json`。脚本会记录采集方法、`activeInstall: false` 和数据边界，任何一个 Skill 查询失败时都不会轮换或写入不完整快照。
+
+保留两个不同时间的快照后，可在本地生成差异报告，不再访问 ClawHub：
+
+```bash
+python3 scripts/compare_clawhub_metrics.py \
+  metrics/clawhub-previous.json \
+  metrics/clawhub-latest.json \
+  --output metrics/clawhub-change-report.md
+```
+
+对比器把版本变化、非 `clean` moderation、Skill 消失和计数回退标为验证事项。downloads、installs 与 stars 的正向变化只记录为观察信号，不自动解释为自然增长。
 
 运行离线测试：
 
 ```bash
-python3 -m unittest tests/test_collect_clawhub_metrics.py
+python3 -m unittest discover -s tests
 ```
 
 ## 增长原则

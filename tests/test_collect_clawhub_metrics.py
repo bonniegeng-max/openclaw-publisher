@@ -107,6 +107,56 @@ class CollectClawHubMetricsTests(unittest.TestCase):
             )
             self.assertEqual(list(output.parent.glob("*.tmp")), [])
 
+    def test_write_snapshot_rotates_previous_successful_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "latest.json"
+            previous = root / "previous.json"
+            MODULE.write_json_atomic(output, {"collectedAt": "first"})
+
+            MODULE.write_snapshot_with_previous(
+                output,
+                previous,
+                {"collectedAt": "second"},
+            )
+
+            self.assertEqual(
+                json.loads(previous.read_text(encoding="utf-8")),
+                {"collectedAt": "first"},
+            )
+            self.assertEqual(
+                json.loads(output.read_text(encoding="utf-8")),
+                {"collectedAt": "second"},
+            )
+
+    def test_write_snapshot_rejects_same_output_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "latest.json"
+
+            with self.assertRaisesRegex(ValueError, "must be different"):
+                MODULE.write_snapshot_with_previous(output, output, {})
+
+    def test_write_snapshot_does_not_rotate_invalid_existing_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "latest.json"
+            previous = root / "previous.json"
+            output.write_text("{invalid", encoding="utf-8")
+            MODULE.write_json_atomic(previous, {"collectedAt": "stable"})
+
+            with self.assertRaises(json.JSONDecodeError):
+                MODULE.write_snapshot_with_previous(
+                    output,
+                    previous,
+                    {"collectedAt": "new"},
+                )
+
+            self.assertEqual(output.read_text(encoding="utf-8"), "{invalid")
+            self.assertEqual(
+                json.loads(previous.read_text(encoding="utf-8")),
+                {"collectedAt": "stable"},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

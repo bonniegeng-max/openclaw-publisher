@@ -3,3 +3,6 @@
 context:/
 __pycache__/
 *.py[cod]
+metrics/clawhub-latest.json
+metrics/clawhub-previous.json
+metrics/clawhub-change-report.md

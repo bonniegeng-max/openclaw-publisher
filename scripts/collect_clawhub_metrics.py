@@ -114,6 +114,21 @@ def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     temporary_path.replace(path)
 
 
+def write_snapshot_with_previous(
+    output_path: Path,
+    previous_path: Path,
+    payload: dict[str, Any],
+) -> None:
+    if output_path.resolve() == previous_path.resolve():
+        raise ValueError("output and previous-output must be different paths")
+    if output_path.exists():
+        previous_payload = json.loads(output_path.read_text(encoding="utf-8"))
+        if not isinstance(previous_payload, dict):
+            raise ValueError("existing output snapshot must be a JSON object")
+        write_json_atomic(previous_path, previous_payload)
+    write_json_atomic(output_path, payload)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Collect ClawHub metrics without downloading or installing skills."
@@ -129,6 +144,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("metrics/clawhub-latest.json"),
         help="Destination JSON snapshot.",
+    )
+    parser.add_argument(
+        "--previous-output",
+        type=Path,
+        default=Path("metrics/clawhub-previous.json"),
+        help="Where to preserve the prior successful output snapshot.",
     )
     parser.add_argument(
         "--clawhub-bin",
@@ -152,7 +173,7 @@ def main() -> int:
             clawhub_bin=args.clawhub_bin,
             timeout=args.timeout,
         )
-        write_json_atomic(args.output, snapshot)
+        write_snapshot_with_previous(args.output, args.previous_output, snapshot)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"metrics collection failed: {exc}", file=sys.stderr)
         return 1

@@ -9,3 +9,4 @@ metrics/clawhub-change-report.md
 metrics/clawhub-search-latest.json
 metrics/clawhub-search-previous.json
 metrics/clawhub-search-change-report.md
+metrics/.growth-run-*/

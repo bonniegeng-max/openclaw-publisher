@@ -178,7 +178,8 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 ├── scripts/
 │   ├── collect_clawhub_metrics.py
 │   ├── collect_clawhub_search_visibility.py
-│   └── compare_clawhub_metrics.py
+│   ├── compare_clawhub_metrics.py
+│   └── run_clawhub_growth_monitor.py
 ├── metrics/
 │   └── README.md
 ├── skill_growth_monitor.md
@@ -216,6 +217,14 @@ python3 scripts/collect_clawhub_search_visibility.py
 脚本会确认查询配置完整覆盖 catalog 中的全部 Skill，再记录目标 Skill 的当前排名和同页结果。任何查询或输出解析失败时都不会写入部分快照。
 
 同一个离线对比器会自动识别搜索快照，输出 `up`、`down`、`gained`、`lost` 或 `unchanged`；查询配置发生变化时拒绝把两轮排名当作可比证据。
+
+完整周检使用统一入口：
+
+```bash
+python3 scripts/run_clawhub_growth_monitor.py
+```
+
+它会先在临时目录完成两类采集和可用的差异报告，全部成功后才轮换正式快照。任一采集或对比失败时，现有 latest、previous 和报告保持不变。
 
 运行离线测试：
 

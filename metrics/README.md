@@ -109,3 +109,20 @@ python3 scripts/compare_clawhub_metrics.py \
 ```
 
 排名状态包括 `up`、`down`、`gained`、`lost` 和 `unchanged`。如果查询文本、查询 limit、查询集合或采集方法变化，证据质量会变成 `incomparable`；不足 7 天或存在主动安装声明时，同样不允许进入增长决策。
+
+## 统一周检入口
+
+推荐使用统一入口完成两类采集：
+
+```bash
+python3 scripts/run_clawhub_growth_monitor.py
+```
+
+执行顺序：
+
+1. 在 `metrics` 下的临时目录采集采用指标。
+2. 在同一临时目录采集搜索可见性。
+3. 如果已有 latest，则先在临时目录生成两份差异报告。
+4. 全部步骤成功后，才轮换正式 latest、previous 和报告。
+
+任何子命令失败都会中止本轮，保留上一次完整输出。首次运行只生成 latest；第二次开始才会生成 previous 和差异报告。

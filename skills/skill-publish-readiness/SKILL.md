@@ -1,5 +1,5 @@
 ---
-name: clawhub-publish-assistant-pro
+name: skill-publish-readiness
 description: 在发布到 ClawHub 之前，帮你揪出那些“能过 dry-run，但其实还不该发”的问题，包括文件缺失、版本不一致、环境声明脱节、安全风险和同质化定位。
 version: 1.0.0
 metadata:
@@ -16,13 +16,13 @@ metadata:
         bins: [clawhub]
 ---
 
-# clawhub-publish-assistant-pro
+# skill-publish-readiness
 
 大多数 skill 不是死在发布命令上，而是死在发布之前没人认真看过一遍。
 
 文件看起来齐了，`version` 也写了，`dry-run` 也许还能过，但真正上线后暴露出来的问题往往更致命：元数据前后不一致，环境变量没声明清楚，示例里带着危险做法，产品页读起来像模板，和同类 skill 几乎没有区分。
 
-`clawhub-publish-assistant-pro` 不是替你按一下发布按钮，它是帮你在发布前，把这些“看起来能发、其实还不该发”的问题先揪出来。
+`skill-publish-readiness` 不是替你按一下发布按钮，它是帮你在发布前，把这些“看起来能发、其实还不该发”的问题先揪出来。
 
 ## 一句话卖点
 

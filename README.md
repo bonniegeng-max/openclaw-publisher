@@ -177,6 +177,7 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 ├── plugins/
 ├── scripts/
 │   ├── collect_clawhub_metrics.py
+│   ├── collect_clawhub_search_visibility.py
 │   └── compare_clawhub_metrics.py
 ├── metrics/
 │   └── README.md
@@ -205,6 +206,14 @@ python3 scripts/compare_clawhub_metrics.py \
 ```
 
 对比器把版本变化、非 `clean` moderation、Skill 消失和计数回退标为验证事项。downloads、installs 与 stars 的正向变化只记录为观察信号，不自动解释为自然增长；只有同口径、无主动安装且间隔至少 7 天的快照才标记为可进入增长决策。
+
+搜索可见性使用独立的只读采集器，并由受版本控制的真实任务查询清单驱动：
+
+```bash
+python3 scripts/collect_clawhub_search_visibility.py
+```
+
+脚本会确认查询配置完整覆盖 catalog 中的全部 Skill，再记录目标 Skill 的当前排名和同页结果。任何查询或输出解析失败时都不会写入部分快照。
 
 运行离线测试：
 

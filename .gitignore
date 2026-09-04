@@ -6,3 +6,5 @@ __pycache__/
 metrics/clawhub-latest.json
 metrics/clawhub-previous.json
 metrics/clawhub-change-report.md
+metrics/clawhub-search-latest.json
+metrics/clawhub-search-previous.json

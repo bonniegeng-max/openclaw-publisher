@@ -79,3 +79,22 @@ python3 scripts/compare_clawhub_metrics.py \
 `observe` 不是“自然增长”结论。对比器只证明两个快照之间存在计数差异，不判断流量来源，也不会自动触发安装。
 
 latest、previous 和默认 Markdown 报告均为本地观察产物，已从 Git 跟踪中排除；公开仓库只保存采集逻辑和口径规则。
+
+## 搜索可见性
+
+`metrics/search-queries.json` 为每个已发布 Skill 保存一条真实任务查询。采集器会先确认查询配置与 catalog 的 slug 集合完全一致，再逐条执行只读搜索：
+
+```bash
+python3 scripts/collect_clawhub_search_visibility.py
+```
+
+默认输出并自动轮换：
+
+```text
+metrics/clawhub-search-latest.json
+metrics/clawhub-search-previous.json
+```
+
+每条记录包含目标查询、目标 Skill 当前排名、是否出现在结果范围内、同页结果和 CLI 版本。不同来源可能展示 60 天 installs、skills.sh lifetime installs、downloads 或 score，这些指标保留原始类型，不混为同一口径。
+
+搜索排名是时间点观察，不是稳定位置。脚本不会执行 inspect、download 或 install；任一查询失败或 CLI 输出格式无法识别时，整轮失败且不写入部分快照。

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "queries": [
+    {
+      "slug": "skill-publish-readiness",
+      "query": "publish skill readiness",
+      "limit": 20
+    },
+    {
+      "slug": "github-actions-clawhub-doctor",
+      "query": "github actions publish failure",
+      "limit": 20
+    },
+    {
+      "slug": "skill-positioning-audit",
+      "query": "skill positioning storefront",
+      "limit": 20
+    },
+    {
+      "slug": "skill-launch-checklist",
+      "query": "skill launch checklist",
+      "limit": 20
+    },
+    {
+      "slug": "skill-summary-rewriter",
+      "query": "skill summary rewrite",
+      "limit": 20
+    },
+    {
+      "slug": "release-proof-builder",
+      "query": "release verification install proof",
+      "limit": 20
+    },
+    {
+      "slug": "skill-portfolio-growth-audit",
+      "query": "skill portfolio growth audit",
+      "limit": 20
+    }
+  ]
+}

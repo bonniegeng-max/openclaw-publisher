@@ -37,8 +37,10 @@ jobs:
         run: |
           python -m py_compile \
             scripts/collect_clawhub_metrics.py \
+            scripts/collect_clawhub_search_visibility.py \
             scripts/compare_clawhub_metrics.py \
             tests/test_collect_clawhub_metrics.py \
+            tests/test_collect_clawhub_search_visibility.py \
             tests/test_compare_clawhub_metrics.py
 
       - name: Run offline tests

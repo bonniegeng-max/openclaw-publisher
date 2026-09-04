@@ -98,3 +98,14 @@ metrics/clawhub-search-previous.json
 每条记录包含目标查询、目标 Skill 当前排名、是否出现在结果范围内、同页结果和 CLI 版本。不同来源可能展示 60 天 installs、skills.sh lifetime installs、downloads 或 score，这些指标保留原始类型，不混为同一口径。
 
 搜索排名是时间点观察，不是稳定位置。脚本不会执行 inspect、download 或 install；任一查询失败或 CLI 输出格式无法识别时，整轮失败且不写入部分快照。
+
+使用同一个离线对比器生成搜索排名变化报告：
+
+```bash
+python3 scripts/compare_clawhub_metrics.py \
+  metrics/clawhub-search-previous.json \
+  metrics/clawhub-search-latest.json \
+  --output metrics/clawhub-search-change-report.md
+```
+
+排名状态包括 `up`、`down`、`gained`、`lost` 和 `unchanged`。如果查询文本、查询 limit、查询集合或采集方法变化，证据质量会变成 `incomparable`；不足 7 天或存在主动安装声明时，同样不允许进入增长决策。

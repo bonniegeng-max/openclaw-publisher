@@ -21,9 +21,22 @@ def load_snapshot(path: Path) -> dict[str, Any]:
         raise ValueError(f"{path}：快照根节点必须是 JSON 对象")
     if payload.get("schemaVersion") != 1:
         raise ValueError(f"{path}：不支持的 schemaVersion")
-    if not isinstance(payload.get("skills"), list):
-        raise ValueError(f"{path}：skills 必须是 JSON 数组")
+    has_skills = isinstance(payload.get("skills"), list)
+    has_queries = isinstance(payload.get("queries"), list)
+    if has_skills == has_queries:
+        raise ValueError(f"{path}：必须且只能包含 skills 或 queries 数组")
     return payload
+
+
+def detect_snapshot_kind(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+) -> str:
+    previous_kind = "metrics" if "skills" in previous else "search"
+    current_kind = "metrics" if "skills" in current else "search"
+    if previous_kind != current_kind:
+        raise ValueError("两个快照类型不一致")
+    return previous_kind
 
 
 def index_skills(snapshot: dict[str, Any], source: str) -> dict[str, dict[str, Any]]:
@@ -249,6 +262,210 @@ def compare_snapshots(
     }
 
 
+def index_search_queries(
+    snapshot: dict[str, Any],
+    source: str,
+) -> dict[str, dict[str, Any]]:
+    queries = snapshot.get("queries")
+    if not isinstance(queries, list):
+        raise ValueError(f"{source}：queries 必须是 JSON 数组")
+    indexed: dict[str, dict[str, Any]] = {}
+    for item in queries:
+        if not isinstance(item, dict):
+            raise ValueError(f"{source}：每条搜索记录必须是 JSON 对象")
+        slug = item.get("slug")
+        query = item.get("query")
+        limit = item.get("limit")
+        rank = item.get("rank")
+        if not isinstance(slug, str) or not slug:
+            raise ValueError(f"{source}：每条搜索记录必须包含非空 slug")
+        if not isinstance(query, str) or not query:
+            raise ValueError(f"{source}：{slug}.query 必须是非空字符串")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError(f"{source}：{slug}.limit 必须是正整数")
+        if rank is not None and (
+            isinstance(rank, bool) or not isinstance(rank, int) or rank < 1
+        ):
+            raise ValueError(f"{source}：{slug}.rank 必须是正整数或 null")
+        if slug in indexed:
+            raise ValueError(f"{source}：搜索记录 slug 重复：{slug}")
+        indexed[slug] = item
+    return indexed
+
+
+def compare_search_query(
+    slug: str,
+    previous: dict[str, Any],
+    current: dict[str, Any],
+) -> dict[str, Any]:
+    previous_query = previous["query"]
+    current_query = current["query"]
+    previous_limit = previous.get("limit")
+    current_limit = current.get("limit")
+    previous_rank = previous.get("rank")
+    current_rank = current.get("rank")
+    query_changed = previous_query != current_query
+    limit_changed = previous_limit != current_limit
+    configuration_changed = query_changed or limit_changed
+
+    if configuration_changed:
+        status = "incomparable"
+        rank_delta = None
+    elif previous_rank is None and current_rank is not None:
+        status = "gained"
+        rank_delta = None
+    elif previous_rank is not None and current_rank is None:
+        status = "lost"
+        rank_delta = None
+    elif previous_rank is None and current_rank is None:
+        status = "unchanged"
+        rank_delta = None
+    else:
+        rank_delta = previous_rank - current_rank
+        if rank_delta > 0:
+            status = "up"
+        elif rank_delta < 0:
+            status = "down"
+        else:
+            status = "unchanged"
+
+    previous_count = previous.get("resultCount")
+    current_count = current.get("resultCount")
+    result_count_delta = metric_delta(previous_count, current_count)
+    return {
+        "slug": slug,
+        "status": status,
+        "query": current_query,
+        "previousQuery": previous_query,
+        "queryChanged": query_changed,
+        "previousLimit": previous_limit,
+        "currentLimit": current_limit,
+        "limitChanged": limit_changed,
+        "configurationChanged": configuration_changed,
+        "previousRank": previous_rank,
+        "currentRank": current_rank,
+        "rankDelta": rank_delta,
+        "previousVisible": previous_rank is not None,
+        "currentVisible": current_rank is not None,
+        "previousResultCount": previous_count,
+        "currentResultCount": current_count,
+        "resultCountDelta": result_count_delta,
+    }
+
+
+def compare_search_snapshots(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    previous_source: str = "previous",
+    current_source: str = "current",
+) -> dict[str, Any]:
+    previous_queries = index_search_queries(previous, previous_source)
+    current_queries = index_search_queries(current, current_source)
+    evidence_quality = evaluate_evidence(
+        previous,
+        current,
+        previous_source,
+        current_source,
+    )
+    results: list[dict[str, Any]] = []
+    configuration_changes: list[str] = []
+
+    for slug in sorted(previous_queries.keys() | current_queries.keys()):
+        if slug not in previous_queries:
+            results.append(
+                {
+                    "slug": slug,
+                    "status": "query-added",
+                    "query": current_queries[slug]["query"],
+                    "previousQuery": None,
+                    "queryChanged": True,
+                    "previousLimit": None,
+                    "currentLimit": current_queries[slug].get("limit"),
+                    "limitChanged": True,
+                    "configurationChanged": True,
+                    "previousRank": None,
+                    "currentRank": current_queries[slug].get("rank"),
+                    "rankDelta": None,
+                    "previousVisible": False,
+                    "currentVisible": current_queries[slug].get("rank") is not None,
+                    "previousResultCount": None,
+                    "currentResultCount": current_queries[slug].get("resultCount"),
+                    "resultCountDelta": None,
+                }
+            )
+            configuration_changes.append(f"新增查询：{slug}")
+        elif slug not in current_queries:
+            results.append(
+                {
+                    "slug": slug,
+                    "status": "query-removed",
+                    "query": None,
+                    "previousQuery": previous_queries[slug]["query"],
+                    "queryChanged": True,
+                    "previousLimit": previous_queries[slug].get("limit"),
+                    "currentLimit": None,
+                    "limitChanged": True,
+                    "configurationChanged": True,
+                    "previousRank": previous_queries[slug].get("rank"),
+                    "currentRank": None,
+                    "rankDelta": None,
+                    "previousVisible": previous_queries[slug].get("rank") is not None,
+                    "currentVisible": False,
+                    "previousResultCount": previous_queries[slug].get("resultCount"),
+                    "currentResultCount": None,
+                    "resultCountDelta": None,
+                }
+            )
+            configuration_changes.append(f"删除查询：{slug}")
+        else:
+            item = compare_search_query(
+                slug,
+                previous_queries[slug],
+                current_queries[slug],
+            )
+            results.append(item)
+            if item["queryChanged"]:
+                configuration_changes.append(f"查询文本变化：{slug}")
+            if item["limitChanged"]:
+                configuration_changes.append(f"查询 limit 变化：{slug}")
+
+    if configuration_changes:
+        if evidence_quality["status"] != "contaminated":
+            evidence_quality["status"] = "incomparable"
+        evidence_quality["decisionReady"] = False
+        evidence_quality["reasons"].append(
+            "搜索查询配置发生变化，排名不能直接比较"
+        )
+
+    statuses = (
+        "up",
+        "down",
+        "gained",
+        "lost",
+        "unchanged",
+        "incomparable",
+        "query-added",
+        "query-removed",
+    )
+    counts = {
+        status: sum(item["status"] == status for item in results)
+        for status in statuses
+    }
+    return {
+        "schemaVersion": 1,
+        "kind": "search",
+        "previousCollectedAt": previous.get("collectedAt"),
+        "currentCollectedAt": current.get("collectedAt"),
+        "evidenceQuality": evidence_quality,
+        "attribution": (
+            "搜索排名是时间点观察，不代表稳定曝光；同页指标可能来自不同来源和时间窗口。"
+        ),
+        "configurationChanges": configuration_changes,
+        "summary": {"queries": len(results), **counts},
+        "queries": results,
+    }
+
+
 def format_value(value: Any) -> str:
     if value is None:
         return "—"
@@ -344,6 +561,64 @@ def render_markdown(comparison: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_search_markdown(comparison: dict[str, Any]) -> str:
+    summary = comparison["summary"]
+    evidence = comparison["evidenceQuality"]
+    elapsed_days = evidence.get("elapsedDays")
+    elapsed_label = "未知" if elapsed_days is None else f"{elapsed_days:.2f} 天"
+    lines = [
+        "# ClawHub 搜索可见性变化",
+        "",
+        f"- 前次快照：`{format_value(comparison['previousCollectedAt'])}`",
+        f"- 当前快照：`{format_value(comparison['currentCollectedAt'])}`",
+        f"- 观察窗口：{elapsed_label}",
+        (
+            f"- 证据质量：`{evidence['status']}`；"
+            f"{'可进入增长决策' if evidence['decisionReady'] else '不可进入增长决策'}"
+        ),
+        (
+            f"- 排名变化：{summary['up']} 个上升，{summary['down']} 个下降，"
+            f"{summary['gained']} 个首次出现，{summary['lost']} 个消失"
+        ),
+        "",
+        "> 搜索排名是时间点观察，不代表稳定曝光；不同来源的指标不能混为同一口径。",
+        f"> 证据门槛：{'; '.join(evidence['reasons'])}",
+        "",
+        "| Skill | 查询 | 前次 | 当前 | 变化 | 状态 |",
+        "|---|---|---:|---:|---:|---|",
+    ]
+
+    for item in comparison["queries"]:
+        rank_delta = item.get("rankDelta")
+        if rank_delta is None:
+            delta_label = "—"
+        else:
+            sign = "+" if rank_delta > 0 else ""
+            delta_label = f"{sign}{rank_delta}"
+        lines.append(
+            "| "
+            + " | ".join(
+                (
+                    f"`{item['slug']}`",
+                    format_value(item.get("query")),
+                    format_value(item.get("previousRank")),
+                    format_value(item.get("currentRank")),
+                    delta_label,
+                    item["status"],
+                )
+            )
+            + " |"
+        )
+
+    if comparison["configurationChanges"]:
+        lines.extend(["", "## 查询配置变化"])
+        lines.extend(
+            f"- {change}" for change in comparison["configurationChanges"]
+        )
+
+    return "\n".join(lines) + "\n"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="在不访问网络的情况下对比两个 ClawHub 指标快照。"
@@ -365,14 +640,25 @@ def main() -> int:
     try:
         previous = load_snapshot(args.previous)
         current = load_snapshot(args.current)
-        comparison = compare_snapshots(
-            previous,
-            current,
-            previous_source=str(args.previous),
-            current_source=str(args.current),
-        )
+        kind = detect_snapshot_kind(previous, current)
+        if kind == "metrics":
+            comparison = compare_snapshots(
+                previous,
+                current,
+                previous_source=str(args.previous),
+                current_source=str(args.current),
+            )
+        else:
+            comparison = compare_search_snapshots(
+                previous,
+                current,
+                previous_source=str(args.previous),
+                current_source=str(args.current),
+            )
         if args.format == "json":
             output = json.dumps(comparison, ensure_ascii=False, indent=2) + "\n"
+        elif kind == "search":
+            output = render_search_markdown(comparison)
         else:
             output = render_markdown(comparison)
         if args.output:

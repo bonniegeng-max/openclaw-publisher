@@ -215,6 +215,8 @@ python3 scripts/collect_clawhub_search_visibility.py
 
 脚本会确认查询配置完整覆盖 catalog 中的全部 Skill，再记录目标 Skill 的当前排名和同页结果。任何查询或输出解析失败时都不会写入部分快照。
 
+同一个离线对比器会自动识别搜索快照，输出 `up`、`down`、`gained`、`lost` 或 `unchanged`；查询配置发生变化时拒绝把两轮排名当作可比证据。
+
 运行离线测试：
 
 ```bash

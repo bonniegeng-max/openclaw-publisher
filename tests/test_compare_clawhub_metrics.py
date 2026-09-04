@@ -51,6 +51,33 @@ def skill(
     }
 
 
+def search_snapshot(
+    queries,
+    collected_at="2026-09-05T00:00:00+00:00",
+    active_install=False,
+    method="clawhub search",
+):
+    return {
+        "schemaVersion": 1,
+        "collectedAt": collected_at,
+        "method": method,
+        "activeInstall": active_install,
+        "queries": queries,
+    }
+
+
+def search_query(slug, rank, query=None, result_count=10, limit=20):
+    return {
+        "slug": slug,
+        "query": query or f"{slug} query",
+        "limit": limit,
+        "rank": rank,
+        "visible": rank is not None,
+        "resultCount": result_count,
+        "results": [],
+    }
+
+
 class CompareClawHubMetricsTests(unittest.TestCase):
     def test_load_snapshot_rejects_unsupported_schema(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -221,6 +248,126 @@ class CompareClawHubMetricsTests(unittest.TestCase):
         self.assertIn("1.0.0 → 1.1.0", report)
         self.assertIn("证据质量：`eligible`", report)
         self.assertIn("## 需处理", report)
+
+
+class CompareClawHubSearchVisibilityTests(unittest.TestCase):
+    def test_detect_snapshot_kind_rejects_mismatch(self):
+        with self.assertRaisesRegex(ValueError, "两个快照类型不一致"):
+            MODULE.detect_snapshot_kind(
+                snapshot([skill("alpha")]),
+                search_snapshot([search_query("alpha", 1)]),
+            )
+
+    def test_rank_changes_are_classified(self):
+        previous = search_snapshot(
+            [
+                search_query("up", 4),
+                search_query("down", 1),
+                search_query("gained", None),
+                search_query("lost", 2),
+                search_query("same", 3),
+            ]
+        )
+        current = search_snapshot(
+            [
+                search_query("up", 2),
+                search_query("down", 3),
+                search_query("gained", 1),
+                search_query("lost", None),
+                search_query("same", 3),
+            ],
+            collected_at="2026-09-12T00:00:00+00:00",
+        )
+
+        result = MODULE.compare_search_snapshots(previous, current)
+        indexed = {item["slug"]: item for item in result["queries"]}
+
+        self.assertEqual(indexed["up"]["status"], "up")
+        self.assertEqual(indexed["up"]["rankDelta"], 2)
+        self.assertEqual(indexed["down"]["status"], "down")
+        self.assertEqual(indexed["down"]["rankDelta"], -2)
+        self.assertEqual(indexed["gained"]["status"], "gained")
+        self.assertEqual(indexed["lost"]["status"], "lost")
+        self.assertEqual(indexed["same"]["status"], "unchanged")
+        self.assertTrue(result["evidenceQuality"]["decisionReady"])
+
+    def test_query_text_change_makes_snapshots_incomparable(self):
+        previous = search_snapshot(
+            [search_query("alpha", 1, query="old query")]
+        )
+        current = search_snapshot(
+            [search_query("alpha", 1, query="new query")],
+            collected_at="2026-09-12T00:00:00+00:00",
+        )
+
+        result = MODULE.compare_search_snapshots(previous, current)
+
+        self.assertEqual(result["queries"][0]["status"], "incomparable")
+        self.assertEqual(result["evidenceQuality"]["status"], "incomparable")
+        self.assertFalse(result["evidenceQuality"]["decisionReady"])
+        self.assertEqual(
+            result["configurationChanges"],
+            ["查询文本变化：alpha"],
+        )
+
+    def test_added_or_removed_query_makes_snapshots_incomparable(self):
+        previous = search_snapshot([search_query("removed", 1)])
+        current = search_snapshot(
+            [search_query("added", 1)],
+            collected_at="2026-09-12T00:00:00+00:00",
+        )
+
+        result = MODULE.compare_search_snapshots(previous, current)
+
+        self.assertEqual(result["summary"]["query-added"], 1)
+        self.assertEqual(result["summary"]["query-removed"], 1)
+        self.assertEqual(result["evidenceQuality"]["status"], "incomparable")
+        self.assertFalse(result["evidenceQuality"]["decisionReady"])
+
+    def test_limit_change_makes_rank_incomparable(self):
+        previous = search_snapshot([search_query("alpha", 15, limit=20)])
+        current = search_snapshot(
+            [search_query("alpha", None, limit=10)],
+            collected_at="2026-09-12T00:00:00+00:00",
+        )
+
+        result = MODULE.compare_search_snapshots(previous, current)
+
+        self.assertEqual(result["queries"][0]["status"], "incomparable")
+        self.assertTrue(result["queries"][0]["limitChanged"])
+        self.assertEqual(
+            result["configurationChanges"],
+            ["查询 limit 变化：alpha"],
+        )
+        self.assertFalse(result["evidenceQuality"]["decisionReady"])
+
+    def test_short_search_window_is_not_decision_ready(self):
+        previous = search_snapshot([search_query("alpha", 2)])
+        current = search_snapshot(
+            [search_query("alpha", 1)],
+            collected_at="2026-09-06T00:00:00+00:00",
+        )
+
+        result = MODULE.compare_search_snapshots(previous, current)
+
+        self.assertEqual(result["queries"][0]["status"], "up")
+        self.assertEqual(result["evidenceQuality"]["status"], "premature")
+        self.assertFalse(result["evidenceQuality"]["decisionReady"])
+
+    def test_search_markdown_reports_rank_and_evidence(self):
+        previous = search_snapshot([search_query("alpha", 3)])
+        current = search_snapshot(
+            [search_query("alpha", 1)],
+            collected_at="2026-09-12T00:00:00+00:00",
+        )
+
+        report = MODULE.render_search_markdown(
+            MODULE.compare_search_snapshots(previous, current)
+        )
+
+        self.assertIn("# ClawHub 搜索可见性变化", report)
+        self.assertIn("证据质量：`eligible`", report)
+        self.assertIn("| `alpha` | alpha query | 3 | 1 | +2 | up |", report)
 
 
 if __name__ == "__main__":

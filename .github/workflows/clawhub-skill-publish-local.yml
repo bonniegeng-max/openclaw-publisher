@@ -242,6 +242,18 @@ jobs:
 
           for target in targets:
               relative_path = target.relative_to(workspace).as_posix()
+              slug = target.name.lower()
+              if slug.startswith("clawhub-") or slug.endswith("-clawhub"):
+                  results["failed"].append({
+                      "slug": target.name,
+                      "folder": relative_path,
+                      "message": (
+                          f"{target.name!r} uses the protected ClawHub slug namespace; "
+                          "choose a slug that does not start with 'clawhub-' "
+                          "or end with '-clawhub'."
+                      ),
+                  })
+                  continue
               command = [
                   "bun", str(cli_entry),
                   "--workdir", str(workspace),

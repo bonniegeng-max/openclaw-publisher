@@ -32,8 +32,8 @@
       "storefront-review"
     ]
   },
-  "skills/clawhub-launch-checklist": {
-    "displayName": "ClawHub Launch Checklist",
+  "skills/skill-launch-checklist": {
+    "displayName": "Skill Launch Checklist",
     "categories": ["development", "automation", "productivity"],
     "topics": [
       "launch-checklist",

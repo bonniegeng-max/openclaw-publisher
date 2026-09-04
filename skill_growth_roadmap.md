@@ -6,7 +6,7 @@
   - `skill-publish-readiness`
   - `github-actions-clawhub-doctor`
   - `skill-positioning-audit`
-  - `clawhub-launch-checklist`
+  - `skill-launch-checklist`
   - `skill-summary-rewriter`
   - `release-proof-builder`
 - 已完成：GitHub 自动发布到 ClawHub、分类和 topics 自动同步、商店页摘要与首屏优化
@@ -70,7 +70,7 @@
 - 可以直接承接 `skill-publish-readiness` 用户
 - 适合中文创作者场景
 
-### 3. `clawhub-launch-checklist`
+### 3. `skill-launch-checklist`
 
 定位：
 在正式发布前，把文案、分类、topics、README、示例、安装路径和 dry-run 前置项做成一张清单。
@@ -97,7 +97,7 @@
 
 ## 当前组合建议
 
-1. `clawhub-launch-checklist`
+1. `skill-launch-checklist`
 2. `skill-publish-readiness`
 3. `github-actions-clawhub-doctor`
 4. `skill-positioning-audit`

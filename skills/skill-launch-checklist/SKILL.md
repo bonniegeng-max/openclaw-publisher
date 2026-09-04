@@ -1,5 +1,5 @@
 ---
-name: clawhub-launch-checklist
+name: skill-launch-checklist
 description: Final launch checklist for ClawHub skills. 在正式发布前快速检查标题、摘要、分类、示例、版本、dry-run 和公开页可信度。
 version: 1.0.0
 metadata:
@@ -17,7 +17,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# clawhub-launch-checklist
+# skill-launch-checklist
 
 Before you publish, run one last check that cares about both shipping and storefront quality.
 
@@ -25,7 +25,7 @@ Before you publish, run one last check that cares about both shipping and storef
 
 `SKILL.md` 在，`version` 有，`dry-run` 也许过了，但真正上线时最容易漏掉的，往往是这些让结果变差的小问题：标题还像目录名、摘要太长、categories 没配、示例太弱、README 和页面说法对不上，或者这次发布根本还没到“值得发”的状态。
 
-`clawhub-launch-checklist` 的目标不是替代完整诊断，而是在正式发布前，用一张轻量但够狠的清单，快速判断这次上架是不是已经到了该按下发布的时候。
+`skill-launch-checklist` 的目标不是替代完整诊断，而是在正式发布前，用一张轻量但够狠的清单，快速判断这次上架是不是已经到了该按下发布的时候。
 
 ## 一句话卖点
 

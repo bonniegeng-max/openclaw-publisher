@@ -12,7 +12,7 @@
 
 ## 已进入仓库
 
-### `clawhub-launch-checklist`
+### `skill-launch-checklist`
 
 - 类型：skill
 - 当前作用：轻量入口，先判断这次发布是不是已经值得发

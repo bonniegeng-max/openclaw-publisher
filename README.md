@@ -34,7 +34,7 @@
 
 适合在 skill 已经具备基础能力后，继续提升标题、摘要、目标用户和首屏转化。
 
-### `clawhub-launch-checklist`
+### `skill-launch-checklist`
 
 把正式发布前最容易漏掉的动作收成一张轻量清单，快速判断这次上架是不是已经到了“值得按下发布”的状态。
 
@@ -74,7 +74,7 @@
 │   ├── skill-publish-readiness/
 │   ├── github-actions-clawhub-doctor/
 │   ├── skill-positioning-audit/
-│   ├── clawhub-launch-checklist/
+│   ├── skill-launch-checklist/
 │   ├── skill-summary-rewriter/
 │   └── release-proof-builder/
 └── plugins/
@@ -131,7 +131,7 @@ clawhub package publish ./plugins/<plugin-name> --dry-run --owner <your-owner>
 
 接下来优先继续沿着这几个方向扩：
 
-- 轻量入口：`clawhub-launch-checklist`
+- 轻量入口：`skill-launch-checklist`
 - 页面转化：`skill-summary-rewriter`
 - 元数据治理：`topic-fit-audit`
 - 发布后核验：`release-proof-builder`
@@ -143,7 +143,7 @@ clawhub package publish ./plugins/<plugin-name> --dry-run --owner <your-owner>
 
 如果你刚开始做 ClawHub skill：
 
-1. 先用 `clawhub-launch-checklist`
+1. 先用 `skill-launch-checklist`
 2. 再用 `skill-publish-readiness`
 3. 如果 Actions 红了，再用 `github-actions-clawhub-doctor`
 4. 发布后用 `release-proof-builder` 核验是否真正可安装

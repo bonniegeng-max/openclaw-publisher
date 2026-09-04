@@ -8,9 +8,25 @@ GitHub 基线提交：`029fb2763b6d8530f6efd29dea6e5aa8d42ec7d3`
 
 作品集已经形成一条清晰主线：发布前审查、发布链路排障、发布后证明和商店页增长。`skill-publish-readiness` 是当前下载信号最强的入口；两个最新增长类 skill 已在搜索接口出现首次安装信号，但平台不同接口尚未同步一致。
 
-当前最高优先级是统一修复展示名。除 `GitHub Actions ClawHub Doctor` 外，其余 skill 在 `inspect` 和搜索结果中仍以 slug 展示，会增加理解成本，也削弱系列品牌感。
+本轮最高优先级“统一展示名”已完成。7 个 skill 均保留稳定 slug，同时使用人类可读展示名；下一阶段进入观察窗口，不用短期波动过早判断增长效果。
 
-## 数据快照
+## 修复验收
+
+GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
+
+| Skill | Latest | Display | Moderation | 安装验证 |
+|---|---:|---|---|---|
+| `skill-publish-readiness` | 1.0.6 | Skill Publish Readiness | clean | 通过 |
+| `github-actions-clawhub-doctor` | 1.0.5 | GitHub Actions ClawHub Doctor | clean | 通过 |
+| `skill-positioning-audit` | 1.0.4 | Skill Positioning Audit | clean | 通过 |
+| `skill-launch-checklist` | 1.0.2 | Skill Launch Checklist | clean | 通过 |
+| `skill-summary-rewriter` | 1.0.2 | Skill Summary Rewriter | clean | 通过 |
+| `release-proof-builder` | 1.0.2 | Release Proof Builder | clean | 通过 |
+| `skill-portfolio-growth-audit` | 1.0.1 | Skill Portfolio Growth Audit | clean | 通过 |
+
+7 个 latest 版本均完成隔离安装，安装后的 `SKILL.md` 与该 GitHub 提交中的文件一致，证据等级达到 `E4`。
+
+## 修复前快照
 
 | Skill | Downloads | Inspect installs | Search installs | Stars | Versions | Latest | Display | Moderation |
 |---|---:|---:|---:|---:|---:|---:|---|---|
@@ -63,4 +79,4 @@ GitHub 基线提交：`029fb2763b6d8530f6efd29dea6e5aa8d42ec7d3`
 
 ## 唯一下一步
 
-统一所有 skill 的人类可读展示名，同时保留稳定 slug；发布后复查搜索结果和 `inspect.displayName`，再开始下一观察窗口。
+保持现有作品集结构至少一个完整 7 天观察窗口；下次周检优先比较展示名修复前后的搜索可见性、downloads 与 installs，再决定是否加码主入口或优化摘要，不新增同质化发布检查器。

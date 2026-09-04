@@ -1,0 +1,45 @@
+name: Metrics Tools CI
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "metrics/README.md"
+      - ".github/workflows/metrics-tools-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "metrics/README.md"
+      - ".github/workflows/metrics-tools-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metrics-tools-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Python sources
+        run: |
+          python -m py_compile \
+            scripts/collect_clawhub_metrics.py \
+            scripts/compare_clawhub_metrics.py \
+            tests/test_collect_clawhub_metrics.py \
+            tests/test_compare_clawhub_metrics.py
+
+      - name: Run offline tests
+        run: python -m unittest discover -s tests

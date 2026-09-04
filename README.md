@@ -170,7 +170,8 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 ├── .github/workflows/
 │   ├── clawhub-skill-publish.yml
 │   ├── clawhub-skill-publish-local.yml
-│   └── clawhub-plugin-publish.yml
+│   ├── clawhub-plugin-publish.yml
+│   └── metrics-tools-ci.yml
 ├── skills/
 │   └── 7 个已发布 Skill
 ├── plugins/
@@ -203,7 +204,7 @@ python3 scripts/compare_clawhub_metrics.py \
   --output metrics/clawhub-change-report.md
 ```
 
-对比器把版本变化、非 `clean` moderation、Skill 消失和计数回退标为验证事项。downloads、installs 与 stars 的正向变化只记录为观察信号，不自动解释为自然增长。
+对比器把版本变化、非 `clean` moderation、Skill 消失和计数回退标为验证事项。downloads、installs 与 stars 的正向变化只记录为观察信号，不自动解释为自然增长；只有同口径、无主动安装且间隔至少 7 天的快照才标记为可进入增长决策。
 
 运行离线测试：
 

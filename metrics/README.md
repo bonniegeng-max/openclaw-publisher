@@ -66,6 +66,16 @@ python3 scripts/compare_clawhub_metrics.py \
 - `observe`：出现正向计数变化或非风险元数据变化
 - `unchanged`：同口径字段无变化
 
+证据质量含义：
+
+- `eligible`：采集方法一致、两次均明确没有主动安装，且间隔至少 7 天
+- `premature`：观察窗口不足 7 天
+- `contaminated`：至少一个快照声明执行过主动安装
+- `incomparable`：采集方法缺失或不一致
+- `insufficient`：时间或主动安装声明缺失
+
+只有 `evidenceQuality.decisionReady` 为 `true` 时，才允许把报告带入下一轮产品加码、合并或停更决策。即使证据质量为 `eligible`，也只能说明观察条件合格，不能证明计数来自独立自然用户。
+
 `observe` 不是“自然增长”结论。对比器只证明两个快照之间存在计数差异，不判断流量来源，也不会自动触发安装。
 
 latest、previous 和默认 Markdown 报告均为本地观察产物，已从 Git 跟踪中排除；公开仓库只保存采集逻辑和口径规则。

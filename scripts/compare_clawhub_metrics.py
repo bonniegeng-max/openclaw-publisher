@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 
 METRICS = ("downloads", "installs", "stars", "versions")
+MIN_OBSERVATION_DAYS = 7
 
 
 def load_snapshot(path: Path) -> dict[str, Any]:
@@ -49,6 +51,81 @@ def metric_delta(previous: Any, current: Any) -> int | float | None:
     if not isinstance(current, (int, float)):
         return None
     return current - previous
+
+
+def parse_timestamp(value: Any, source: str) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{source}：collectedAt 必须是非空 ISO 8601 字符串")
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"{source}：collectedAt 不是有效的 ISO 8601 时间") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{source}：collectedAt 必须包含时区")
+    return parsed
+
+
+def evaluate_evidence(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    previous_source: str,
+    current_source: str,
+) -> dict[str, Any]:
+    reasons: list[str] = []
+    previous_time = parse_timestamp(previous.get("collectedAt"), previous_source)
+    current_time = parse_timestamp(current.get("collectedAt"), current_source)
+    elapsed_days: float | None = None
+    if previous_time is not None and current_time is not None:
+        elapsed_days = (current_time - previous_time).total_seconds() / 86400
+        if elapsed_days < 0:
+            raise ValueError("当前快照时间早于前次快照")
+
+    previous_install = previous.get("activeInstall")
+    current_install = current.get("activeInstall")
+    same_method = (
+        isinstance(previous.get("method"), str)
+        and bool(previous.get("method"))
+        and previous.get("method") == current.get("method")
+    )
+
+    if previous_install is True or current_install is True:
+        status = "contaminated"
+        reasons.append("至少一个快照声明执行过主动安装")
+    elif not same_method:
+        status = "incomparable"
+        reasons.append("两个快照的采集方法缺失或不一致")
+    elif not isinstance(previous_install, bool) or not isinstance(
+        current_install, bool
+    ):
+        status = "insufficient"
+        reasons.append("至少一个快照缺少 activeInstall 布尔声明")
+    elif elapsed_days is None:
+        status = "insufficient"
+        reasons.append("至少一个快照缺少 collectedAt")
+    elif elapsed_days < MIN_OBSERVATION_DAYS:
+        status = "premature"
+        reasons.append(
+            f"观察窗口仅 {elapsed_days:.2f} 天，少于 {MIN_OBSERVATION_DAYS} 天"
+        )
+    else:
+        status = "eligible"
+        reasons.append(
+            f"同口径、无主动安装声明，观察窗口为 {elapsed_days:.2f} 天"
+        )
+
+    return {
+        "status": status,
+        "decisionReady": status == "eligible",
+        "minimumDays": MIN_OBSERVATION_DAYS,
+        "elapsedDays": elapsed_days,
+        "sameMethod": same_method,
+        "previousActiveInstall": previous_install,
+        "currentActiveInstall": current_install,
+        "reasons": reasons,
+    }
 
 
 def compare_skill(
@@ -116,6 +193,12 @@ def compare_snapshots(
 ) -> dict[str, Any]:
     previous_skills = index_skills(previous, previous_source)
     current_skills = index_skills(current, current_source)
+    evidence_quality = evaluate_evidence(
+        previous,
+        current,
+        previous_source,
+        current_source,
+    )
     results: list[dict[str, Any]] = []
 
     for slug in sorted(previous_skills.keys() | current_skills.keys()):
@@ -156,6 +239,7 @@ def compare_snapshots(
         "schemaVersion": 1,
         "previousCollectedAt": previous.get("collectedAt"),
         "currentCollectedAt": current.get("collectedAt"),
+        "evidenceQuality": evidence_quality,
         "attribution": (
             "观察到的计数变化不能证明自然采用。downloads 不是独立用户数，"
             "installs 可能包含维护者验收。"
@@ -173,17 +257,26 @@ def format_value(value: Any) -> str:
 
 def render_markdown(comparison: dict[str, Any]) -> str:
     summary = comparison["summary"]
+    evidence = comparison["evidenceQuality"]
+    elapsed_days = evidence.get("elapsedDays")
+    elapsed_label = "未知" if elapsed_days is None else f"{elapsed_days:.2f} 天"
     lines = [
         "# ClawHub 指标变化",
         "",
         f"- 前次快照：`{format_value(comparison['previousCollectedAt'])}`",
         f"- 当前快照：`{format_value(comparison['currentCollectedAt'])}`",
+        f"- 观察窗口：{elapsed_label}",
+        (
+            f"- 证据质量：`{evidence['status']}`；"
+            f"{'可进入增长决策' if evidence['decisionReady'] else '不可进入增长决策'}"
+        ),
         (
             f"- 状态：{summary['verify']} 个需验证，"
             f"{summary['observe']} 个需观察，{summary['unchanged']} 个无变化"
         ),
         "",
         "> 指标变化只代表观察到的计数变化，不证明自然采用或独立用户增长。",
+        f"> 证据门槛：{'; '.join(evidence['reasons'])}",
         "",
         "| Skill | 状态 | Downloads | Installs | Stars | Latest / Moderation |",
         "|---|---|---:|---:|---:|---|",

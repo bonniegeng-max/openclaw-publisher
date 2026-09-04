@@ -12,12 +12,17 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
 
 
-def snapshot(skills, collected_at="2026-09-05T00:00:00+00:00"):
+def snapshot(
+    skills,
+    collected_at="2026-09-05T00:00:00+00:00",
+    active_install=False,
+    method="clawhub inspect --json",
+):
     return {
         "schemaVersion": 1,
         "collectedAt": collected_at,
-        "method": "clawhub inspect --json",
-        "activeInstall": False,
+        "method": method,
+        "activeInstall": active_install,
         "skills": skills,
     }
 
@@ -125,6 +130,70 @@ class CompareClawHubMetricsTests(unittest.TestCase):
             {"added", "removed"},
         )
 
+    def test_seven_day_clean_window_is_eligible(self):
+        result = MODULE.compare_snapshots(
+            snapshot([skill("alpha")]),
+            snapshot(
+                [skill("alpha")],
+                collected_at="2026-09-12T00:00:00+00:00",
+            ),
+        )
+
+        evidence = result["evidenceQuality"]
+        self.assertEqual(evidence["status"], "eligible")
+        self.assertTrue(evidence["decisionReady"])
+        self.assertEqual(evidence["elapsedDays"], 7)
+
+    def test_short_window_is_premature(self):
+        result = MODULE.compare_snapshots(
+            snapshot([skill("alpha")]),
+            snapshot(
+                [skill("alpha")],
+                collected_at="2026-09-11T23:59:59+00:00",
+            ),
+        )
+
+        evidence = result["evidenceQuality"]
+        self.assertEqual(evidence["status"], "premature")
+        self.assertFalse(evidence["decisionReady"])
+
+    def test_active_install_marks_evidence_contaminated(self):
+        result = MODULE.compare_snapshots(
+            snapshot([skill("alpha")], active_install=True),
+            snapshot(
+                [skill("alpha")],
+                collected_at="2026-09-12T00:00:00+00:00",
+            ),
+        )
+
+        evidence = result["evidenceQuality"]
+        self.assertEqual(evidence["status"], "contaminated")
+        self.assertFalse(evidence["decisionReady"])
+
+    def test_different_collection_methods_are_incomparable(self):
+        result = MODULE.compare_snapshots(
+            snapshot([skill("alpha")]),
+            snapshot(
+                [skill("alpha")],
+                collected_at="2026-09-12T00:00:00+00:00",
+                method="manual import",
+            ),
+        )
+
+        evidence = result["evidenceQuality"]
+        self.assertEqual(evidence["status"], "incomparable")
+        self.assertFalse(evidence["decisionReady"])
+
+    def test_reversed_timestamps_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "当前快照时间早于前次快照"):
+            MODULE.compare_snapshots(
+                snapshot(
+                    [skill("alpha")],
+                    collected_at="2026-09-12T00:00:00+00:00",
+                ),
+                snapshot([skill("alpha")]),
+            )
+
     def test_unchanged_skill_is_classified(self):
         same_skill = skill("alpha", downloads=3)
 
@@ -150,6 +219,7 @@ class CompareClawHubMetricsTests(unittest.TestCase):
         self.assertIn("# ClawHub 指标变化", report)
         self.assertIn("1 个需验证", report)
         self.assertIn("1.0.0 → 1.1.0", report)
+        self.assertIn("证据质量：`eligible`", report)
         self.assertIn("## 需处理", report)
 
 

@@ -1,7 +1,8 @@
 ---
-name: skill-positioning-audit
+name: Skill Positioning Audit
+slug: skill-positioning-audit
 description: Audit how your skill will read on ClawHub before you publish. 检查标题、摘要、目标用户、差异化和商店页转化问题。
-version: 1.0.0
+version: 1.0.4
 metadata:
   openclaw:
     os: [macos]
@@ -17,7 +18,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# skill-positioning-audit
+# Skill Positioning Audit
 
 If your skill can publish but nobody wants to install it, the problem is usually positioning, not syntax.
 

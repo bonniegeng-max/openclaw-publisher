@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6
+
+- 将 frontmatter `name` 统一为人类可读展示名 `Skill Publish Readiness`
+- 新增稳定 `slug: skill-publish-readiness`，避免展示名变化影响 registry 标识
+- 同步更新页面主标题，强化系列产品的一致性
+
 ## 1.0.1
 
 - 将商店页摘要改为中英混合短描述，首屏更快说明它解决什么问题

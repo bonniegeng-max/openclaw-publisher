@@ -1,7 +1,8 @@
 ---
-name: skill-portfolio-growth-audit
+name: Skill Portfolio Growth Audit
+slug: skill-portfolio-growth-audit
 description: Audit a ClawHub publisher portfolio using live registry evidence. Invoke when deciding which skills to improve, merge, stop, or build next based on downloads, installs, search competition, and version health.
-version: 1.0.0
+version: 1.0.1
 metadata:
   openclaw:
     os: [macos]
@@ -17,7 +18,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# skill-portfolio-growth-audit
+# Skill Portfolio Growth Audit
 
 别再靠感觉决定下一个 skill 做什么。
 

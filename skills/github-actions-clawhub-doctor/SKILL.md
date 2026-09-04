@@ -1,7 +1,8 @@
 ---
-name: github-actions-clawhub-doctor
+name: GitHub Actions ClawHub Doctor
+slug: github-actions-clawhub-doctor
 description: Diagnose why GitHub Actions to ClawHub publishes fail. 检查 workflow 引用、owner、token、slug、pending-publication 和目录发现问题。
-version: 1.0.0
+version: 1.0.5
 metadata:
   openclaw:
     os: [macos]
@@ -17,7 +18,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# github-actions-clawhub-doctor
+# GitHub Actions ClawHub Doctor
 
 Your publish failed. The real question is: where did the chain break?
 

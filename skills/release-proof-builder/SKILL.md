@@ -1,7 +1,8 @@
 ---
-name: release-proof-builder
+name: Release Proof Builder
+slug: release-proof-builder
 description: Build verifiable proof that a ClawHub release is live and installable. 在发布后核验 GitHub、Actions、registry、公开元数据和安装结果，避免把推送成功误当成上架成功。
-version: 1.0.0
+version: 1.0.2
 metadata:
   openclaw:
     os: [macos]
@@ -17,7 +18,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# release-proof-builder
+# Release Proof Builder
 
 “代码已经 push”不等于“skill 已经可以下载”。
 

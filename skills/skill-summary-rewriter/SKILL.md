@@ -1,7 +1,8 @@
 ---
-name: skill-summary-rewriter
+name: Skill Summary Rewriter
+slug: skill-summary-rewriter
 description: Rewrite weak skill summaries into sharper storefront copy. 把模糊、冗长、像模板的 skill 摘要改成更短、更清楚、更容易被安装的版本。
-version: 1.0.0
+version: 1.0.2
 metadata:
   openclaw:
     os: [macos]
@@ -17,7 +18,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# skill-summary-rewriter
+# Skill Summary Rewriter
 
 If your skill page feels vague in the first two lines, the problem is usually the summary.
 

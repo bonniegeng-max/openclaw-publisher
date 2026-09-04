@@ -1,7 +1,8 @@
 ---
-name: skill-publish-readiness
+name: Skill Publish Readiness
+slug: skill-publish-readiness
 description: Publish-ready review for ClawHub skills and plugins. 在正式发布前揪出文件缺失、版本不一致、环境声明、安全风险和同质化问题。
-version: 1.0.0
+version: 1.0.6
 metadata:
   openclaw:
     os: [macos]
@@ -17,7 +18,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# skill-publish-readiness
+# Skill Publish Readiness
 
 Before you hit publish, make sure your skill looks like a product instead of a rushed draft.
 

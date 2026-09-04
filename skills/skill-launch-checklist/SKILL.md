@@ -1,7 +1,8 @@
 ---
-name: skill-launch-checklist
+name: Skill Launch Checklist
+slug: skill-launch-checklist
 description: Final launch checklist for ClawHub skills. 在正式发布前快速检查标题、摘要、分类、示例、版本、dry-run 和公开页可信度。
-version: 1.0.0
+version: 1.0.2
 metadata:
   openclaw:
     os: [macos]
@@ -17,7 +18,7 @@ metadata:
         bins: [clawhub]
 ---
 
-# skill-launch-checklist
+# Skill Launch Checklist
 
 Before you publish, run one last check that cares about both shipping and storefront quality.
 

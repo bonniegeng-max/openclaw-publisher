@@ -261,6 +261,7 @@ jobs:
                   "--registry", os.environ["INPUT_REGISTRY"],
                   "skill", "publish", relative_path,
                   "--json",
+                  "--slug", target.name,
                   "--source-repo", os.environ["SOURCE_REPOSITORY"],
                   "--source-commit", source_commit,
                   "--source-path", relative_path,

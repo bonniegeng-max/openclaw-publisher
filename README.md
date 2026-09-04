@@ -1,70 +1,163 @@
-# openclaw-publisher
+# OpenClaw Publisher
 
-围绕 ClawHub 发布、排障和增长的一组 skill，以及一条能自动同步到 GitHub 和 ClawHub 的发布链路。
+Ship ClawHub skills with evidence, not guesswork.
 
-这个仓库不只是“自动同步模板”，而是一个正在成型的系列产品：先帮创作者把 skill 发出去，再帮他们把发布质量、页面转化和后续增长一起做起来。
+这里是一组围绕 ClawHub 发布、排障、验证和增长的 Skill，也是一条可复用的 GitHub → ClawHub 自动发布链路。每个产品都来自真实发布问题，并经过公开 registry 检查与独立安装验证。
 
-## 当前定位
+[ClawHub Publisher](https://clawhub.ai/user/bonniegeng-max) · [Growth Monitor](skill_growth_monitor.md) · [Idea Backlog](skill_idea_backlog.md)
 
-这条线现在聚焦 3 件事：
+## 当前状态
 
-- 发布前自查：避免“能过 dry-run，但不值得发”
-- GitHub Actions 排障：定位 GitHub 到 ClawHub 的链路断点
-- 商店页转化：减少模板感，增加被理解、被记住、被安装的概率
+最后验证：`2026-09-05`
 
-如果这三件事持续做深，你的账号会更像一个明确的角色，而不是零散地发几个工具。
+| 信号 | 状态 |
+|---|---|
+| 已发布 Skill | 7 |
+| ClawHub moderation | 全部 `clean` |
+| 安装验证 | 7 个 latest 版本均达到 `E4` |
+| 自动发布 | GitHub `main` → ClawHub |
+| 差分发布 | 只发布发生实质变化的 Skill |
+| 主入口 | `Skill Publish Readiness 1.0.7` |
 
-## 已有 skill
+公开数据会变化，当前快照、口径限制和决策记录在 [`skill_growth_monitor.md`](skill_growth_monitor.md)。
 
-### `skill-publish-readiness`
+## 从这里开始
 
-发布前审查 skill 和 plugin，重点看文件齐不齐、版本和文案是否一致、环境声明是否负责、安全风险是否可控，以及它和同类 skill 有没有真正区别。
+如果只安装一个，先用主入口：
 
-适合在你准备正式发布前，做一次“现在发出去会不会太草率”的总检查。
+```bash
+clawhub install skill-publish-readiness
+```
 
-### `github-actions-clawhub-doctor`
+它会审查文件、版本、slug、环境、安全风险和差异化，并给出阻塞项、证据矩阵与最小修复路径。
 
-专门诊断 GitHub Actions 到 ClawHub 的发布失败，把问题拆到 workflow、owner、token、slug、目录发现或 registry 返回状态那一层。
+| 你正在面对的问题 | 推荐 Skill | 你会得到什么 |
+|---|---|---|
+| 第一次发布，不确定是否准备好 | [Skill Launch Checklist](https://clawhub.ai/bonniegeng-max/skills/skill-launch-checklist) | 一次轻量发布判断 |
+| dry-run 能过，但担心发布质量 | [Skill Publish Readiness](https://clawhub.ai/bonniegeng-max/skills/skill-publish-readiness) | 完整发布前审查 |
+| GitHub Actions 红了 | [GitHub Actions ClawHub Doctor](https://clawhub.ai/bonniegeng-max/skills/github-actions-clawhub-doctor) | 链路断点与最小修复 |
+| 已经 push，不确定是否真能下载 | [Release Proof Builder](https://clawhub.ai/bonniegeng-max/skills/release-proof-builder) | `E0-E4` 发布证据 |
+| 页面看起来像模板 | [Skill Positioning Audit](https://clawhub.ai/bonniegeng-max/skills/skill-positioning-audit) | 定位与商店页诊断 |
+| 摘要太泛、太长 | [Skill Summary Rewriter](https://clawhub.ai/bonniegeng-max/skills/skill-summary-rewriter) | 可直接替换的摘要 |
+| 已经发布多个 Skill，不知道该押注谁 | [Skill Portfolio Growth Audit](https://clawhub.ai/bonniegeng-max/skills/skill-portfolio-growth-audit) | 作品集决策与证据边界 |
 
-适合在 Actions 红灯、发布结果真假难辨，或者 `pending-publication` 被误判时使用。
+## 产品路径
 
-### `skill-positioning-audit`
+这 7 个 Skill 覆盖同一条发布旅程：
 
-不看“能不能发”，而看“发出去之后会不会像模板、会不会没有记忆点、会不会让人看不懂给谁用”。
+```text
+Launch Checklist
+      ↓
+Publish Readiness
+      ↓
+GitHub Actions Doctor
+      ↓
+Release Proof Builder
+      ↓
+Positioning Audit / Summary Rewriter
+      ↓
+Portfolio Growth Audit
+```
 
-适合在 skill 已经具备基础能力后，继续提升标题、摘要、目标用户和首屏转化。
+先判断是否值得发，再解决链路问题；发布完成后验证可安装性，最后才优化页面转化和作品集方向。
 
-### `skill-launch-checklist`
+## 产品目录
 
-把正式发布前最容易漏掉的动作收成一张轻量清单，快速判断这次上架是不是已经到了“值得按下发布”的状态。
+| Skill | 角色 | 安装命令 | 当前信号 |
+|---|---|---|---|
+| `skill-publish-readiness` | 主入口，完整发布审查 | `clawhub install skill-publish-readiness` | 43 downloads |
+| `github-actions-clawhub-doctor` | CI/CD 发布排障 | `clawhub install github-actions-clawhub-doctor` | 11 downloads |
+| `skill-launch-checklist` | 低门槛发布入口 | `clawhub install skill-launch-checklist` | 观察中 |
+| `release-proof-builder` | 发布后证据核验 | `clawhub install release-proof-builder` | 观察中 |
+| `skill-positioning-audit` | 商店页定位诊断 | `clawhub install skill-positioning-audit` | 观察中 |
+| `skill-summary-rewriter` | 摘要改写 | `clawhub install skill-summary-rewriter` | 观察中 |
+| `skill-portfolio-growth-audit` | 作品集增长决策 | `clawhub install skill-portfolio-growth-audit` | 观察中 |
 
-适合做轻量入口，也适合给还不想跑完整诊断的人先做第一次自查。
+下载数字是 `2026-09-05` 的 ClawHub 快照，不等同于安装用户数。
 
-### `skill-summary-rewriter`
+## 真实失败来源
 
-专门把模糊、冗长、像模板的 skill 摘要，改成更短、更清楚、更容易被理解和安装的商店页文案。
+这套产品线源于实际发生过的发布事故：
 
-适合方向已经明确，但首页第一句话还不够有产品感的创作者。
+- reusable workflow 引用不存在，Actions 无法启动真实发布
+- slug 使用 ClawHub 受保护命名空间，首次上架失败
+- `pending-publication` 被错误映射为失败
+- 上传票据瞬时过期，需要有限退避重试
+- 每次发布全部 Skill，制造无意义版本
+- 展示名回退成 slug，降低搜索结果可读性
+- GitHub 已推送，但 registry 或独立安装仍未证明成功
 
-### `release-proof-builder`
+主入口中的 [`real_publish_failure_review.md`](skills/skill-publish-readiness/examples/real_publish_failure_review.md) 展示了证据、根因、修复和最终 E4 验收。
 
-把 GitHub 提交、Actions、ClawHub registry 和独立安装结果整理成可核验的发布证据链。
+## 发布证据
 
-适合解决“已经 push 了，但到底有没有真正上架、能不能下载”的发布后确认问题。
+仓库用 `E0-E4` 区分“做过动作”和“结果已成立”：
 
-### `skill-portfolio-growth-audit`
+| 等级 | 含义 |
+|---|---|
+| `E0` | 只有本地文件 |
+| `E1` | GitHub 远端包含目标提交 |
+| `E2` | 发布 workflow 已执行 |
+| `E3` | ClawHub registry 可读取正确版本与元数据 |
+| `E4` | 指定版本可独立安装，核心文件与源码一致 |
 
-读取整个 publisher 的真实下载、安装、版本、搜索竞争和仓库质量，决定哪些 skill 应该加码、修复、合并、观察或停更。
+只有达到 `E4`，才在这里标记为“已上线、可下载使用”。
 
-适合已经有多个公开 skill，希望建立系列心智并减少盲目开发的人。
+## 自动发布
 
-## 为什么这条线有机会
+### Skill
 
-- 题目来自真实踩坑，不是凭空拼出来的功能清单
-- 每个 skill 都围绕同一条发布链路展开，天然适合系列化
-- 工程问题和增长问题被放在同一个体系里，差异会比纯“工具集合”更明显
+- pull request：对改动过的 `skills/**` 执行 dry-run
+- push 到 `main`：只发布改动过的 Skill
+- workflow dispatch：支持手动重跑
+- `.clawhub/skill-catalog.json`：统一管理展示名、categories 和 topics
+- 发布命令显式传递稳定 slug，避免展示名变化创建错误 ID
+- 瞬时上传错误最多退避重试 3 次，确定性错误直接失败
 
-这意味着它既能服务当下的发布问题，也能慢慢长成一个更鲜明的个人 IP 方向：`ClawHub 发布与增长工具作者`。
+### Plugin
+
+- pull request：只验证改动过的 plugin
+- push 到 `main`：只发布改动过的 plugin
+- workflow dispatch：可指定单个 plugin，也可扫描全部 plugin
+
+## 复用这套仓库
+
+先准备 ClawHub CLI：
+
+```bash
+npm i -g clawhub
+clawhub login
+clawhub whoami
+```
+
+在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 中配置：
+
+- `CLAWHUB_OWNER`
+- `CLAWHUB_TOKEN`
+
+新增 Skill 时至少包含：
+
+```text
+skills/<stable-slug>/
+├── SKILL.md
+├── CHANGELOG.md
+├── .clawhubignore
+├── examples/
+├── references/
+└── templates/
+```
+
+在 `.clawhub/skill-catalog.json` 中补充展示名、categories 和 topics，然后先执行：
+
+```bash
+clawhub skill publish ./skills/<stable-slug> \
+  --slug <stable-slug> \
+  --name "<Human Readable Name>" \
+  --dry-run \
+  --owner <owner>
+```
+
+push 到 `main` 后，自动发布只处理发生变化的目录。
 
 ## 仓库结构
 
@@ -77,84 +170,20 @@
 │   ├── clawhub-skill-publish-local.yml
 │   └── clawhub-plugin-publish.yml
 ├── skills/
-│   ├── skill-publish-readiness/
-│   ├── github-actions-clawhub-doctor/
-│   ├── skill-positioning-audit/
-│   ├── skill-launch-checklist/
-│   ├── skill-summary-rewriter/
-│   ├── release-proof-builder/
-│   └── skill-portfolio-growth-audit/
-└── plugins/
+│   └── 7 个已发布 Skill
+├── plugins/
+├── skill_growth_monitor.md
+├── skill_growth_roadmap.md
+└── skill_idea_backlog.md
 ```
 
-## 自动发布链路
+## 增长原则
 
-### Skill
+- 优先优化已有采用信号的产品
+- 新版本必须包含可解释的实质变化
+- downloads、installs、stars 和搜索结果分别记录
+- 新 Skill 至少观察 7 天，不用短期零数据判定失败
+- 竞品成熟且差异不足时，不复制同类产品
+- 新方向必须强化“ClawHub 发布与增长工具作者”这条主线
 
-- `pull_request`：对 `skills/**` 做 dry-run
-- `push` 到 `main`：自动发布 `skills/**`
-- `workflow_dispatch`：支持手动重跑
-- `.clawhub/skill-catalog.json`：统一管理 `categories` 和 `topics`
-
-### Plugin
-
-- `pull_request`：只 dry-run 改动过的 plugin
-- `push` 到 `main`：只发布改动过的 plugin
-- `workflow_dispatch`：可指定单个 plugin，也可扫描全部 plugin
-
-## 需要的 GitHub 配置
-
-在仓库的 `Settings -> Secrets and variables -> Actions` 中配置：
-
-- `CLAWHUB_OWNER`
-- `CLAWHUB_TOKEN`
-
-其中 `CLAWHUB_OWNER` 用于 skill 与 plugin 的 owner 透传，`CLAWHUB_TOKEN` 用于正式 publish。
-
-## 本地验证
-
-先安装并登录 CLI：
-
-```bash
-npm i -g clawhub
-clawhub login
-clawhub whoami
-```
-
-验证某个 skill：
-
-```bash
-clawhub skill publish ./skills/<skill-slug> --dry-run --owner <your-owner>
-```
-
-验证某个 plugin：
-
-```bash
-clawhub package validate ./plugins/<plugin-name>
-clawhub package publish ./plugins/<plugin-name> --dry-run --owner <your-owner>
-```
-
-## 适合继续做的方向
-
-接下来优先继续沿着这几个方向扩：
-
-- 轻量入口：`skill-launch-checklist`
-- 页面转化：`skill-summary-rewriter`
-- 元数据治理：`topic-fit-audit`
-- 发布后核验：`release-proof-builder`
-- 长线工具化：`clawhub-catalog-optimizer` plugin
-
-这些题比“万能 AI 助手”更容易被记住，也更容易形成系列心智。
-
-## 使用建议
-
-如果你刚开始做 ClawHub skill：
-
-1. 先用 `skill-launch-checklist`
-2. 再用 `skill-publish-readiness`
-3. 如果 Actions 红了，再用 `github-actions-clawhub-doctor`
-4. 发布后用 `release-proof-builder` 核验是否真正可安装
-5. 真要提高安装转化，再用 `skill-positioning-audit` 和 `skill-summary-rewriter`
-6. skill 数量变多后，用 `skill-portfolio-growth-audit` 决定下一步押注
-
-这套顺序覆盖了发布前、发布中、发布后和增长优化，而不是一组彼此孤立的工具。
+当前处于 `Skill Publish Readiness 1.0.7` 的观察窗口。下一个产品或插件会由真实采用数据和竞争缺口决定。

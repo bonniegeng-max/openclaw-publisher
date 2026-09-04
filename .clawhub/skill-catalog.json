@@ -8,5 +8,15 @@
       "skill-audit",
       "metadata"
     ]
+  },
+  "skills/github-actions-clawhub-doctor": {
+    "categories": ["development", "automation", "operations"],
+    "topics": [
+      "github-actions",
+      "workflow-debug",
+      "publish-failure",
+      "release-ops",
+      "ci-troubleshooting"
+    ]
   }
 }

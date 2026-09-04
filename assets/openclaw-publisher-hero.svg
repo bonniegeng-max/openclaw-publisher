@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">OpenClaw Publisher</title>
+  <desc id="desc">Ship ClawHub skills with evidence, from preparation through publishing, verification, and growth.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071018"/>
+      <stop offset="0.55" stop-color="#0b1822"/>
+      <stop offset="1" stop-color="#10242b"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff6b35"/>
+      <stop offset="1" stop-color="#ff9d5c"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#b8d8d4" stroke-opacity=".06"/>
+    </pattern>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="420" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="420" rx="28" fill="url(#grid)"/>
+  <circle cx="1038" cy="74" r="128" fill="#65d1c8" opacity=".05"/>
+  <circle cx="1080" cy="18" r="62" fill="#ff6b35" opacity=".08"/>
+
+  <g transform="translate(70 66)">
+    <rect width="58" height="58" rx="17" fill="#ff6b35"/>
+    <path d="M17 36c0-12 7-20 17-20 7 0 12 3 15 8l-8 5c-2-3-4-4-7-4-5 0-8 4-8 11s3 11 8 11c3 0 6-2 8-5l8 5c-4 6-9 9-17 9-10 0-16-8-16-20Z" fill="#071018"/>
+    <circle cx="45" cy="13" r="4" fill="#f4f0e8"/>
+  </g>
+
+  <text x="150" y="96" fill="#65d1c8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" letter-spacing="3">OPENCLAW / PUBLISHER</text>
+  <text x="70" y="178" fill="#f4f0e8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="58" font-weight="800" letter-spacing="-2">Ship with evidence.</text>
+  <text x="72" y="220" fill="#a8bbc0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22">Release, diagnose, verify, and grow ClawHub skills.</text>
+
+  <g transform="translate(72 275)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <path d="M84 25H916" stroke="#65d1c8" stroke-opacity=".22" stroke-width="2"/>
+    <path d="M84 25H276" stroke="url(#signal)" stroke-width="3" filter="url(#glow)"/>
+
+    <g transform="translate(0)">
+      <circle cx="24" cy="25" r="24" fill="#ff6b35"/>
+      <text x="24" y="30" text-anchor="middle" fill="#071018" font-size="14" font-weight="800">01</text>
+      <text x="62" y="21" fill="#f4f0e8" font-size="14" font-weight="700">PREPARE</text>
+      <text x="62" y="42" fill="#71858b" font-size="12">readiness</text>
+    </g>
+
+    <g transform="translate(270)">
+      <circle cx="24" cy="25" r="24" fill="#102d35" stroke="#65d1c8" stroke-width="2"/>
+      <text x="24" y="30" text-anchor="middle" fill="#65d1c8" font-size="14" font-weight="800">02</text>
+      <text x="62" y="21" fill="#f4f0e8" font-size="14" font-weight="700">PUBLISH</text>
+      <text x="62" y="42" fill="#71858b" font-size="12">actions</text>
+    </g>
+
+    <g transform="translate(540)">
+      <circle cx="24" cy="25" r="24" fill="#102d35" stroke="#65d1c8" stroke-width="2"/>
+      <text x="24" y="30" text-anchor="middle" fill="#65d1c8" font-size="14" font-weight="800">03</text>
+      <text x="62" y="21" fill="#f4f0e8" font-size="14" font-weight="700">VERIFY</text>
+      <text x="62" y="42" fill="#71858b" font-size="12">E0 → E4</text>
+    </g>
+
+    <g transform="translate(810)">
+      <circle cx="24" cy="25" r="24" fill="#102d35" stroke="#65d1c8" stroke-width="2"/>
+      <text x="24" y="30" text-anchor="middle" fill="#65d1c8" font-size="14" font-weight="800">04</text>
+      <text x="62" y="21" fill="#f4f0e8" font-size="14" font-weight="700">GROW</text>
+      <text x="62" y="42" fill="#71858b" font-size="12">portfolio</text>
+    </g>
+  </g>
+
+  <g transform="translate(70 370)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700" letter-spacing="1.4">
+    <rect width="488" height="30" rx="15" fill="#0f252d" stroke="#24424a"/>
+    <circle cx="19" cy="15" r="4" fill="#65d1c8"/>
+    <text x="33" y="20" fill="#b8d8d4">7 LIVE SKILLS</text>
+    <text x="164" y="20" fill="#45616a">/</text>
+    <text x="184" y="20" fill="#b8d8d4">CLEAN MODERATION</text>
+    <text x="354" y="20" fill="#45616a">/</text>
+    <text x="374" y="20" fill="#ff9d5c">E4 VERIFIED</text>
+  </g>
+
+  <text x="1128" y="390" text-anchor="end" fill="#45616a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">BONNIEGENG-MAX</text>
+</svg>

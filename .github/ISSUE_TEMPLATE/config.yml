@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ClawHub Publisher
+    url: https://clawhub.ai/user/bonniegeng-max
+    about: 浏览已发布 Skill、版本和公开状态
+  - name: 作品集增长报告
+    url: https://github.com/bonniegeng-max/openclaw-publisher/blob/main/skill_growth_monitor.md
+    about: 查看指标口径、当前决策和观察边界

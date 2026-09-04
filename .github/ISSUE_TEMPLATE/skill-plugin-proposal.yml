@@ -1,0 +1,97 @@
+name: Skill / Plugin 提案
+description: 提交有真实任务、差异和验证方法的新方向
+title: "[Proposal] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        好提案先说明问题和证据，再讨论名字与功能。与现有产品高度重叠的方向通常会先合并评估。
+
+  - type: dropdown
+    id: artifact
+    attributes:
+      label: 提案类型
+      options:
+        - Skill
+        - Plugin
+        - 现有 Skill 改进
+        - 自动发布基础设施
+    validations:
+      required: true
+
+  - type: textarea
+    id: user
+    attributes:
+      label: 谁会遇到这个问题
+      description: 描述具体用户和触发场景，避免“所有开发者”
+      placeholder: 准备把多个 Skill 从 GitHub 自动发布到 ClawHub 的个人作者……
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 真实任务与当前代价
+      description: 用户现在要完成什么，哪里最容易失败或浪费时间
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 现有替代方案
+      description: 列出已知 Skill、Plugin、脚本或手工流程，并说明不足
+    validations:
+      required: true
+
+  - type: textarea
+    id: differentiation
+    attributes:
+      label: 差异化
+      description: 一句话说明为什么不该直接使用或改进现有产品
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 所属产品阶段
+      options:
+        - 发布准备
+        - GitHub Actions 与发布执行
+        - Registry 与安装验证
+        - 商店页定位与转化
+        - 作品集增长
+        - 不属于现有主线
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: 用户安装后会得到什么
+      description: 描述具体输出，不要只列能力
+      placeholder: 一份包含……的 Markdown 报告 / 一个可运行的发布状态面板……
+    validations:
+      required: true
+
+  - type: textarea
+    id: proof
+    attributes:
+      label: 验证信号
+      description: 什么公开证据会证明它值得继续
+      placeholder: 精确任务搜索可见、自然安装、真实失败案例复用、重复使用……
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: 提案边界
+      options:
+        - label: 该方向不会复制已有成熟高安装产品
+          required: true
+        - label: 该方向能加强 ClawHub 发布与增长主线
+          required: true
+        - label: 我接受先优化现有 Skill，而不是立即新建
+          required: true

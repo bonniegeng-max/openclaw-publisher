@@ -1,0 +1,41 @@
+name: ClawHub Skill Publish
+
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - ".github/workflows/clawhub-skill-publish.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "skills/**"
+      - ".github/workflows/clawhub-skill-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: clawhub-skill-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dry-run:
+    if: github.event_name == 'pull_request'
+    uses: openclaw/clawhub/.github/workflows/skill-publish.yml@v1
+    with:
+      owner: ${{ vars.CLAWHUB_OWNER }}
+      root: skills
+      dry_run: true
+
+  publish:
+    if: github.event_name != 'pull_request'
+    uses: openclaw/clawhub/.github/workflows/skill-publish.yml@v1
+    with:
+      owner: ${{ vars.CLAWHUB_OWNER }}
+      root: skills
+      dry_run: false
+    secrets:
+      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}

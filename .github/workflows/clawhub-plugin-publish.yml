@@ -1,0 +1,159 @@
+name: ClawHub Plugin Publish
+
+on:
+  pull_request:
+    paths:
+      - "plugins/**"
+      - ".github/workflows/clawhub-plugin-publish.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "plugins/**"
+      - ".github/workflows/clawhub-plugin-publish.yml"
+  workflow_dispatch:
+    inputs:
+      plugin_path:
+        description: "指定单个 plugin 目录，例如 plugins/my-plugin"
+        required: false
+        type: string
+      publish_all:
+        description: "忽略 diff，发布当前仓库中所有可识别 plugin"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: clawhub-plugin-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.collect.outputs.matrix }}
+      has_targets: ${{ steps.collect.outputs.has_targets }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: collect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          INPUT_PLUGIN_PATH: ${{ inputs.plugin_path }}
+          INPUT_PUBLISH_ALL: ${{ inputs.publish_all }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          root = Path(".").resolve()
+          plugins_root = root / "plugins"
+
+          def is_plugin_dir(path: Path) -> bool:
+              return (
+                  path.is_dir()
+                  and (path / "package.json").is_file()
+                  and (path / "openclaw.plugin.json").is_file()
+              )
+
+          def list_all_plugins():
+              if not plugins_root.is_dir():
+                  return []
+              items = []
+              for child in sorted(plugins_root.iterdir()):
+                  if is_plugin_dir(child):
+                      items.append({"path": child.relative_to(root).as_posix()})
+              return items
+
+          event = os.environ.get("EVENT_NAME", "").strip()
+          manual_path = os.environ.get("INPUT_PLUGIN_PATH", "").strip()
+          publish_all = os.environ.get("INPUT_PUBLISH_ALL", "").strip().lower() == "true"
+
+          targets = []
+
+          if manual_path:
+              candidate = (root / manual_path).resolve()
+              if root not in candidate.parents and candidate != root:
+                  raise SystemExit(f"plugin_path 超出仓库范围: {manual_path}")
+              if not is_plugin_dir(candidate):
+                  raise SystemExit(f"plugin_path 不是有效 plugin 目录: {manual_path}")
+              targets = [{"path": candidate.relative_to(root).as_posix()}]
+          elif publish_all or event == "workflow_dispatch":
+              targets = list_all_plugins()
+          else:
+              if event == "pull_request":
+                  base = os.environ.get("PR_BASE_SHA", "").strip()
+                  head = os.environ.get("PR_HEAD_SHA", "").strip()
+              else:
+                  base = os.environ.get("BEFORE_SHA", "").strip()
+                  head = os.environ.get("CURRENT_SHA", "").strip()
+
+              if not base or set(base) == {"0"} or not head:
+                  targets = list_all_plugins()
+              else:
+                  diff = subprocess.check_output(
+                      ["git", "diff", "--name-only", base, head, "--", "plugins"],
+                      text=True,
+                  )
+                  seen = set()
+                  for line in diff.splitlines():
+                      raw = line.strip()
+                      if not raw:
+                          continue
+                      parts = Path(raw).parts
+                      if len(parts) < 2 or parts[0] != "plugins":
+                          continue
+                      plugin_dir = root / parts[0] / parts[1]
+                      if plugin_dir.as_posix() in seen:
+                          continue
+                      if is_plugin_dir(plugin_dir):
+                          seen.add(plugin_dir.as_posix())
+                          targets.append({"path": plugin_dir.relative_to(root).as_posix()})
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write(f"matrix={json.dumps(targets, ensure_ascii=False)}\n")
+              fh.write(f"has_targets={'true' if targets else 'false'}\n")
+
+          print(json.dumps(targets, ensure_ascii=False))
+          PY
+
+  dry-run:
+    if: github.event_name == 'pull_request' && needs.discover.outputs.has_targets == 'true'
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.discover.outputs.matrix) }}
+    uses: openclaw/clawhub/.github/workflows/package-publish.yml@main
+    with:
+      source: ${{ matrix.path }}
+      owner: ${{ vars.CLAWHUB_OWNER }}
+      dry_run: true
+
+  publish:
+    if: github.event_name != 'pull_request' && needs.discover.outputs.has_targets == 'true'
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.discover.outputs.matrix) }}
+    uses: openclaw/clawhub/.github/workflows/package-publish.yml@main
+    with:
+      source: ${{ matrix.path }}
+      owner: ${{ vars.CLAWHUB_OWNER }}
+      dry_run: false
+    secrets:
+      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}

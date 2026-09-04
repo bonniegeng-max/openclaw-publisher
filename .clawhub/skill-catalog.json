@@ -18,5 +18,15 @@
       "release-ops",
       "ci-troubleshooting"
     ]
+  },
+  "skills/skill-positioning-audit": {
+    "categories": ["development", "research", "knowledge"],
+    "topics": [
+      "positioning",
+      "catalog-copy",
+      "skill-differentiation",
+      "install-conversion",
+      "storefront-review"
+    ]
   }
 }

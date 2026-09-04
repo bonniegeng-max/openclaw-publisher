@@ -10,6 +10,8 @@ GitHub 基线提交：`029fb2763b6d8530f6efd29dea6e5aa8d42ec7d3`
 
 本轮最高优先级“统一展示名”已完成。7 个 skill 均保留稳定 slug，同时使用人类可读展示名；下一阶段进入观察窗口，不用短期波动过早判断增长效果。
 
+主入口加码动作也已完成：`skill-publish-readiness` 发布 `1.0.7`，新增真实复合失败审查案例和证据矩阵模板，并通过 ClawHub `clean` 审核及 E4 独立安装验证。该版本刚上线，暂不把下载量未变化解释为优化无效。
+
 ## 修复验收
 
 GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
@@ -30,7 +32,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 | Skill | Downloads | Inspect installs | Search installs / 60d | Stars | Versions | Latest | DisplayName | Topics | Moderation | 可安装 |
 |---|---:|---:|---:|---:|---:|---|---|---|---|---|
-| `skill-publish-readiness` | 43 | 0 | 1* | 0 | 7 | `1.0.6` | Skill Publish Readiness | `publishing`, `release-review`, `github-actions`, `skill-audit`, `metadata` | clean | 是 |
+| `skill-publish-readiness` | 43 | 0 | 1* | 0 | 8 | `1.0.7` | Skill Publish Readiness | `publishing`, `release-review`, `github-actions`, `skill-audit`, `metadata` | clean | 是 |
 | `github-actions-clawhub-doctor` | 11 | 0 | 1* | 0 | 6 | `1.0.5` | GitHub Actions ClawHub Doctor | `github-actions`, `workflow-debug`, `publish-failure`, `release-ops`, `ci-troubleshooting` | clean | 是 |
 | `skill-positioning-audit` | 0 | 0 | 1* | 0 | 5 | `1.0.4` | Skill Positioning Audit | `positioning`, `catalog-copy`, `skill-differentiation`, `install-conversion`, `storefront-review` | clean | 是 |
 | `skill-launch-checklist` | 0 | 0 | 1* | 0 | 3 | `1.0.2` | Skill Launch Checklist | `launch-checklist`, `pre-publish-review`, `release-readiness`, `catalog-quality`, `skill-launch` | clean | 是 |
@@ -47,7 +49,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 | Downloads | 七项均无变化 | 没有可确认的新增下载信号 |
 | Inspect installs | 七项均保持 0 | 仍无 registry 详情口径的安装量 |
 | Stars | 七项均保持 0 | 无变化 |
-| Versions / latest | 七项各增加 1 个版本 | 来自展示名修复发布，不等于功能增长 |
+| Versions / latest | 主入口较基线增加 2 个版本，其余各增加 1 个 | `1.0.7` 是真实案例与报告模板升级，其余来自展示名修复 |
 | DisplayName | 6 项由 slug 改为产品名 | 搜索可读性已实质改善；Doctor 原本已正确 |
 | Moderation | 七项均保持 clean | 无审核异常 |
 | 可安装状态 | 七项均安装成功 | 最新版本均完成 E4 安装验证 |
@@ -91,7 +93,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 | Skill | 决策 | 依据 |
 |---|---|---|
-| `skill-publish-readiness` | 加码 | downloads 明显领先、长尾搜索第 1，是最强入口 |
+| `skill-publish-readiness` | 加码已执行，进入观察 | downloads 明显领先、长尾搜索第 1；`1.0.7` 已补真实案例与结构化输出 |
 | `github-actions-clawhub-doctor` | 加码 | 第二高 downloads，任务最具体，搜索中没有直接竞品 |
 | `skill-positioning-audit` | 观察 | 新发布、0 downloads，且与 Summary Rewriter 关键词重叠 |
 | `skill-launch-checklist` | 观察 | 可见且可安装，但与主入口任务相邻，尚无独立采用证据 |
@@ -109,4 +111,4 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 唯一下一步
 
-只优化 `skill-publish-readiness`：在 GitHub 版本中加入一个可直接复用的真实发布失败审查案例与结构化输出样例，形成一次有实质内容的版本更新；完成前不开发新 Skill 或 plugin。
+保持作品集结构不变，等待 `skill-publish-readiness 1.0.7` 至少一个完整 7 天观察窗口；下一次周检只比较自然 downloads、installs 与搜索可见性变化，再决定是否继续加码主入口或转向 `github-actions-clawhub-doctor`。

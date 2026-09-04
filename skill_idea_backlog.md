@@ -18,15 +18,15 @@
 - 当前作用：轻量入口，先判断这次发布是不是已经值得发
 - 后续可继续补：更强的 checklist 输出样式、首屏改写建议、和其他 skill 的路由关系
 
-## 优先级 A
-
-### 1. `skill-summary-rewriter`
+### `skill-summary-rewriter`
 
 - 类型：skill
-- 价值：专门把弱摘要改成更短、更像产品的摘要
-- 原因：和 `skill-positioning-audit` 形成上下游
+- 当前作用：专门改写商店页摘要，承接“定位没错但第一页不够打”的问题
+- 后续可继续补：摘要风格切换、短版/长版双输出、与 `skill-positioning-audit` 的联动路由
 
-### 2. `clawhub-catalog-optimizer`
+## 优先级 A
+
+### 1. `clawhub-catalog-optimizer`
 
 - 类型：plugin
 - 价值：集中维护 categories、topics、摘要、版本和 changelog
@@ -34,19 +34,19 @@
 
 ## 优先级 B
 
-### 3. `release-proof-builder`
+### 2. `release-proof-builder`
 
 - 类型：skill
 - 价值：自动整理发布证据，包括 workflow 状态、公开页、安装命令
 - 原因：适合做成“发完后一键核验”
 
-### 4. `skill-series-planner`
+### 3. `skill-series-planner`
 
 - 类型：skill
 - 价值：围绕现有 skill 生成系列化扩展方向
 - 原因：帮你持续开新题，而不是一次性发完
 
-### 5. `topic-fit-audit`
+### 4. `topic-fit-audit`
 
 - 类型：skill
 - 价值：检查 categories / topics 是否匹配内容和目标用户
@@ -54,25 +54,25 @@
 
 ## 优先级 C
 
-### 6. `workflow-ref-doctor`
+### 5. `workflow-ref-doctor`
 
 - 类型：skill
 - 价值：更聚焦 reusable workflow 引用、版本和兼容性问题
 - 原因：是 `github-actions-clawhub-doctor` 的垂直拆分版
 
-### 7. `skill-page-benchmark`
+### 6. `skill-page-benchmark`
 
 - 类型：skill
 - 价值：把你的页面和同类 skill 做结构化对比
 - 原因：更偏增长策略，适合后期做
 
-### 8. `trusted-publisher-preflight`
+### 7. `trusted-publisher-preflight`
 
 - 类型：plugin
 - 价值：专门检查 package trusted publishing 和 OIDC 配置
 - 原因：更适合 plugin 发布链路成熟后再做
 
-### 9. `release-change-narrator`
+### 8. `release-change-narrator`
 
 - 类型：skill
 - 价值：根据 changelog 和更新内容生成更好的发布说明

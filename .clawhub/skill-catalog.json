@@ -42,5 +42,16 @@
       "catalog-quality",
       "skill-launch"
     ]
+  },
+  "skills/skill-summary-rewriter": {
+    "displayName": "Skill Summary Rewriter",
+    "categories": ["development", "knowledge", "productivity"],
+    "topics": [
+      "summary-rewrite",
+      "storefront-copy",
+      "catalog-copy",
+      "install-conversion",
+      "skill-positioning"
+    ]
   }
 }

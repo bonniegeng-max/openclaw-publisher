@@ -101,6 +101,13 @@ Use one short checklist to decide whether your ClawHub skill is ready to launch,
 - 我不会伪造 dry-run 或正式发布结果
 - 如果更适合用更深的 skill，我会直说你该切到哪一个
 
+## 何时切换到其他 skill
+
+- 清单发现内容质量问题：继续用 `skill-publish-readiness`
+- GitHub Actions 或 registry 状态异常：切到 `github-actions-clawhub-doctor`
+- 发布后需要证明已上架可安装：切到 `release-proof-builder`
+- 页面定位或摘要不够清楚：切到 `skill-positioning-audit` 或 `skill-summary-rewriter`
+
 ## 配套文件
 
 - `examples/launch_ready_vs_rushed.md`

@@ -48,6 +48,11 @@ on:
         required: false
         type: string
         default: .clawhub/skill-catalog.json
+      changed_only:
+        description: Publish only skill folders changed by the current push or pull request.
+        required: false
+        type: boolean
+        default: true
     secrets:
       clawhub_token:
         required: false
@@ -74,6 +79,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
@@ -133,14 +139,18 @@ jobs:
           INPUT_REGISTRY: ${{ inputs.registry }}
           INPUT_REF: ${{ inputs.ref }}
           INPUT_CATALOG_METADATA: ${{ inputs.catalog_metadata }}
+          INPUT_CHANGED_ONLY: ${{ inputs.changed_only }}
           SOURCE_REPOSITORY: ${{ github.repository }}
           SOURCE_REF: ${{ github.ref }}
+          SOURCE_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           python3 - <<'PY'
           import json
           import os
           import subprocess
           import sys
+          import time
           from pathlib import Path
 
           workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
@@ -189,6 +199,23 @@ jobs:
           owner = os.environ["INPUT_OWNER"].strip()
           tags = os.environ["INPUT_TAGS"].strip()
           catalog_metadata_input = os.environ["INPUT_CATALOG_METADATA"].strip()
+          changed_only = os.environ["INPUT_CHANGED_ONLY"] == "true"
+
+          if changed_only and not skill_path and targets:
+              base_sha = os.environ["PR_BASE_SHA"].strip() or os.environ["SOURCE_BEFORE"].strip()
+              if base_sha and set(base_sha) != {"0"}:
+                  changed_output = subprocess.check_output(
+                      ["git", "diff", "--name-only", base_sha, source_commit, "--", root_input],
+                      cwd=workspace,
+                      text=True,
+                  )
+                  changed_folders = set()
+                  root_parts = Path(root_input).parts
+                  for raw in changed_output.splitlines():
+                      parts = Path(raw.strip()).parts
+                      if len(parts) > len(root_parts) and parts[:len(root_parts)] == root_parts:
+                          changed_folders.add(parts[len(root_parts)])
+                  targets = [target for target in targets if target.name in changed_folders]
 
           catalog = {}
           if catalog_metadata_input:
@@ -245,7 +272,30 @@ jobs:
               if topics:
                   command += ["--topics", ",".join(topics)]
 
-              completed = subprocess.run(command, cwd=workspace, capture_output=True, text=True)
+              transient_markers = (
+                  "upload ticket is missing, used, or expired",
+                  "rate limit",
+                  "too many requests",
+                  "temporarily unavailable",
+              )
+              max_attempts = 1 if dry_run else 3
+              completed = None
+              for attempt in range(1, max_attempts + 1):
+                  completed = subprocess.run(command, cwd=workspace, capture_output=True, text=True)
+                  if completed.returncode == 0:
+                      break
+                  message = f"{completed.stderr}\n{completed.stdout}".lower()
+                  is_transient = any(marker in message for marker in transient_markers)
+                  if not is_transient or attempt == max_attempts:
+                      break
+                  delay = 10 * attempt
+                  print(
+                      f"Transient publish failure for {relative_path}; "
+                      f"retrying in {delay}s ({attempt}/{max_attempts})",
+                      file=sys.stderr,
+                  )
+                  time.sleep(delay)
+
               if completed.returncode != 0:
                   message = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
                   results["failed"].append({"slug": target.name, "folder": relative_path, "message": message})

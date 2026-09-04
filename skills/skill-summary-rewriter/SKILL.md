@@ -102,6 +102,13 @@ Turn a weak skill summary into storefront copy people can understand in seconds.
 - 我不会伪造平台热度或下载结果
 - 如果问题不只是摘要，而是整个定位太散，我会明确建议你去用 `skill-positioning-audit`
 
+## 和系列 skill 的关系
+
+- 不确定摘要之外还有没有发布风险：先用 `skill-publish-readiness`
+- 整个标题、受众和差异化都不清楚：先用 `skill-positioning-audit`
+- 只差最后一句商店页摘要：直接用本 skill
+- 改完并发布后需要核验上架结果：使用 `release-proof-builder`
+
 ## 配套文件
 
 - `examples/weak_vs_strong_summaries.md`

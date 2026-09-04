@@ -53,5 +53,16 @@
       "install-conversion",
       "skill-positioning"
     ]
+  },
+  "skills/release-proof-builder": {
+    "displayName": "Release Proof Builder",
+    "categories": ["development", "automation", "operations"],
+    "topics": [
+      "release-verification",
+      "publish-proof",
+      "registry-check",
+      "install-verification",
+      "release-ops"
+    ]
   }
 }

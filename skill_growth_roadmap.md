@@ -8,6 +8,7 @@
   - `skill-positioning-audit`
   - `clawhub-launch-checklist`
   - `skill-summary-rewriter`
+  - `release-proof-builder`
 - 已完成：GitHub 自动发布到 ClawHub、分类和 topics 自动同步、商店页摘要与首屏优化
 - 当前定位：围绕 ClawHub 发布质量、发布前自查、GitHub Actions 同步链路和商店页转化
 
@@ -110,20 +111,20 @@
 
 ## 下一个最值得做的题
 
-### 1. `release-proof-builder`
-
-- 价值：把发布完成后的公开页、workflow 状态和安装命令整理成证据包
-- 理由：能承接“发完之后怎么确认结果”的高频问题
-
-### 2. `topic-fit-audit`
+### 1. `topic-fit-audit`
 
 - 价值：检查 `categories` / `topics` 是否真和内容匹配
 - 理由：直接影响在 ClawHub 里的发现性
 
-### 3. `skill-page-benchmark`
+### 2. `skill-page-benchmark`
 
 - 价值：把你的 skill 页面和同类项做结构化对比
 - 理由：当你已有 5 个左右 skill 时，更适合开始做横向 benchmark
+
+### 3. `clawhub-catalog-optimizer`
+
+- 价值：集中维护展示名、categories、topics、版本和 changelog
+- 理由：当前 skill 数量已增长到需要减少重复维护和无意义版本发布的阶段
 
 ## 每个 skill 上线前都统一执行
 

@@ -40,6 +40,18 @@
 
 适合做轻量入口，也适合给还不想跑完整诊断的人先做第一次自查。
 
+### `skill-summary-rewriter`
+
+专门把模糊、冗长、像模板的 skill 摘要，改成更短、更清楚、更容易被理解和安装的商店页文案。
+
+适合方向已经明确，但首页第一句话还不够有产品感的创作者。
+
+### `release-proof-builder`
+
+把 GitHub 提交、Actions、ClawHub registry 和独立安装结果整理成可核验的发布证据链。
+
+适合解决“已经 push 了，但到底有没有真正上架、能不能下载”的发布后确认问题。
+
 ## 为什么这条线有机会
 
 - 题目来自真实踩坑，不是凭空拼出来的功能清单
@@ -62,7 +74,9 @@
 │   ├── skill-publish-readiness/
 │   ├── github-actions-clawhub-doctor/
 │   ├── skill-positioning-audit/
-│   └── clawhub-launch-checklist/
+│   ├── clawhub-launch-checklist/
+│   ├── skill-summary-rewriter/
+│   └── release-proof-builder/
 └── plugins/
 ```
 
@@ -132,6 +146,7 @@ clawhub package publish ./plugins/<plugin-name> --dry-run --owner <your-owner>
 1. 先用 `clawhub-launch-checklist`
 2. 再用 `skill-publish-readiness`
 3. 如果 Actions 红了，再用 `github-actions-clawhub-doctor`
-4. 真要提高安装转化，再用 `skill-positioning-audit`
+4. 发布后用 `release-proof-builder` 核验是否真正可安装
+5. 真要提高安装转化，再用 `skill-positioning-audit` 和 `skill-summary-rewriter`
 
-这套顺序更像一个完整路径，而不是四个彼此孤立的工具。
+这套顺序覆盖了发布前、发布中、发布后和增长优化，而不是一组彼此孤立的工具。

@@ -24,6 +24,12 @@
 - 当前作用：专门改写商店页摘要，承接“定位没错但第一页不够打”的问题
 - 后续可继续补：摘要风格切换、短版/长版双输出、与 `skill-positioning-audit` 的联动路由
 
+### `release-proof-builder`
+
+- 类型：skill
+- 当前作用：用 `E0-E4` 证据等级核验 GitHub、Actions、registry 和安装结果
+- 后续可继续补：自动生成机器可读证据 JSON、发布历史对比、异常状态提示
+
 ## 优先级 A
 
 ### 1. `clawhub-catalog-optimizer`
@@ -34,19 +40,13 @@
 
 ## 优先级 B
 
-### 2. `release-proof-builder`
-
-- 类型：skill
-- 价值：自动整理发布证据，包括 workflow 状态、公开页、安装命令
-- 原因：适合做成“发完后一键核验”
-
-### 3. `skill-series-planner`
+### 2. `skill-series-planner`
 
 - 类型：skill
 - 价值：围绕现有 skill 生成系列化扩展方向
 - 原因：帮你持续开新题，而不是一次性发完
 
-### 4. `topic-fit-audit`
+### 3. `topic-fit-audit`
 
 - 类型：skill
 - 价值：检查 categories / topics 是否匹配内容和目标用户
@@ -54,25 +54,25 @@
 
 ## 优先级 C
 
-### 5. `workflow-ref-doctor`
+### 4. `workflow-ref-doctor`
 
 - 类型：skill
 - 价值：更聚焦 reusable workflow 引用、版本和兼容性问题
 - 原因：是 `github-actions-clawhub-doctor` 的垂直拆分版
 
-### 6. `skill-page-benchmark`
+### 5. `skill-page-benchmark`
 
 - 类型：skill
 - 价值：把你的页面和同类 skill 做结构化对比
 - 原因：更偏增长策略，适合后期做
 
-### 7. `trusted-publisher-preflight`
+### 6. `trusted-publisher-preflight`
 
 - 类型：plugin
 - 价值：专门检查 package trusted publishing 和 OIDC 配置
 - 原因：更适合 plugin 发布链路成熟后再做
 
-### 8. `release-change-narrator`
+### 7. `release-change-narrator`
 
 - 类型：skill
 - 价值：根据 changelog 和更新内容生成更好的发布说明

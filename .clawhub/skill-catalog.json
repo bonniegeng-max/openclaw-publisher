@@ -28,5 +28,15 @@
       "install-conversion",
       "storefront-review"
     ]
+  },
+  "skills/clawhub-launch-checklist": {
+    "categories": ["development", "automation", "productivity"],
+    "topics": [
+      "launch-checklist",
+      "pre-publish-review",
+      "release-readiness",
+      "catalog-quality",
+      "skill-launch"
+    ]
   }
 }

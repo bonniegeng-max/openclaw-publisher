@@ -2,9 +2,13 @@
 
 ## 当前状态
 
-- 已发布 skill：`skill-publish-readiness`
+- 已完成并纳入仓库的 skill：
+  - `skill-publish-readiness`
+  - `github-actions-clawhub-doctor`
+  - `skill-positioning-audit`
+  - `clawhub-launch-checklist`
 - 已完成：GitHub 自动发布到 ClawHub、分类和 topics 自动同步、商店页摘要与首屏优化
-- 当前定位：围绕 ClawHub 发布质量、发布前自查、GitHub Actions 同步链路
+- 当前定位：围绕 ClawHub 发布质量、发布前自查、GitHub Actions 同步链路和商店页转化
 
 ## 为什么这条线值得继续做
 
@@ -67,7 +71,7 @@
 ### 3. `clawhub-launch-checklist`
 
 定位：
-在正式发布前，把文案、分类、topics、README、示例、安装路径和 Actions 状态做成一张清单。
+在正式发布前，把文案、分类、topics、README、示例、安装路径和 dry-run 前置项做成一张清单。
 
 为什么值得做：
 
@@ -89,12 +93,36 @@
 - 偏元数据管理
 - 适合在你有 3 到 5 个 skill 后再做
 
-## 建议的发布顺序
+## 当前组合建议
 
-1. `skill-publish-readiness`
-2. `github-actions-clawhub-doctor`
-3. `skill-positioning-audit`
-4. `clawhub-launch-checklist`
+1. `clawhub-launch-checklist`
+2. `skill-publish-readiness`
+3. `github-actions-clawhub-doctor`
+4. `skill-positioning-audit`
+
+这套顺序更像一个用户真正会走的路径：
+
+- 先用轻量清单判断值不值得发
+- 再做更完整的发布前审查
+- 如果链路出错，再看 Actions 排障
+- 真要提升页面转化，再做定位与文案优化
+
+## 下一个最值得做的题
+
+### 1. `skill-summary-rewriter`
+
+- 价值：直接把弱摘要改成更短、更像产品的摘要
+- 理由：和 `skill-positioning-audit` 组合最自然，也更容易被理解和使用
+
+### 2. `release-proof-builder`
+
+- 价值：把发布完成后的公开页、workflow 状态和安装命令整理成证据包
+- 理由：能承接“发完之后怎么确认结果”的高频问题
+
+### 3. `topic-fit-audit`
+
+- 价值：检查 `categories` / `topics` 是否真和内容匹配
+- 理由：直接影响在 ClawHub 里的发现性
 
 ## 每个 skill 上线前都统一执行
 

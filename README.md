@@ -1,123 +1,98 @@
-# ClawHub 自动同步模板
+# openclaw-publisher
 
-这个目录已经按「GitHub 作为源码仓库，ClawHub 作为发布仓库」的思路做好了基础结构。
+围绕 ClawHub 发布、排障和增长的一组 skill，以及一条能自动同步到 GitHub 和 ClawHub 的发布链路。
 
-后续你只需要：
+这个仓库不只是“自动同步模板”，而是一个正在成型的系列产品：先帮创作者把 skill 发出去，再帮他们把发布质量、页面转化和后续增长一起做起来。
 
-1. 把 skill 放到 `skills/<skill-slug>/SKILL.md`
-2. 把 plugin 放到 `plugins/<plugin-name>/`
-3. 把整个目录推到 GitHub
-4. 在 GitHub 仓库里配置变量和密钥
-5. 以后新增或修改 skill / plugin，提交到 GitHub 后会自动触发对应工作流
+## 当前定位
 
-## 目录约定
+这条线现在聚焦 3 件事：
+
+- 发布前自查：避免“能过 dry-run，但不值得发”
+- GitHub Actions 排障：定位 GitHub 到 ClawHub 的链路断点
+- 商店页转化：减少模板感，增加被理解、被记住、被安装的概率
+
+如果这三件事持续做深，你的账号会更像一个明确的角色，而不是零散地发几个工具。
+
+## 已有 skill
+
+### `skill-publish-readiness`
+
+发布前审查 skill 和 plugin，重点看文件齐不齐、版本和文案是否一致、环境声明是否负责、安全风险是否可控，以及它和同类 skill 有没有真正区别。
+
+适合在你准备正式发布前，做一次“现在发出去会不会太草率”的总检查。
+
+### `github-actions-clawhub-doctor`
+
+专门诊断 GitHub Actions 到 ClawHub 的发布失败，把问题拆到 workflow、owner、token、slug、目录发现或 registry 返回状态那一层。
+
+适合在 Actions 红灯、发布结果真假难辨，或者 `pending-publication` 被误判时使用。
+
+### `skill-positioning-audit`
+
+不看“能不能发”，而看“发出去之后会不会像模板、会不会没有记忆点、会不会让人看不懂给谁用”。
+
+适合在 skill 已经具备基础能力后，继续提升标题、摘要、目标用户和首屏转化。
+
+### `clawhub-launch-checklist`
+
+把正式发布前最容易漏掉的动作收成一张轻量清单，快速判断这次上架是不是已经到了“值得按下发布”的状态。
+
+适合做轻量入口，也适合给还不想跑完整诊断的人先做第一次自查。
+
+## 为什么这条线有机会
+
+- 题目来自真实踩坑，不是凭空拼出来的功能清单
+- 每个 skill 都围绕同一条发布链路展开，天然适合系列化
+- 工程问题和增长问题被放在同一个体系里，差异会比纯“工具集合”更明显
+
+这意味着它既能服务当下的发布问题，也能慢慢长成一个更鲜明的个人 IP 方向：`ClawHub 发布与增长工具作者`。
+
+## 仓库结构
 
 ```text
 .
+├── .clawhub/
+│   └── skill-catalog.json
 ├── .github/workflows/
 │   ├── clawhub-skill-publish.yml
+│   ├── clawhub-skill-publish-local.yml
 │   └── clawhub-plugin-publish.yml
 ├── skills/
-│   └── ...
+│   ├── skill-publish-readiness/
+│   ├── github-actions-clawhub-doctor/
+│   ├── skill-positioning-audit/
+│   └── clawhub-launch-checklist/
 └── plugins/
-    └── ...
 ```
 
-## GitHub 需要配置的内容
-
-### 1. Repository Variables
-
-在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions -> Variables` 里新增：
-
-- `CLAWHUB_OWNER`
-  - 你的 ClawHub 发布 owner
-  - skill 发布时会传给 `--owner`
-  - plugin 发布时也会作为 owner 传入
-
-### 2. Repository Secrets
-
-在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions -> Secrets` 里新增：
-
-- `CLAWHUB_TOKEN`
-  - 用 `clawhub login` 登录后，可通过 `clawhub token` 拿到
-  - skill 自动发布目前建议直接用这个 token
-  - plugin 也可以先用这个 token；后续再升级到 trusted publishing
-
-## Skill 放法
-
-每个 skill 一个文件夹，至少包含一个 `SKILL.md`：
-
-```text
-skills/
-└── my-skill/
-    ├── SKILL.md
-    └── 其他辅助文件
-```
-
-一个最小的 `SKILL.md` 例子：
-
-```md
----
-name: my-skill
-description: 这是一个示例 skill。
-version: 1.0.0
-metadata:
-  openclaw:
-    os: [macos]
----
-
-# My Skill
-
-这里写 skill 的说明、使用方式和约束。
-```
-
-## Plugin 放法
-
-每个 plugin 一个文件夹，至少建议包含：
-
-```text
-plugins/
-└── my-plugin/
-    ├── package.json
-    ├── openclaw.plugin.json
-    └── 代码文件
-```
-
-其中：
-
-- `package.json` 里需要带 `openclaw.compat.pluginApi` 和 `openclaw.build.openclawVersion`
-- `package.json` 的包名 scope 要和 `CLAWHUB_OWNER` 对应
-- `openclaw.plugin.json` 里要有插件清单
-
-## 工作流行为
-
-### Skill 工作流
-
-- `pull_request`：对 `skills/**` 做 dry-run 检查
-- `push` 到 `main`：自动发布 `skills/**`
-- `workflow_dispatch`：可手动触发重新发布
-
-### Plugin 工作流
-
-- `pull_request`：只对改动过的 plugin 目录做 dry-run
-- `push` 到 `main`：只发布改动过的 plugin 目录
-- `workflow_dispatch`：可指定单个 plugin 目录，也可发布所有 plugin
-
-## 推荐发布方式
+## 自动发布链路
 
 ### Skill
 
-推荐把 skill 放在这个仓库下统一管理，合并到 `main` 后自动发到 ClawHub。
+- `pull_request`：对 `skills/**` 做 dry-run
+- `push` 到 `main`：自动发布 `skills/**`
+- `workflow_dispatch`：支持手动重跑
+- `.clawhub/skill-catalog.json`：统一管理 `categories` 和 `topics`
 
 ### Plugin
 
-如果 plugin 还在早期阶段，先用 `CLAWHUB_TOKEN` 即可。
+- `pull_request`：只 dry-run 改动过的 plugin
+- `push` 到 `main`：只发布改动过的 plugin
+- `workflow_dispatch`：可指定单个 plugin，也可扫描全部 plugin
 
-如果 plugin 已经稳定，建议后续再补 `trusted publishing`，这样可以减少长期 token 依赖。
+## 需要的 GitHub 配置
+
+在仓库的 `Settings -> Secrets and variables -> Actions` 中配置：
+
+- `CLAWHUB_OWNER`
+- `CLAWHUB_TOKEN`
+
+其中 `CLAWHUB_OWNER` 用于 skill 与 plugin 的 owner 透传，`CLAWHUB_TOKEN` 用于正式 publish。
 
 ## 本地验证
 
-在本地先装 CLI：
+先安装并登录 CLI：
 
 ```bash
 npm i -g clawhub
@@ -125,40 +100,38 @@ clawhub login
 clawhub whoami
 ```
 
-### 本地验证 skill
+验证某个 skill：
 
 ```bash
-clawhub skill publish ./skills/my-skill --dry-run --owner <your-owner>
+clawhub skill publish ./skills/<skill-slug> --dry-run --owner <your-owner>
 ```
 
-### 本地验证 plugin
+验证某个 plugin：
 
 ```bash
-clawhub package validate ./plugins/my-plugin
-clawhub package publish ./plugins/my-plugin --dry-run --owner <your-owner>
+clawhub package validate ./plugins/<plugin-name>
+clawhub package publish ./plugins/<plugin-name> --dry-run --owner <your-owner>
 ```
 
-## 推到 GitHub
+## 适合继续做的方向
 
-如果你还没初始化 git，可以在这个目录执行：
+接下来优先继续沿着这几个方向扩：
 
-```bash
-git init
-git add .
-git commit -m "init clawhub sync template"
-git branch -M main
-git remote add origin <your-github-repo-url>
-git push -u origin main
-```
+- 轻量入口：`clawhub-launch-checklist`
+- 页面转化：`skill-summary-rewriter`
+- 元数据治理：`topic-fit-audit`
+- 发布后核验：`release-proof-builder`
+- 长线工具化：`clawhub-catalog-optimizer` plugin
 
-推上去以后，GitHub 本身就已经保存了源码；而 `main` 分支合并后，Actions 会继续把内容发布到 ClawHub。
+这些题比“万能 AI 助手”更容易被记住，也更容易形成系列心智。
 
-## 你接下来要做的事
+## 使用建议
 
-1. 把这个目录建成 GitHub 仓库
-2. 配置 `CLAWHUB_OWNER`
-3. 配置 `CLAWHUB_TOKEN`
-4. 新增第一个 `skills/<slug>/SKILL.md` 或 `plugins/<name>/`
-5. 提交并推送
+如果你刚开始做 ClawHub skill：
 
-完成后，这套模板就能开始工作。
+1. 先用 `clawhub-launch-checklist`
+2. 再用 `skill-publish-readiness`
+3. 如果 Actions 红了，再用 `github-actions-clawhub-doctor`
+4. 真要提高安装转化，再用 `skill-positioning-audit`
+
+这套顺序更像一个完整路径，而不是四个彼此孤立的工具。

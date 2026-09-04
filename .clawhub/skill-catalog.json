@@ -1,5 +1,6 @@
 {
   "skills/skill-publish-readiness": {
+    "displayName": "Skill Publish Readiness",
     "categories": ["development", "automation", "security"],
     "topics": [
       "publishing",
@@ -10,6 +11,7 @@
     ]
   },
   "skills/github-actions-clawhub-doctor": {
+    "displayName": "GitHub Actions ClawHub Doctor",
     "categories": ["development", "automation", "operations"],
     "topics": [
       "github-actions",
@@ -20,6 +22,7 @@
     ]
   },
   "skills/skill-positioning-audit": {
+    "displayName": "Skill Positioning Audit",
     "categories": ["development", "research", "knowledge"],
     "topics": [
       "positioning",
@@ -30,6 +33,7 @@
     ]
   },
   "skills/clawhub-launch-checklist": {
+    "displayName": "ClawHub Launch Checklist",
     "categories": ["development", "automation", "productivity"],
     "topics": [
       "launch-checklist",

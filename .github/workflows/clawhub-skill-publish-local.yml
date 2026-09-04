@@ -235,8 +235,11 @@ jobs:
               if source_ref:
                   command += ["--source-ref", source_ref]
               skill_catalog = catalog.get(relative_path, {})
+              display_name = skill_catalog.get("displayName") or skill_catalog.get("display_name") or ""
               categories = skill_catalog.get("categories", [])
               topics = skill_catalog.get("topics", [])
+              if display_name:
+                  command += ["--name", display_name]
               if categories:
                   command += ["--categories", ",".join(categories)]
               if topics:

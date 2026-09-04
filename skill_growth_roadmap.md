@@ -9,6 +9,7 @@
   - `skill-launch-checklist`
   - `skill-summary-rewriter`
   - `release-proof-builder`
+  - `skill-portfolio-growth-audit`
 - 已完成：GitHub 自动发布到 ClawHub、分类和 topics 自动同步、商店页摘要与首屏优化
 - 当前定位：围绕 ClawHub 发布质量、发布前自查、GitHub Actions 同步链路和商店页转化
 
@@ -125,6 +126,14 @@
 
 - 价值：集中维护展示名、categories、topics、版本和 changelog
 - 理由：当前 skill 数量已增长到需要减少重复维护和无意义版本发布的阶段
+
+## 当前增长判断
+
+- `skill-publish-readiness` 已经形成最早的下载信号，仍是主力入口
+- `skill-summary-rewriter` 已在搜索侧出现首次安装信号，值得继续观察
+- 新发布 skill 尚未经过完整观察窗口，不应过早判定失败
+- 通用更新安全和安装前审查已有成熟强者，不建议正面复制
+- 下一阶段重点从“继续堆发布工具”转向“作品集证据、主题治理和搜索转化”
 
 ## 每个 skill 上线前都统一执行
 

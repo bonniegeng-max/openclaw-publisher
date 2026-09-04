@@ -52,6 +52,12 @@
 
 适合解决“已经 push 了，但到底有没有真正上架、能不能下载”的发布后确认问题。
 
+### `skill-portfolio-growth-audit`
+
+读取整个 publisher 的真实下载、安装、版本、搜索竞争和仓库质量，决定哪些 skill 应该加码、修复、合并、观察或停更。
+
+适合已经有多个公开 skill，希望建立系列心智并减少盲目开发的人。
+
 ## 为什么这条线有机会
 
 - 题目来自真实踩坑，不是凭空拼出来的功能清单
@@ -76,7 +82,8 @@
 │   ├── skill-positioning-audit/
 │   ├── skill-launch-checklist/
 │   ├── skill-summary-rewriter/
-│   └── release-proof-builder/
+│   ├── release-proof-builder/
+│   └── skill-portfolio-growth-audit/
 └── plugins/
 ```
 
@@ -148,5 +155,6 @@ clawhub package publish ./plugins/<plugin-name> --dry-run --owner <your-owner>
 3. 如果 Actions 红了，再用 `github-actions-clawhub-doctor`
 4. 发布后用 `release-proof-builder` 核验是否真正可安装
 5. 真要提高安装转化，再用 `skill-positioning-audit` 和 `skill-summary-rewriter`
+6. skill 数量变多后，用 `skill-portfolio-growth-audit` 决定下一步押注
 
 这套顺序覆盖了发布前、发布中、发布后和增长优化，而不是一组彼此孤立的工具。

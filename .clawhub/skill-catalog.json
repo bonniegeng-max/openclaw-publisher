@@ -64,5 +64,16 @@
       "install-verification",
       "release-ops"
     ]
+  },
+  "skills/skill-portfolio-growth-audit": {
+    "displayName": "Skill Portfolio Growth Audit",
+    "categories": ["development", "research", "productivity"],
+    "topics": [
+      "portfolio-audit",
+      "skill-growth",
+      "registry-analytics",
+      "competition-research",
+      "publisher-strategy"
+    ]
   }
 }

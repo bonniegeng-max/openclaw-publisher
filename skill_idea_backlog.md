@@ -30,6 +30,12 @@
 - 当前作用：用 `E0-E4` 证据等级核验 GitHub、Actions、registry 和安装结果
 - 后续可继续补：自动生成机器可读证据 JSON、发布历史对比、异常状态提示
 
+### `skill-portfolio-growth-audit`
+
+- 类型：skill
+- 当前作用：基于 registry 指标、搜索竞争和仓库质量管理整个 publisher 作品集
+- 后续可继续补：历史快照、搜索排名变化、自动生成优化队列
+
 ## 优先级 A
 
 ### 1. `clawhub-catalog-optimizer`
@@ -37,6 +43,11 @@
 - 类型：plugin
 - 价值：集中维护 categories、topics、摘要、版本和 changelog
 - 原因：当 skill 数量变多后，手工维护成本会上升
+
+暂不做：
+
+- 通用 skill 更新器：已有成熟产品覆盖备份、diff、迁移与回滚
+- 通用安装前安全审查：已有高安装量产品，竞争成熟
 
 ## 优先级 B
 

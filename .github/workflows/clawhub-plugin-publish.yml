@@ -137,7 +137,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.discover.outputs.matrix) }}
-    uses: openclaw/clawhub/.github/workflows/package-publish.yml@main
+    uses: openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3
     with:
       source: ${{ matrix.path }}
       owner: ${{ vars.CLAWHUB_OWNER }}
@@ -150,7 +150,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.discover.outputs.matrix) }}
-    uses: openclaw/clawhub/.github/workflows/package-publish.yml@main
+    uses: openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3
     with:
       source: ${{ matrix.path }}
       owner: ${{ vars.CLAWHUB_OWNER }}

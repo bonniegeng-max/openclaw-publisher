@@ -43,6 +43,11 @@ on:
         required: false
         type: string
         default: ""
+      catalog_metadata:
+        description: Optional JSON file mapping skill paths to categories/topics metadata.
+        required: false
+        type: string
+        default: .clawhub/skill-catalog.json
     secrets:
       clawhub_token:
         required: false
@@ -127,6 +132,7 @@ jobs:
           INPUT_SITE: ${{ inputs.site }}
           INPUT_REGISTRY: ${{ inputs.registry }}
           INPUT_REF: ${{ inputs.ref }}
+          INPUT_CATALOG_METADATA: ${{ inputs.catalog_metadata }}
           SOURCE_REPOSITORY: ${{ github.repository }}
           SOURCE_REF: ${{ github.ref }}
         run: |
@@ -182,6 +188,15 @@ jobs:
           dry_run = os.environ["INPUT_DRY_RUN"] == "true"
           owner = os.environ["INPUT_OWNER"].strip()
           tags = os.environ["INPUT_TAGS"].strip()
+          catalog_metadata_input = os.environ["INPUT_CATALOG_METADATA"].strip()
+
+          catalog = {}
+          if catalog_metadata_input:
+              catalog_path = resolve_inside_workspace(catalog_metadata_input)
+              if catalog_path.is_file():
+                  catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+              elif skill_path:
+                  raise SystemExit(f"catalog_metadata file not found: {catalog_metadata_input}")
 
           results = {
               "wouldPublish": [],
@@ -219,6 +234,13 @@ jobs:
                   command += ["--tags", tags]
               if source_ref:
                   command += ["--source-ref", source_ref]
+              skill_catalog = catalog.get(relative_path, {})
+              categories = skill_catalog.get("categories", [])
+              topics = skill_catalog.get("topics", [])
+              if categories:
+                  command += ["--categories", ",".join(categories)]
+              if topics:
+                  command += ["--topics", ",".join(topics)]
 
               completed = subprocess.run(command, cwd=workspace, capture_output=True, text=True)
               if completed.returncode != 0:
@@ -240,6 +262,7 @@ jobs:
               "dryRun": dry_run,
               "registry": os.environ["INPUT_REGISTRY"],
               "roots": [skill_path or root_input],
+              "catalogMetadata": catalog_metadata_input,
               **({"owner": owner.lstrip("@")} if owner else {}),
               "summary": {key: len(value) for key, value in results.items()},
               **results,

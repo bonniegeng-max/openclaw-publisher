@@ -1,10 +1,11 @@
 ---
 name: skill-publish-readiness
-description: 在发布到 ClawHub 之前，帮你揪出那些“能过 dry-run，但其实还不该发”的问题，包括文件缺失、版本不一致、环境声明脱节、安全风险和同质化定位。
+description: Publish-ready review for ClawHub skills and plugins. 在正式发布前揪出文件缺失、版本不一致、环境声明、安全风险和同质化问题。
 version: 1.0.0
 metadata:
   openclaw:
     os: [macos]
+    emoji: "🚦"
     requires:
       bins:
         - git
@@ -18,6 +19,8 @@ metadata:
 
 # skill-publish-readiness
 
+Before you hit publish, make sure your skill looks like a product instead of a rushed draft.
+
 大多数 skill 不是死在发布命令上，而是死在发布之前没人认真看过一遍。
 
 文件看起来齐了，`version` 也写了，`dry-run` 也许还能过，但真正上线后暴露出来的问题往往更致命：元数据前后不一致，环境变量没声明清楚，示例里带着危险做法，产品页读起来像模板，和同类 skill 几乎没有区分。
@@ -26,7 +29,7 @@ metadata:
 
 ## 一句话卖点
 
-把“能过 dry-run”这件事，升级成“值得发布、少踩坑、发出去不显得粗糙”。
+Turn “it passes dry-run” into “it is actually worth publishing”.
 
 ## 它和普通检查器的区别
 
@@ -213,4 +216,3 @@ metadata:
   版本变更记录
 
 如果你需要更稳定的输出，先参考 `templates/publish_review_report.md`；如果你对判断依据不放心，先看 `references/`；如果你想快速理解什么叫“好”和“差”，先看 `examples/`。
-

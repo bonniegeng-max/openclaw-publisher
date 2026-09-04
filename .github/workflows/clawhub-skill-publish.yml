@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "skills/**"
+      - ".clawhub/skill-catalog.json"
       - ".github/workflows/clawhub-skill-publish.yml"
       - ".github/workflows/clawhub-skill-publish-local.yml"
   push:
@@ -11,6 +12,7 @@ on:
       - main
     paths:
       - "skills/**"
+      - ".clawhub/skill-catalog.json"
       - ".github/workflows/clawhub-skill-publish.yml"
       - ".github/workflows/clawhub-skill-publish-local.yml"
   workflow_dispatch:
@@ -30,6 +32,7 @@ jobs:
     with:
       owner: ${{ vars.CLAWHUB_OWNER }}
       root: skills
+      catalog_metadata: .clawhub/skill-catalog.json
       dry_run: true
 
   publish:
@@ -38,6 +41,7 @@ jobs:
     with:
       owner: ${{ vars.CLAWHUB_OWNER }}
       root: skills
+      catalog_metadata: .clawhub/skill-catalog.json
       dry_run: false
     secrets:
       clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}

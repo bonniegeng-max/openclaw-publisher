@@ -1,0 +1,12 @@
+{
+  "skills/skill-publish-readiness": {
+    "categories": ["development", "automation", "security"],
+    "topics": [
+      "publishing",
+      "release-review",
+      "github-actions",
+      "skill-audit",
+      "metadata"
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 # ClawHub 作品集增长基线
 
-更新时间：2026-09-05  
+更新时间：2026-09-05 00:41（Asia/Shanghai）
 发布者：`@bonniegeng-max`  
 GitHub 基线提交：`029fb2763b6d8530f6efd29dea6e5aa8d42ec7d3`
 
@@ -26,6 +26,34 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 7 个 latest 版本均完成隔离安装，安装后的 `SKILL.md` 与该 GitHub 提交中的文件一致，证据等级达到 `E4`。
 
+## 当前数据快照
+
+| Skill | Downloads | Inspect installs | Search installs / 60d | Stars | Versions | Latest | DisplayName | Topics | Moderation | 可安装 |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---|
+| `skill-publish-readiness` | 43 | 0 | 1* | 0 | 7 | `1.0.6` | Skill Publish Readiness | `publishing`, `release-review`, `github-actions`, `skill-audit`, `metadata` | clean | 是 |
+| `github-actions-clawhub-doctor` | 11 | 0 | 1* | 0 | 6 | `1.0.5` | GitHub Actions ClawHub Doctor | `github-actions`, `workflow-debug`, `publish-failure`, `release-ops`, `ci-troubleshooting` | clean | 是 |
+| `skill-positioning-audit` | 0 | 0 | 1* | 0 | 5 | `1.0.4` | Skill Positioning Audit | `positioning`, `catalog-copy`, `skill-differentiation`, `install-conversion`, `storefront-review` | clean | 是 |
+| `skill-launch-checklist` | 0 | 0 | 1* | 0 | 3 | `1.0.2` | Skill Launch Checklist | `launch-checklist`, `pre-publish-review`, `release-readiness`, `catalog-quality`, `skill-launch` | clean | 是 |
+| `skill-summary-rewriter` | 0 | 0 | 1* | 0 | 3 | `1.0.2` | Skill Summary Rewriter | `summary-rewrite`, `storefront-copy`, `catalog-copy`, `install-conversion`, `skill-positioning` | clean | 是 |
+| `release-proof-builder` | 0 | 0 | 1* | 0 | 3 | `1.0.2` | Release Proof Builder | `release-verification`, `publish-proof`, `registry-check`, `install-verification`, `release-ops` | clean | 是 |
+| `skill-portfolio-growth-audit` | 0 | 0 | 1* | 0 | 2 | `1.0.1` | Skill Portfolio Growth Audit | `portfolio-audit`, `skill-growth`, `registry-analytics`, `competition-research`, `publisher-strategy` | clean | 是 |
+
+\* 本次巡检执行了独立安装验证，搜索接口随后显示 1 install / 60d；该值可能包含巡检行为，不作为自然增长证据。
+
+## 快照对比
+
+| 维度 | 变化 | 解释 |
+|---|---|---|
+| Downloads | 七项均无变化 | 没有可确认的新增下载信号 |
+| Inspect installs | 七项均保持 0 | 仍无 registry 详情口径的安装量 |
+| Stars | 七项均保持 0 | 无变化 |
+| Versions / latest | 七项各增加 1 个版本 | 来自展示名修复发布，不等于功能增长 |
+| DisplayName | 6 项由 slug 改为产品名 | 搜索可读性已实质改善；Doctor 原本已正确 |
+| Moderation | 七项均保持 clean | 无审核异常 |
+| 可安装状态 | 七项均安装成功 | 最新版本均完成 E4 安装验证 |
+
+本轮唯一明确的可见性变化是展示名修复生效。搜索排名缺少更早的同口径完整记录，因此不声称排名上升或下降。
+
 ## 修复前快照
 
 | Skill | Downloads | Inspect installs | Search installs | Stars | Versions | Latest | Display | Moderation |
@@ -47,29 +75,31 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 搜索可见性
 
-### `publish skill`
+| Skill | 真实任务关键词 | 当前位置 | 代表性结果 | 判断 |
+|---|---|---:|---|---|
+| `skill-publish-readiness` | `publish skill readiness` | 1 | `Novel Publish Ready` 0 installs；`Skill Validation` 0 installs | 长尾可见，且与自家 Launch Checklist 同场 |
+| `github-actions-clawhub-doctor` | `github actions publish failure` | 1 | 无直接同任务结果 | 定位最独特，搜索噪音低 |
+| `skill-positioning-audit` | `skill positioning storefront` | 2 | 第 1 是自家 Summary Rewriter | 两项关键词重叠，先观察再决定是否合并 |
+| `skill-launch-checklist` | `skill launch checklist` | 1 | `site-launch-checklist` 有 1,956 skills.sh lifetime installs，但任务是网站上线 | 长尾可见，代表性竞品并非同任务 |
+| `skill-summary-rewriter` | `skill summary rewrite` | 1 | 高安装结果主要是论文写作类 | 精确词可见，宽泛 summary 词噪音较高 |
+| `release-proof-builder` | `release verification install proof` | 1 | 无直接同任务结果 | 细分任务独特，尚无自然采用证据 |
+| `skill-portfolio-growth-audit` | `skill portfolio growth audit` | 1 | 无直接同任务结果 | 精确词可见，但刚发布，不能判断需求 |
 
-`skill-publish-readiness` 可以被搜到，但显示名仍是 slug。代表性竞品最高只有 2 installs / 60d，说明赛道存在需求但整体采用仍低。
-
-### `skill summary`
-
-`skill-summary-rewriter` 位于结果前列，并显示 1 install / 60d。搜索结果同时混入大量内容摘要类 skill，后续应继续强化 `storefront copy`、`catalog copy` 等差异化关键词。
-
-### `skill portfolio`
-
-`skill-portfolio-growth-audit` 已出现 1 install / 60d，高于同名 `skill-portfolio-audit` 的 0 installs。当前摘要强调 registry 证据和作品集决策，差异已经能被搜索结果识别。
+这些查询只验证当前可发现性，不代表稳定排名。skills.sh lifetime installs 与 ClawHub 60 天 installs 不是同一统计口径，未参与数值比较。
 
 ## 决策
 
 | Skill | 决策 | 依据 |
 |---|---|---|
-| `skill-publish-readiness` | 加码 | 当前 downloads 最高，仍是系列主入口 |
-| `github-actions-clawhub-doctor` | 保留 | 已有第二强下载信号，定位具体 |
-| `skill-positioning-audit` | 观察 | 发布窗口短，且属于后置需求 |
-| `skill-launch-checklist` | 观察 | 已可安装，尚无足够增长数据 |
-| `skill-summary-rewriter` | 观察并强化搜索词 | 搜索侧出现首次安装信号 |
-| `release-proof-builder` | 观察 | 真实痛点明确，但尚无采用数据 |
-| `skill-portfolio-growth-audit` | 观察并作为组合决策层 | 搜索侧出现首次安装信号 |
+| `skill-publish-readiness` | 加码 | downloads 明显领先、长尾搜索第 1，是最强入口 |
+| `github-actions-clawhub-doctor` | 加码 | 第二高 downloads，任务最具体，搜索中没有直接竞品 |
+| `skill-positioning-audit` | 观察 | 新发布、0 downloads，且与 Summary Rewriter 关键词重叠 |
+| `skill-launch-checklist` | 观察 | 可见且可安装，但与主入口任务相邻，尚无独立采用证据 |
+| `skill-summary-rewriter` | 观察 | 精确查询第 1，但 0 downloads，宽泛关键词噪音较高 |
+| `release-proof-builder` | 观察 | 独特的发布后核验任务已成立，但没有自然采用证据 |
+| `skill-portfolio-growth-audit` | 观察 | 刚发布且只有当前截面，不能做趋势或停更判断 |
+
+当前没有足够证据把任何 Skill 标为“停更”；也没有足够观察窗口把 Positioning Audit 与 Summary Rewriter 标为“合并”。展示名问题已修复，因此本轮不保留“修复”标签。
 
 ## 暂不进入的方向
 
@@ -79,4 +109,4 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 唯一下一步
 
-保持现有作品集结构至少一个完整 7 天观察窗口；下次周检优先比较展示名修复前后的搜索可见性、downloads 与 installs，再决定是否加码主入口或优化摘要，不新增同质化发布检查器。
+只优化 `skill-publish-readiness`：在 GitHub 版本中加入一个可直接复用的真实发布失败审查案例与结构化输出样例，形成一次有实质内容的版本更新；完成前不开发新 Skill 或 plugin。

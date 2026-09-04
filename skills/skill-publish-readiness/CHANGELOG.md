@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.7
+
+- 新增基于真实 GitHub Actions → ClawHub 发布事故整理的复合失败审查案例
+- 覆盖受保护 slug、`pending-publication` 误判和上传票据瞬时失效
+- 将发布报告模板升级为证据矩阵，补充问题优先级、修复后验收和证据边界
+- 在主文档加入 `Built from real publish failures`，强化产品可信度与差异化
+
 ## 1.0.6
 
 - 将 frontmatter `name` 统一为人类可读展示名 `Skill Publish Readiness`

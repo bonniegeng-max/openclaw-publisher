@@ -2,7 +2,7 @@
 name: Skill Publish Readiness
 slug: skill-publish-readiness
 description: Publish-ready review for ClawHub skills and plugins. 在正式发布前揪出文件缺失、版本不一致、环境声明、安全风险和同质化问题。
-version: 1.0.6
+version: 1.0.7
 metadata:
   openclaw:
     os: [macos]
@@ -44,6 +44,18 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 - 这份 skill 发出去之后，别人为什么要装你，而不是装另一个差不多的
 
 一句话说，我关心的不只是“能不能发”，还关心“现在发出去，会不会看起来太草率”。
+
+## Built from real publish failures
+
+这套检查不是从理想流程里拼出来的。它来自真实发布事故：受保护 slug 让首次发布直接失败，`pending-publication` 被 workflow 错判成红灯，上传票据瞬时失效又被误认为内容错误。
+
+这些经历形成三条硬规则：
+
+- dry-run 只能证明“可解析”，不能单独证明“可上架”
+- Actions、registry、moderation 和安装结果必须分层判断
+- 确定性配置错误不能重试掩盖，只有明确的瞬时错误才允许退避重试
+
+完整证据、判断过程和最终报告见 `examples/real_publish_failure_review.md`。
 
 ## 适合谁
 
@@ -205,6 +217,8 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
   一个看起来能发、但其实不建议马上发的示例
 - `examples/plugin_scope_mismatch.md`
   一个 plugin owner 与 package scope 不匹配的示例
+- `examples/real_publish_failure_review.md`
+  一个来自真实发布链路的复合失败案例，包含证据矩阵、根因和 E4 验收
 - `references/differentiation_rubric.md`
   差异化评分规则
 - `references/security_review_guide.md`
@@ -212,7 +226,7 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 - `references/consistency_rules.md`
   版本、文案、命名与环境声明的一致性检查参考
 - `templates/publish_review_report.md`
-  发布前审查报告模板
+  带证据矩阵、优先级、验收清单和证据边界的发布前审查报告模板
 - `CHANGELOG.md`
   版本变更记录
 

@@ -65,7 +65,7 @@ Portfolio Growth Audit
 
 ## 产品目录
 
-| Skill | 角色 | 安装命令 | 当前信号 |
+| Skill | 角色 | 安装命令 | 验收前基线 |
 |---|---|---|---|
 | `skill-publish-readiness` | 主入口，完整发布审查 | `clawhub install skill-publish-readiness` | 43 downloads |
 | `github-actions-clawhub-doctor` | CI/CD 发布排障 | `clawhub install github-actions-clawhub-doctor` | 11 downloads |
@@ -75,7 +75,7 @@ Portfolio Growth Audit
 | `skill-summary-rewriter` | 摘要改写 | `clawhub install skill-summary-rewriter` | 观察中 |
 | `skill-portfolio-growth-audit` | 作品集增长决策 | `clawhub install skill-portfolio-growth-audit` | 观察中 |
 
-下载数字是 `2026-09-05` 的 ClawHub 快照，不等同于安装用户数。
+下载数字是 `2026-09-05` 全量 E4 验收前的 ClawHub 基线，不等同于安装用户数。后续主动安装污染了平台计数，当前原始值和口径说明见增长报告。
 
 ## 真实失败来源
 

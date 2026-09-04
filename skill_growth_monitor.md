@@ -1,6 +1,6 @@
 # ClawHub 作品集增长基线
 
-更新时间：2026-09-05 00:41（Asia/Shanghai）
+更新时间：2026-09-05 05:43（Asia/Shanghai）
 发布者：`@bonniegeng-max`  
 GitHub 基线提交：`029fb2763b6d8530f6efd29dea6e5aa8d42ec7d3`
 
@@ -32,22 +32,24 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 | Skill | Downloads | Inspect installs | Search installs / 60d | Stars | Versions | Latest | DisplayName | Topics | Moderation | 可安装 |
 |---|---:|---:|---:|---:|---:|---|---|---|---|---|
-| `skill-publish-readiness` | 43 | 0 | 1* | 0 | 8 | `1.0.7` | Skill Publish Readiness | `publishing`, `release-review`, `github-actions`, `skill-audit`, `metadata` | clean | 是 |
-| `github-actions-clawhub-doctor` | 11 | 0 | 1* | 0 | 6 | `1.0.5` | GitHub Actions ClawHub Doctor | `github-actions`, `workflow-debug`, `publish-failure`, `release-ops`, `ci-troubleshooting` | clean | 是 |
-| `skill-positioning-audit` | 0 | 0 | 1* | 0 | 5 | `1.0.4` | Skill Positioning Audit | `positioning`, `catalog-copy`, `skill-differentiation`, `install-conversion`, `storefront-review` | clean | 是 |
-| `skill-launch-checklist` | 0 | 0 | 1* | 0 | 3 | `1.0.2` | Skill Launch Checklist | `launch-checklist`, `pre-publish-review`, `release-readiness`, `catalog-quality`, `skill-launch` | clean | 是 |
-| `skill-summary-rewriter` | 0 | 0 | 1* | 0 | 3 | `1.0.2` | Skill Summary Rewriter | `summary-rewrite`, `storefront-copy`, `catalog-copy`, `install-conversion`, `skill-positioning` | clean | 是 |
-| `release-proof-builder` | 0 | 0 | 1* | 0 | 3 | `1.0.2` | Release Proof Builder | `release-verification`, `publish-proof`, `registry-check`, `install-verification`, `release-ops` | clean | 是 |
-| `skill-portfolio-growth-audit` | 0 | 0 | 1* | 0 | 2 | `1.0.1` | Skill Portfolio Growth Audit | `portfolio-audit`, `skill-growth`, `registry-analytics`, `competition-research`, `publisher-strategy` | clean | 是 |
+| `skill-publish-readiness` | 100† | 1* | 1* | 0 | 8 | `1.0.7` | Skill Publish Readiness | `publishing`, `release-review`, `github-actions`, `skill-audit`, `metadata` | clean | 是 |
+| `github-actions-clawhub-doctor` | 80† | 1* | 1* | 0 | 6 | `1.0.5` | GitHub Actions ClawHub Doctor | `github-actions`, `workflow-debug`, `publish-failure`, `release-ops`, `ci-troubleshooting` | clean | 是 |
+| `skill-positioning-audit` | 74† | 1* | 1* | 0 | 5 | `1.0.4` | Skill Positioning Audit | `positioning`, `catalog-copy`, `skill-differentiation`, `install-conversion`, `storefront-review` | clean | 是 |
+| `skill-launch-checklist` | 66† | 1* | 1* | 0 | 3 | `1.0.2` | Skill Launch Checklist | `launch-checklist`, `pre-publish-review`, `release-readiness`, `catalog-quality`, `skill-launch` | clean | 是 |
+| `skill-summary-rewriter` | 67† | 1* | 1* | 0 | 3 | `1.0.2` | Skill Summary Rewriter | `summary-rewrite`, `storefront-copy`, `catalog-copy`, `install-conversion`, `skill-positioning` | clean | 是 |
+| `release-proof-builder` | 68† | 1* | 1* | 0 | 3 | `1.0.2` | Release Proof Builder | `release-verification`, `publish-proof`, `registry-check`, `install-verification`, `release-ops` | clean | 是 |
+| `skill-portfolio-growth-audit` | 59† | 1* | 1* | 0 | 2 | `1.0.1` | Skill Portfolio Growth Audit | `portfolio-audit`, `skill-growth`, `registry-analytics`, `competition-research`, `publisher-strategy` | clean | 是 |
 
-\* 本次巡检执行了独立安装验证，搜索接口随后显示 1 install / 60d；该值可能包含巡检行为，不作为自然增长证据。
+\* 本次巡检对 7 个 Skill 各执行了至少一次独立安装，inspect 与搜索随后均显示 1 install；这些值不作为自然增长证据。
+
+† downloads 在全量隔离安装和重复 registry 核验后同步跳升，且 7 个 Skill 均出现相近量级变化。当前无法从平台口径中排除自动验收流量，因此只保留原始值，不把增量解释为外部用户下载。
 
 ## 快照对比
 
 | 维度 | 变化 | 解释 |
 |---|---|---|
-| Downloads | 七项均无变化 | 没有可确认的新增下载信号 |
-| Inspect installs | 七项均保持 0 | 仍无 registry 详情口径的安装量 |
+| Downloads | 七项同步跳升至 59-100 | 与验收时段重合，指标已被技术核验污染，不能证明自然增长 |
+| Inspect installs | 七项均由 0 变为 1 | 与每项一次独立安装完全一致，不是自然采用证据 |
 | Stars | 七项均保持 0 | 无变化 |
 | Versions / latest | 主入口较基线增加 2 个版本，其余各增加 1 个 | `1.0.7` 是真实案例与报告模板升级，其余来自展示名修复 |
 | DisplayName | 6 项由 slug 改为产品名 | 搜索可读性已实质改善；Doctor 原本已正确 |
@@ -73,7 +75,17 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 - 这是首份基线，不能据此计算增长率。
 - `inspect` 与 `search` 的 installs 数据存在差异，两组数据均保留。
 - 新 skill 尚未经过 7 天观察窗口，不做停更或失败判断。
-- downloads 不等于 installs，不能把 43 次 downloads 解释为 43 个用户。
+- downloads 不等于 installs，也不等于独立用户。
+- E4 验收会触发真实下载与安装，后续自然增长必须从“最后一次主动验收后的快照”开始观察。
+- 当前最可靠的相对信号仍是验收前基线：主入口 43 downloads、Doctor 11，其余为 0。
+
+## 巡检采样规则
+
+- 周检先读取 `inspect` 和搜索结果，不重复安装未变化的版本。
+- 只有 latest 变化、moderation 异常、公开文件缺失或用户明确要求时，才执行一次隔离安装。
+- 主动 dry-run、inspect、install 和工作流核验都要记录时间，避免与自然指标混为一谈。
+- 发生主动安装后，重新建立观察起点；该时点之前与紧随其后的增量不用于增长归因。
+- 同一轮只采集一次同口径指标，避免重复查询本身影响未知的平台计数。
 
 ## 搜索可见性
 
@@ -93,8 +105,8 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 | Skill | 决策 | 依据 |
 |---|---|---|
-| `skill-publish-readiness` | 加码已执行，进入观察 | downloads 明显领先、长尾搜索第 1；`1.0.7` 已补真实案例与结构化输出 |
-| `github-actions-clawhub-doctor` | 加码 | 第二高 downloads，任务最具体，搜索中没有直接竞品 |
+| `skill-publish-readiness` | 加码已执行，进入观察 | 验收前 downloads 基线领先、长尾搜索第 1；`1.0.7` 已补真实案例与结构化输出 |
+| `github-actions-clawhub-doctor` | 加码 | 验收前 downloads 基线第二，任务最具体，搜索中没有直接竞品 |
 | `skill-positioning-audit` | 观察 | 新发布、0 downloads，且与 Summary Rewriter 关键词重叠 |
 | `skill-launch-checklist` | 观察 | 可见且可安装，但与主入口任务相邻，尚无独立采用证据 |
 | `skill-summary-rewriter` | 观察 | 精确查询第 1，但 0 downloads，宽泛关键词噪音较高 |

@@ -1,105 +1,104 @@
 # Skill / Plugin 候选池
 
-## 当前定位
+更新时间：`2026-09-05`
 
-优先围绕这条主线扩展：
+## 当前决策
 
-- ClawHub 发布前质量
-- GitHub Actions -> ClawHub 发布排障
-- 商店页定位与安装转化
+作品集已有 7 个 Skill，覆盖发布准备、Actions 排障、发布证明、页面转化和组合决策。当前不新增第 8 个 Skill，先观察 `Skill Publish Readiness 1.0.7` 的自然采用信号。
 
-这样能逐步建立一个清晰 IP：`发布与增长工具作者`
+首个 Plugin 候选暂定为 `skill-catalog-governor`，但还不进入开发。ClawHub package registry 当前没有可观察样本，需求与分发条件都不足以支持正式投入。
+
+## 研究证据
+
+### Skill 搜索
+
+| 查询 | 结果 | 决策 |
+|---|---|---|
+| `skill metadata catalog topics` | 无直接结果 | 存在供给空白，需求未知 |
+| `catalog optimizer` | 无直接结果 | 保留为候选，不立即开发 |
+| `skill topics categories` | 无直接结果 | 能力并入 catalog governor |
+| `topic category fit audit` | 无直接结果 | 不单独拆 Skill |
+| `skill storefront benchmark` | 无直接结果 | 并入 Positioning / Portfolio |
+| `publisher analytics portfolio` | 仅自家 Portfolio Growth Audit | 现有 Skill 已覆盖 |
+| `release changelog notes` | 多个 ClawHub 结果；skills.sh 同类有 1,000-12,000+ lifetime installs | 通用方向拥挤，不进入 |
+
+### Package 搜索
+
+以下查询均使用 `clawhub package explore --family code-plugin --json`：
+
+- `catalog metadata`
+- `topics categories`
+- `publisher analytics`
+
+三组结果均为空。随后枚举全部 package family，registry 仍返回 `0` 个结果。
+
+这只能证明当前 CLI 可见范围内没有公开 package 样本，不能证明用户需要一个 Plugin。package 命令已支持 `validate`、`pack`、`publish --dry-run`、moderation 和 artifact verification，技术路径存在，但市场与消费路径尚未形成可观察证据。
 
 ## 已进入仓库
 
-### `skill-launch-checklist`
+| 产品 | 当前角色 | 后续只在有证据时补充 |
+|---|---|---|
+| `skill-publish-readiness` | 发布前完整审查主入口 | 观察 `1.0.7` 真实案例升级后的自然采用 |
+| `github-actions-clawhub-doctor` | GitHub Actions → ClawHub 排障 | 增加新出现且可复现的失败模式 |
+| `skill-positioning-audit` | 单页定位与转化诊断 | 吸收 topic fit 和页面 benchmark |
+| `skill-launch-checklist` | 低门槛发布入口 | 观察是否形成独立需求 |
+| `skill-summary-rewriter` | 商店页摘要改写 | 观察与 Positioning 的重叠程度 |
+| `release-proof-builder` | `E0-E4` 发布证明 | 增加机器可读证据前先验证需求 |
+| `skill-portfolio-growth-audit` | 作品集组合决策 | 吸收 series planner 和竞争 benchmark |
 
-- 类型：skill
-- 当前作用：轻量入口，先判断这次发布是不是已经值得发
-- 后续可继续补：更强的 checklist 输出样式、首屏改写建议、和其他 skill 的路由关系
+## 首个 Plugin 候选
 
-### `skill-summary-rewriter`
+### `skill-catalog-governor`
 
-- 类型：skill
-- 当前作用：专门改写商店页摘要，承接“定位没错但第一页不够打”的问题
-- 后续可继续补：摘要风格切换、短版/长版双输出、与 `skill-positioning-audit` 的联动路由
+定位：在本地统一检查和维护 Skill 的稳定 slug、人类可读名称、categories、topics、版本与 changelog，并输出可审阅的修复 diff。
 
-### `release-proof-builder`
+预期价值：
 
-- 类型：skill
-- 当前作用：用 `E0-E4` 证据等级核验 GitHub、Actions、registry 和安装结果
-- 后续可继续补：自动生成机器可读证据 JSON、发布历史对比、异常状态提示
+- 发现 `SKILL.md` 与 `.clawhub/skill-catalog.json` 的漂移
+- 阻止受保护 slug 和目录名不一致
+- 检查版本是否高于 registry latest
+- 识别 topics 堆砌、重复定位和分类偏差
+- 生成 diff，不默认自动发布
 
-### `skill-portfolio-growth-audit`
+不把它拆成多个小 Skill。`topic-fit-audit`、版本一致性和 catalog metadata 维护属于同一个治理任务。
 
-- 类型：skill
-- 当前作用：基于 registry 指标、搜索竞争和仓库质量管理整个 publisher 作品集
-- 后续可继续补：历史快照、搜索排名变化、自动生成优化队列
+进入开发必须同时满足：
 
-## 优先级 A
+1. ClawHub package registry 出现可安装的 code-plugin 或官方消费路径已稳定。
+2. 至少出现 3 个独立的 catalog 漂移或批量维护案例。
+3. 能用本仓库 7 个 Skill 做真实回归样本。
+4. Plugin Inspector 能在不执行危险代码的情况下完成基础验证。
+5. 发布后可以完成 package inspect、moderation 和 artifact verification。
 
-### 1. `clawhub-catalog-optimizer`
+## 合并到现有产品
 
-- 类型：plugin
-- 价值：集中维护 categories、topics、摘要、版本和 changelog
-- 原因：当 skill 数量变多后，手工维护成本会上升
+| 原候选 | 处理 | 原因 |
+|---|---|---|
+| `topic-fit-audit` | 并入 `skill-positioning-audit` 与 catalog governor | 单独产品过薄 |
+| `skill-page-benchmark` | 并入 `skill-positioning-audit` 和 `skill-portfolio-growth-audit` | 与现有定位高度重叠 |
+| `skill-series-planner` | 并入 `skill-portfolio-growth-audit` | 组合决策已覆盖系列扩展 |
+| `workflow-ref-doctor` | 并入 `github-actions-clawhub-doctor` | 垂直拆分会稀释排障入口 |
+| `trusted-publisher-preflight` | 暂缓 | package 生态和真实案例不足 |
 
-暂不做：
+## 明确淘汰
 
-- 通用 skill 更新器：已有成熟产品覆盖备份、diff、迁移与回滚
-- 通用安装前安全审查：已有高安装量产品，竞争成熟
+### 通用 changelog / release-note 生成
 
-## 优先级 B
+ClawHub 已有多个同类 Skill，skills.sh 同类产品也有较高 lifetime installs。除非未来出现“ClawHub 发布证据自动生成 changelog”这类不可被通用工具覆盖的任务，否则不进入。
 
-### 2. `skill-series-planner`
+### 通用 Skill 更新器
 
-- 类型：skill
-- 价值：围绕现有 skill 生成系列化扩展方向
-- 原因：帮你持续开新题，而不是一次性发完
+已有成熟产品覆盖 diff、备份、迁移与回滚，不复制。
 
-### 3. `topic-fit-audit`
+### 通用安装前安全审查
 
-- 类型：skill
-- 价值：检查 categories / topics 是否匹配内容和目标用户
-- 原因：直接影响在 ClawHub 里的发现性
-
-## 优先级 C
-
-### 4. `workflow-ref-doctor`
-
-- 类型：skill
-- 价值：更聚焦 reusable workflow 引用、版本和兼容性问题
-- 原因：是 `github-actions-clawhub-doctor` 的垂直拆分版
-
-### 5. `skill-page-benchmark`
-
-- 类型：skill
-- 价值：把你的页面和同类 skill 做结构化对比
-- 原因：更偏增长策略，适合后期做
-
-### 6. `trusted-publisher-preflight`
-
-- 类型：plugin
-- 价值：专门检查 package trusted publishing 和 OIDC 配置
-- 原因：更适合 plugin 发布链路成熟后再做
-
-### 7. `release-change-narrator`
-
-- 类型：skill
-- 价值：根据 changelog 和更新内容生成更好的发布说明
-- 原因：有助于连贯输出和持续更新
+已有高安装量产品，不做缺乏新壁垒的版本。
 
 ## 选择原则
 
-优先做这类题：
-
-- 来自你真实踩过的坑
-- 能和已有 skill 形成系列
-- 页面上能一句话说清楚价值
-- 用户装完后马上能用，而不是需要复杂接入
-
-先不急着做这类题：
-
-- 过于宽泛的“万能助手”
-- 纯概念型 agent 增强
-- 需要大量外部服务授权才能用的方向
+- 问题来自真实失败或重复维护成本
+- 目标用户与触发时机能用一句话说清
+- 新产品加强现有发布与增长主线
+- 输出能被验证，不依赖无法观察的承诺
+- 优先扩展已有产品，避免为了数量拆薄能力
+- 搜索空白只代表供给缺口，必须另找需求证据

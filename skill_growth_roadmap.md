@@ -82,19 +82,16 @@
 - 更容易被理解
 - 适合作为轻量版入口技能
 
-## 更远一点的 plugin 方向
+## Plugin 候选
 
-### 1. GitHub / ClawHub 发布状态桥接插件
+### `skill-catalog-governor`
 
-- 聚合仓库最新发布 run、ClawHub 上架状态、审查状态
-- 更像插件，而不是 skill
-- 适合后续做成长期工具
+- 集中检查稳定 slug、展示名、categories、topics、版本与 changelog
+- 识别 `SKILL.md` 和 catalog metadata 的漂移
+- 输出可审阅 diff，不默认自动发布
+- 吸收原 `topic-fit-audit`，不再拆成多个薄 Skill
 
-### 2. ClawHub catalog optimizer
-
-- 专门改 categories、topics、summary、changelog
-- 偏元数据管理
-- 适合在你有 3 到 5 个 skill 后再做
+当前不进入开发。`clawhub package explore` 暂未返回公开 package 样本，既缺市场参照，也缺稳定消费路径。只有 package 生态可验证且出现至少 3 个独立维护案例后才启动。
 
 ## 当前组合建议
 
@@ -110,22 +107,13 @@
 - 如果链路出错，再看 Actions 排障
 - 真要提升页面转化，再做定位与文案优化
 
-## 下一个最值得做的题
+## 下一阶段
 
-### 1. `topic-fit-audit`
-
-- 价值：检查 `categories` / `topics` 是否真和内容匹配
-- 理由：直接影响在 ClawHub 里的发现性
-
-### 2. `skill-page-benchmark`
-
-- 价值：把你的 skill 页面和同类项做结构化对比
-- 理由：当你已有 5 个左右 skill 时，更适合开始做横向 benchmark
-
-### 3. `clawhub-catalog-optimizer`
-
-- 价值：集中维护展示名、categories、topics、版本和 changelog
-- 理由：当前 skill 数量已增长到需要减少重复维护和无意义版本发布的阶段
+1. 观察 `Skill Publish Readiness 1.0.7` 至少 7 天，不再用主动安装制造增长信号。
+2. 用验收前基线和新的自然观察起点判断主入口是否继续领先。
+3. topic fit 与单页 benchmark 作为现有 Positioning / Portfolio Skill 的能力，不创建新 slug。
+4. 继续收集 catalog 漂移案例，为 `skill-catalog-governor` 判断真实需求。
+5. package registry 出现可验证消费路径前，不发布第一个 Plugin。
 
 ## 当前增长判断
 

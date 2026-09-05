@@ -9,6 +9,7 @@ import importlib.util
 import json
 import re
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,7 @@ TOP_LEVEL_FIELDS = {
     "expiresAt",
     "observationNotBefore",
     "baseCommit",
+    "candidateCommit",
     "modes",
     "targets",
     "catalogChanged",
@@ -163,6 +165,55 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
     return result
 
 
+def load_base_versions(
+    repo_root: Path,
+    base_commit: str,
+    base_catalog: dict[str, Any],
+    slugs: set[str],
+) -> dict[str, str | None]:
+    versions = {}
+    for slug in slugs:
+        catalog_key = f"skills/{slug}"
+        if catalog_key not in base_catalog:
+            versions[slug] = None
+            continue
+        completed = subprocess.run(
+            ["git", "show", f"{base_commit}:{catalog_key}/SKILL.md"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip()
+            raise ValueError(f"{slug}: cannot read base SKILL.md: {message}")
+        match = re.match(r"\A---\n(.*?)\n---\n", completed.stdout, re.DOTALL)
+        if not match:
+            raise ValueError(f"{slug}: base SKILL.md frontmatter missing")
+        observed = {}
+        for line in match.group(1).splitlines():
+            if ":" not in line or line.startswith(" "):
+                continue
+            key, value = line.split(":", 1)
+            normalized_key = key.strip()
+            if normalized_key in observed:
+                raise ValueError(
+                    f"{slug}: base frontmatter has duplicate key: {normalized_key}"
+                )
+            observed[normalized_key] = value.strip()
+        version = observed.get("version")
+        if not isinstance(version, str) or SEMVER_PATTERN.fullmatch(version) is None:
+            raise ValueError(f"{slug}: base version must use three-part semver")
+        versions[slug] = version
+    return versions
+
+
+def semver_tuple(value: str) -> tuple[int, int, int]:
+    if SEMVER_PATTERN.fullmatch(value) is None:
+        raise ValueError(f"invalid three-part semver: {value}")
+    return tuple(int(part) for part in value.split("."))
+
+
 def load_catalog_validator(repo_root: Path):
     validator_path = repo_root / "scripts" / "validate_skill_catalog.py"
     if not validator_path.is_file():
@@ -174,7 +225,12 @@ def load_catalog_validator(repo_root: Path):
     if spec is None or spec.loader is None:
         raise ValueError("catalog validator cannot be loaded")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    previous = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
     return module
 
 
@@ -382,7 +438,9 @@ def evaluate(
     changed_paths: list[str],
     base_catalog: dict[str, Any],
     base_policy: dict[str, Any],
+    base_versions: dict[str, str | None],
     base_commit: str,
+    candidate_commit: str,
     mode: str,
     now: datetime,
 ) -> dict[str, Any]:
@@ -455,7 +513,10 @@ def evaluate(
         or authorization.get("schemaVersion") != 1
     ):
         errors.append("release authorization schemaVersion must equal 1")
-    if authorization.get("status") != "approved":
+    authorization_status = authorization.get("status")
+    if authorization_status not in {"pending", "approved"}:
+        errors.append("release authorization status must be pending or approved")
+    if authorization_status != "approved":
         blockers.append("authorization-not-approved")
 
     release_id = authorization.get("releaseId")
@@ -467,15 +528,25 @@ def evaluate(
         errors.append("releaseId must be a lowercase token using dots or hyphens")
 
     try:
-        issued_at = parse_time(authorization.get("issuedAt"), "issuedAt")
-        expires_at = parse_time(authorization.get("expiresAt"), "expiresAt")
         authorization_not_before = parse_time(
             authorization.get("observationNotBefore"),
             "observationNotBefore",
         )
     except ValueError as error:
         errors.append(str(error))
-        issued_at = expires_at = authorization_not_before = None
+        authorization_not_before = None
+    issued_at = expires_at = None
+    if authorization_status == "approved":
+        try:
+            issued_at = parse_time(authorization.get("issuedAt"), "issuedAt")
+            expires_at = parse_time(authorization.get("expiresAt"), "expiresAt")
+        except ValueError as error:
+            errors.append(str(error))
+    elif (
+        authorization.get("issuedAt") is not None
+        or authorization.get("expiresAt") is not None
+    ):
+        errors.append("pending authorization times must remain null")
     if authorization_not_before is not None and authorization_not_before != not_before:
         errors.append("authorization observationNotBefore must match policy")
     if issued_at is not None and issued_at < not_before:
@@ -496,6 +567,15 @@ def evaluate(
         errors.append("evaluated base commit must be a full lowercase SHA-1")
     if authorization.get("baseCommit") != base_commit:
         errors.append("authorization baseCommit does not match evaluated base")
+    if (
+        not isinstance(candidate_commit, str)
+        or COMMIT_PATTERN.fullmatch(candidate_commit) is None
+    ):
+        errors.append("evaluated candidate commit must be a full lowercase SHA-1")
+    if authorization.get("candidateCommit") != candidate_commit:
+        errors.append(
+            "authorization candidateCommit does not match evaluated candidate"
+        )
 
     modes = authorization.get("modes")
     if not exact_string_list(modes, ALLOWED_MODES):
@@ -522,6 +602,8 @@ def evaluate(
     errors.extend(formal_errors)
     if not target_slugs:
         errors.append("evaluated commit range has no formal Skill changes")
+    if len(target_slugs) != 1:
+        errors.append("each release authorization must target exactly one Skill")
     if authorization.get("catalogChanged") is not catalog_changed:
         errors.append("catalogChanged does not match the evaluated commit range")
 
@@ -564,6 +646,28 @@ def evaluate(
             errors.append(f"{slug}: formal SKILL.md slug does not match authorization")
         if frontmatter.get("version") != version:
             errors.append(f"{slug}: formal SKILL.md version does not match authorization")
+        base_version = base_versions.get(slug)
+        is_new = f"skills/{slug}" not in base_catalog
+        if is_new:
+            if base_version is not None:
+                errors.append(f"{slug}: new Skill must not have a base version")
+        elif (
+            not isinstance(base_version, str)
+            or SEMVER_PATTERN.fullmatch(base_version) is None
+        ):
+            errors.append(f"{slug}: existing Skill base version is invalid")
+        elif semver_tuple(version) <= semver_tuple(base_version):
+            errors.append(f"{slug}: release version must increase from base version")
+        if not any(
+            path.startswith(f"skills/{slug}/")
+            for path in normalized_paths
+        ):
+            errors.append(f"{slug}: release must change the formal Skill directory")
+        expected_release_id = f"{slug}-{version}"
+        if release_id != expected_release_id:
+            errors.append(
+                f"releaseId must equal target slug and version: {expected_release_id}"
+            )
 
     errors.extend(validate_catalog(repo_root, catalog_path))
     try:
@@ -612,21 +716,34 @@ def evaluate(
     if not isinstance(review, dict) or set(review) != REVIEW_FIELDS:
         errors.append("review fields are incomplete or unexpected")
         review = {}
-    if review.get("completed") is not True:
+    review_completed = review.get("completed")
+    if review_completed is not True:
         blockers.append("fresh-review")
+    if authorization_status == "pending" and review_completed is not False:
+        errors.append("pending review.completed must remain false")
     change_class = review.get("changeClass")
     if change_class not in ALLOWED_CHANGE_CLASSES:
         errors.append("review changeClass is invalid")
-    if change_class == "new-skill" and not catalog_changed:
-        errors.append("new-skill authorization must include a catalog change")
+    if len(target_slugs) == 1:
+        target_slug = next(iter(target_slugs))
+        target_is_new = f"skills/{target_slug}" not in base_catalog
+        if target_is_new and change_class != "new-skill":
+            errors.append("new Skill must use changeClass new-skill")
+        if not target_is_new and change_class == "new-skill":
+            errors.append("existing Skill cannot use changeClass new-skill")
+        if target_is_new and not catalog_changed:
+            errors.append("new-skill authorization must include a catalog change")
     review_reason = review.get("reason")
     if not isinstance(review_reason, str) or not review_reason.strip():
         errors.append("review reason must be non-empty")
-    try:
-        reviewed_at = parse_time(review.get("reviewedAt"), "reviewedAt")
-    except ValueError as error:
-        errors.append(str(error))
-        reviewed_at = None
+    reviewed_at = None
+    if authorization_status == "approved":
+        try:
+            reviewed_at = parse_time(review.get("reviewedAt"), "reviewedAt")
+        except ValueError as error:
+            errors.append(str(error))
+    elif review.get("reviewedAt") is not None:
+        errors.append("pending review.reviewedAt must remain null")
     if reviewed_at is not None:
         if reviewed_at < not_before:
             errors.append("fresh review cannot predate observation window")
@@ -765,6 +882,7 @@ def collect_git_inputs(
     repo_root: Path,
     base_ref: str,
     head_ref: str,
+    candidate_ref: str | None = None,
 ) -> tuple[str, list[str], dict[str, Any], dict[str, Any]]:
     base_commit = run_git(
         repo_root,
@@ -783,8 +901,73 @@ def collect_git_inputs(
     checked_out = run_git(repo_root, "rev-parse", "HEAD").strip()
     if head_commit != checked_out:
         raise ValueError("evaluated head must equal the checked-out HEAD")
+    release_head = head_commit
+    if candidate_ref is not None:
+        candidate_commit = run_git(
+            repo_root,
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            f"{candidate_ref}^{{commit}}",
+        ).strip()
+        candidate_ancestor = subprocess.run(
+            [
+                "git",
+                "merge-base",
+                "--is-ancestor",
+                candidate_commit,
+                head_commit,
+            ],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if candidate_ancestor.returncode == 1:
+            raise ValueError("candidate commit must be an ancestor of head")
+        if candidate_ancestor.returncode != 0:
+            message = (
+                candidate_ancestor.stderr.strip()
+                or candidate_ancestor.stdout.strip()
+            )
+            raise ValueError(f"cannot verify candidate ancestry: {message}")
+        authorization_commits = run_git(
+            repo_root,
+            "rev-list",
+            "--count",
+            f"{candidate_commit}..{head_commit}",
+        ).strip()
+        if authorization_commits != "1":
+            raise ValueError(
+                "head must contain exactly one authorization commit after candidate"
+            )
+        authorization_changes = run_git_bytes(
+            repo_root,
+            "diff",
+            "--name-only",
+            "-z",
+            "--diff-filter=ACMRTD",
+            candidate_commit,
+            head_commit,
+            "--",
+        )
+        try:
+            authorization_paths = {
+                item.decode("utf-8")
+                for item in authorization_changes.split(b"\0")
+                if item
+            }
+        except UnicodeDecodeError as error:
+            raise ValueError(
+                "authorization commit paths must be valid UTF-8"
+            ) from error
+        if authorization_paths != {DEFAULT_AUTHORIZATION_PATH}:
+            raise ValueError(
+                "authorization commit must change only the authorization file"
+            )
+        release_head = candidate_commit
     ancestor = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", base_commit, head_commit],
+        ["git", "merge-base", "--is-ancestor", base_commit, release_head],
         cwd=repo_root,
         check=False,
         capture_output=True,
@@ -809,7 +992,7 @@ def collect_git_inputs(
         "-z",
         "--diff-filter=ACMRTD",
         base_commit,
-        head_commit,
+        release_head,
         "--",
     )
     try:
@@ -820,6 +1003,8 @@ def collect_git_inputs(
         ]
     except UnicodeDecodeError as error:
         raise ValueError("changed paths must be valid UTF-8") from error
+    if candidate_ref is not None:
+        changed_paths.append(DEFAULT_AUTHORIZATION_PATH)
     catalog_text = run_git(repo_root, "show", f"{base_commit}:{CATALOG_PATH}")
     base_catalog = parse_json_object_text(catalog_text, "base skill catalog")
     policy_text = run_git(
@@ -845,10 +1030,37 @@ def main(argv: list[str] | None = None) -> int:
     try:
         authorization_path = repo_root / DEFAULT_AUTHORIZATION_PATH
         policy_path = repo_root / "metrics" / "observation-policy.json"
+        authorization_preview = load_json_object(
+            authorization_path,
+            "release authorization",
+        )
+        candidate_commit = authorization_preview.get("candidateCommit")
+        if (
+            not isinstance(candidate_commit, str)
+            or COMMIT_PATTERN.fullmatch(candidate_commit) is None
+        ):
+            raise ValueError(
+                "release authorization candidateCommit must be a full SHA-1"
+            )
         base_commit, changed_paths, base_catalog, base_policy = collect_git_inputs(
             repo_root,
             args.base,
             args.head,
+            candidate_commit,
+        )
+        preview_targets = authorization_preview.get("targets")
+        if not isinstance(preview_targets, list):
+            raise ValueError("release authorization targets must be an array")
+        preview_slugs = {
+            target.get("slug")
+            for target in preview_targets
+            if isinstance(target, dict) and isinstance(target.get("slug"), str)
+        }
+        base_versions = load_base_versions(
+            repo_root,
+            base_commit,
+            base_catalog,
+            preview_slugs,
         )
         result = evaluate(
             repo_root,
@@ -857,7 +1069,9 @@ def main(argv: list[str] | None = None) -> int:
             changed_paths,
             base_catalog,
             base_policy,
+            base_versions,
             base_commit,
+            candidate_commit,
             args.mode,
             now,
         )

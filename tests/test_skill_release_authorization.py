@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 CHECKER = ROOT / "scripts" / "check_skill_release_authorization.py"
+PREPARER = ROOT / "scripts" / "prepare_skill_release_authorization.py"
 CATALOG_VALIDATOR = ROOT / "scripts" / "validate_skill_catalog.py"
 TEMPLATE = (
     ROOT
@@ -30,8 +31,15 @@ SPEC = importlib.util.spec_from_file_location(
 )
 CHECK_MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECK_MODULE)
+PREPARE_SPEC = importlib.util.spec_from_file_location(
+    "prepare_skill_release_authorization",
+    PREPARER,
+)
+PREPARE_MODULE = importlib.util.module_from_spec(PREPARE_SPEC)
+PREPARE_SPEC.loader.exec_module(PREPARE_MODULE)
 
 BASE_COMMIT = "a" * 40
+CANDIDATE_COMMIT = "b" * 40
 NOT_BEFORE = "2026-09-12T10:45:38+00:00"
 AUTHORIZED_NOW = datetime(2026, 9, 13, 1, tzinfo=timezone.utc)
 BEFORE_WINDOW = datetime(2026, 9, 5, tzinfo=timezone.utc)
@@ -113,6 +121,7 @@ def make_authorization(root, base_catalog, changed_paths=None, **overrides):
         "expiresAt": "2026-09-15T00:00:00+00:00",
         "observationNotBefore": NOT_BEFORE,
         "baseCommit": BASE_COMMIT,
+        "candidateCommit": CANDIDATE_COMMIT,
         "modes": ["dry-run", "publish"],
         "targets": [{"slug": "demo-skill", "version": "1.0.1"}],
         "catalogChanged": False,
@@ -164,7 +173,9 @@ def evaluate(root, base_catalog, authorization_path, **overrides):
                 encoding="utf-8"
             )
         ),
+        "base_versions": {"demo-skill": "1.0.0"},
         "base_commit": BASE_COMMIT,
+        "candidate_commit": CANDIDATE_COMMIT,
         "mode": "publish",
         "now": AUTHORIZED_NOW,
     }
@@ -176,9 +187,69 @@ def evaluate(root, base_catalog, authorization_path, **overrides):
         values["changed_paths"],
         values["base_catalog"],
         values["base_policy"],
+        values["base_versions"],
         values["base_commit"],
+        values["candidate_commit"],
         values["mode"],
         values["now"],
+    )
+
+
+def initialize_git(root):
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "baseline"],
+        cwd=root,
+        check=True,
+    )
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        text=True,
+    ).strip()
+
+
+def commit_release_candidate(root, change_evidence=True):
+    skill_path = root / "skills" / "demo-skill" / "SKILL.md"
+    skill_path.write_text(
+        skill_path.read_text(encoding="utf-8").replace(
+            "version: 1.0.1",
+            "version: 1.0.2",
+            1,
+        )
+        + "\nCandidate change.\n",
+        encoding="utf-8",
+    )
+    changelog_path = root / "skills" / "demo-skill" / "CHANGELOG.md"
+    changelog_path.write_text(
+        changelog_path.read_text(encoding="utf-8").replace(
+            "# Changelog\n",
+            "# Changelog\n\n## 1.0.2\n\n- Candidate release.\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    if change_evidence:
+        (root / "review.md").write_text(
+            "# Review\n\nCandidate evidence.\n",
+            encoding="utf-8",
+        )
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "release candidate"],
+        cwd=root,
+        check=True,
     )
 
 
@@ -188,7 +259,11 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
 
         self.assertEqual(set(template), CHECK_MODULE.TOP_LEVEL_FIELDS)
         self.assertEqual(template["status"], "pending")
+        self.assertEqual(template["modes"], ["dry-run"])
+        self.assertIsNone(template["issuedAt"])
+        self.assertIsNone(template["expiresAt"])
         self.assertFalse(template["review"]["completed"])
+        self.assertIsNone(template["review"]["reviewedAt"])
         self.assertEqual(set(template["review"]), CHECK_MODULE.REVIEW_FIELDS)
         self.assertEqual(
             set(template["review"]["evidence"][0]),
@@ -202,6 +277,7 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
             template["observationNotBefore"],
             NOT_BEFORE,
         )
+        self.assertRegex(template["candidateCommit"], r"^[0-9a-f]{40}$")
 
     def test_gate_is_ci_tested_but_not_wired_during_observation(self):
         metrics_workflow = METRICS_WORKFLOW.read_text(encoding="utf-8")
@@ -411,6 +487,20 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 "authorization baseCommit does not match evaluated base",
                 wrong_base["errors"],
             )
+            wrong_candidate = evaluate(
+                root,
+                base_catalog,
+                authorization_path,
+                candidate_commit="c" * 40,
+            )
+            self.assertFalse(wrong_candidate["valid"])
+            self.assertIn(
+                (
+                    "authorization candidateCommit does not match "
+                    "evaluated candidate"
+                ),
+                wrong_candidate["errors"],
+            )
 
             authorization["targets"] = [
                 {"slug": "another-skill", "version": "1.0.0"}
@@ -432,6 +522,7 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
             changed_paths = [
                 CHECK_MODULE.DEFAULT_AUTHORIZATION_PATH,
                 CHECK_MODULE.CATALOG_PATH,
+                "skills/demo-skill/SKILL.md",
                 "review.md",
             ]
             authorization_path, authorization = make_authorization(
@@ -465,7 +556,7 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
         self.assertTrue(valid["authorized"])
         self.assertTrue(valid["catalogChanged"])
 
-    def test_new_skill_class_requires_catalog_change(self):
+    def test_existing_skill_cannot_claim_new_skill_class(self):
         with tempfile.TemporaryDirectory() as directory:
             root, base_catalog = make_repo(directory)
             authorization_path, authorization = make_authorization(
@@ -478,7 +569,7 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
 
         self.assertFalse(result["valid"])
         self.assertIn(
-            "new-skill authorization must include a catalog change",
+            "existing Skill cannot use changeClass new-skill",
             result["errors"],
         )
 
@@ -785,6 +876,420 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 self.assertFalse(result["valid"])
                 self.assertEqual(result["errors"], [expected_error])
 
+    def test_preparer_builds_pending_draft_compatible_with_gate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            policy = {
+                "schemaVersion": 1,
+                "notBefore": "2020-01-01T00:00:00+00:00",
+                "reason": "Completed test observation window.",
+            }
+            write_json(
+                root / "metrics" / "observation-policy.json",
+                policy,
+            )
+            base_commit = initialize_git(root)
+            commit_release_candidate(root)
+
+            draft = PREPARE_MODULE.prepare(
+                repo_root=root,
+                base_ref=base_commit,
+                head_ref="HEAD",
+                release_id="demo-skill-1.0.2",
+                modes=["dry-run", "publish"],
+                change_class="correctness-fix",
+                reason="Fix a verified defect.",
+                evidence_paths=["review.md"],
+            )
+
+            self.assertEqual(draft["status"], "pending")
+            self.assertIsNone(draft["issuedAt"])
+            self.assertIsNone(draft["expiresAt"])
+            self.assertFalse(draft["review"]["completed"])
+            self.assertIsNone(draft["review"]["reviewedAt"])
+            self.assertEqual(
+                draft["targets"],
+                [{"slug": "demo-skill", "version": "1.0.2"}],
+            )
+            self.assertRegex(draft["contentDigest"], r"^sha256:[0-9a-f]{64}$")
+            self.assertRegex(
+                draft["changeSetDigest"],
+                r"^sha256:[0-9a-f]{64}$",
+            )
+
+            authorization_path = (
+                root / CHECK_MODULE.DEFAULT_AUTHORIZATION_PATH
+            )
+            write_json(authorization_path, draft)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "pending authorization"],
+                cwd=root,
+                check=True,
+            )
+            (
+                observed_base,
+                changed_paths,
+                base_catalog,
+                base_policy,
+            ) = CHECK_MODULE.collect_git_inputs(
+                root,
+                base_commit,
+                "HEAD",
+                draft["candidateCommit"],
+            )
+            base_versions = CHECK_MODULE.load_base_versions(
+                root,
+                observed_base,
+                base_catalog,
+                {"demo-skill"},
+            )
+            now = datetime.now(timezone.utc)
+            pending_result = CHECK_MODULE.evaluate(
+                root,
+                authorization_path,
+                root / "metrics" / "observation-policy.json",
+                changed_paths,
+                base_catalog,
+                base_policy,
+                base_versions,
+                observed_base,
+                draft["candidateCommit"],
+                "publish",
+                now,
+            )
+            self.assertTrue(
+                pending_result["valid"],
+                pending_result["errors"],
+            )
+            self.assertFalse(pending_result["authorized"])
+            self.assertIn(
+                "authorization-not-approved",
+                pending_result["blockingReasons"],
+            )
+            self.assertIn(
+                "fresh-review",
+                pending_result["blockingReasons"],
+            )
+
+            draft["status"] = "approved"
+            draft["issuedAt"] = (now - timedelta(minutes=30)).isoformat()
+            draft["expiresAt"] = (now + timedelta(hours=1)).isoformat()
+            draft["review"]["completed"] = True
+            draft["review"]["reviewedAt"] = (
+                now - timedelta(hours=1)
+            ).isoformat()
+            write_json(authorization_path, draft)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "--amend", "--no-edit", "-q"],
+                cwd=root,
+                check=True,
+            )
+            (
+                observed_base,
+                changed_paths,
+                base_catalog,
+                base_policy,
+            ) = CHECK_MODULE.collect_git_inputs(
+                root,
+                base_commit,
+                "HEAD",
+                draft["candidateCommit"],
+            )
+            result = CHECK_MODULE.evaluate(
+                root,
+                authorization_path,
+                root / "metrics" / "observation-policy.json",
+                changed_paths,
+                base_catalog,
+                base_policy,
+                base_versions,
+                observed_base,
+                draft["candidateCommit"],
+                "publish",
+                now,
+            )
+
+        self.assertTrue(result["valid"], result["errors"])
+        self.assertTrue(result["authorized"], result)
+
+    def test_preparer_requires_changed_evidence_and_formal_skill(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            base_commit = initialize_git(root)
+            commit_release_candidate(root, change_evidence=False)
+            with self.assertRaisesRegex(
+                ValueError,
+                "review evidence must change in the release diff",
+            ):
+                PREPARE_MODULE.prepare(
+                    root,
+                    base_commit,
+                    "HEAD",
+                    "demo-skill-1.0.2",
+                    ["publish"],
+                    "correctness-fix",
+                    "Fix a defect.",
+                    ["review.md"],
+                )
+
+    def test_preparer_requires_version_bump_and_bound_release_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            base_commit = initialize_git(root)
+            skill_path = root / "skills" / "demo-skill" / "SKILL.md"
+            skill_path.write_text(
+                skill_path.read_text(encoding="utf-8") + "\nNo bump.\n",
+                encoding="utf-8",
+            )
+            (root / "review.md").write_text(
+                "# Review\n\nNo version bump.\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "no version bump"],
+                cwd=root,
+                check=True,
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "release version must increase from base version",
+            ):
+                PREPARE_MODULE.prepare(
+                    root,
+                    base_commit,
+                    "HEAD",
+                    "demo-skill-1.0.1",
+                    ["dry-run"],
+                    "correctness-fix",
+                    "Fix a defect.",
+                    ["review.md"],
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            base_commit = initialize_git(root)
+            commit_release_candidate(root)
+            with self.assertRaisesRegex(
+                ValueError,
+                "releaseId must equal target slug and version",
+            ):
+                PREPARE_MODULE.prepare(
+                    root,
+                    base_commit,
+                    "HEAD",
+                    "wrong-skill-9.9.9",
+                    ["dry-run"],
+                    "correctness-fix",
+                    "Fix a defect.",
+                    ["review.md"],
+                )
+
+    def test_preparer_rejects_multi_target_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog = make_repo(directory)
+            base_commit = initialize_git(root)
+            commit_release_candidate(root)
+            second = root / "skills" / "second-skill"
+            shutil.copytree(root / "skills" / "demo-skill", second)
+            second_skill = second / "SKILL.md"
+            second_skill.write_text(
+                second_skill.read_text(encoding="utf-8")
+                .replace("name: Demo Skill", "name: Second Skill", 1)
+                .replace("slug: demo-skill", "slug: second-skill", 1)
+                .replace("version: 1.0.2", "version: 1.0.0", 1),
+                encoding="utf-8",
+            )
+            second_changelog = second / "CHANGELOG.md"
+            second_changelog.write_text(
+                "# Changelog\n\n## 1.0.0\n\n- Initial release.\n",
+                encoding="utf-8",
+            )
+            catalog["skills/second-skill"] = {
+                "displayName": "Second Skill",
+                "categories": ["development"],
+                "topics": ["release-automation"],
+            }
+            write_json(root / CHECK_MODULE.CATALOG_PATH, catalog)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "second target"],
+                cwd=root,
+                check=True,
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "must target exactly one Skill",
+            ):
+                PREPARE_MODULE.prepare(
+                    root,
+                    base_commit,
+                    "HEAD",
+                    "multi-target-release",
+                    ["dry-run"],
+                    "new-skill",
+                    "Mixed release.",
+                    ["review.md"],
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            base_commit = initialize_git(root)
+            (root / "review.md").write_text(
+                "# Review\n\nOnly evidence changed.\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "evidence only"],
+                cwd=root,
+                check=True,
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "no formal Skill changes",
+            ):
+                PREPARE_MODULE.prepare(
+                    root,
+                    base_commit,
+                    "HEAD",
+                    "demo-skill-1.0.1",
+                    ["publish"],
+                    "correctness-fix",
+                    "Fix a defect.",
+                    ["review.md"],
+                )
+
+    def test_preparer_refuses_protected_control_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            base_commit = initialize_git(root)
+            commit_release_candidate(root)
+            workflow = root / ".github" / "workflows" / "publish.yml"
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text("name: Changed\n", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "change control"],
+                cwd=root,
+                check=True,
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "cannot modify protected control path",
+            ):
+                PREPARE_MODULE.prepare(
+                    root,
+                    base_commit,
+                    "HEAD",
+                    "demo-skill-1.0.2",
+                    ["publish"],
+                    "correctness-fix",
+                    "Fix a defect.",
+                    ["review.md"],
+                )
+
+    def test_preparer_atomic_write_requires_explicit_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "authorization.json"
+            PREPARE_MODULE.write_json_atomic(
+                path,
+                {"status": "pending"},
+                force=False,
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "already exists",
+            ):
+                PREPARE_MODULE.write_json_atomic(
+                    path,
+                    {"status": "pending"},
+                    force=False,
+                )
+            PREPARE_MODULE.write_json_atomic(
+                path,
+                {"status": "replaced"},
+                force=True,
+            )
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8")),
+                {"status": "replaced"},
+            )
+
+    def test_preparer_cli_writes_pending_draft_without_approval(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            base_commit = initialize_git(root)
+            commit_release_candidate(root)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(PREPARER),
+                    "--repo-root",
+                    str(root),
+                    "--base",
+                    base_commit,
+                    "--release-id",
+                    "demo-skill-1.0.2",
+                    "--mode",
+                    "dry-run",
+                    "--change-class",
+                    "correctness-fix",
+                    "--reason",
+                    "Fix a verified defect.",
+                    "--evidence",
+                    "review.md",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            result = json.loads(completed.stdout)
+            draft = json.loads(
+                (
+                    root / CHECK_MODULE.DEFAULT_AUTHORIZATION_PATH
+                ).read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertTrue(result["prepared"])
+        self.assertFalse(result["approved"])
+        self.assertEqual(result["status"], "pending")
+        self.assertEqual(draft["status"], "pending")
+        self.assertFalse(draft["review"]["completed"])
+        self.assertIsNone(draft["issuedAt"])
+        self.assertIsNone(draft["expiresAt"])
+        self.assertIsNone(draft["review"]["reviewedAt"])
+
+    def test_preparer_cli_requires_explicit_mode(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(PREPARER),
+                "--base",
+                BASE_COMMIT,
+                "--release-id",
+                "demo-skill-1.0.1",
+                "--change-class",
+                "correctness-fix",
+                "--reason",
+                "Fix a verified defect.",
+                "--evidence",
+                "review.md",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("--mode", completed.stderr)
+        self.assertNotIn("Traceback", completed.stderr)
+
     def test_malformed_nested_values_return_structured_errors(self):
         mutations = (
             ("targets", {"slug": "demo-skill"}),
@@ -848,16 +1353,42 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
 
             skill_path = root / "skills" / "demo-skill" / "SKILL.md"
             skill_path.write_text(
-                skill_path.read_text(encoding="utf-8") + "\nAuthorized.\n",
+                skill_path.read_text(encoding="utf-8").replace(
+                    "version: 1.0.1",
+                    "version: 1.0.2",
+                    1,
+                )
+                + "\nAuthorized.\n",
+                encoding="utf-8",
+            )
+            changelog_path = root / "skills" / "demo-skill" / "CHANGELOG.md"
+            changelog_path.write_text(
+                changelog_path.read_text(encoding="utf-8").replace(
+                    "# Changelog\n",
+                    "# Changelog\n\n## 1.0.2\n\n- Authorized release.\n",
+                    1,
+                ),
                 encoding="utf-8",
             )
             (root / "review.md").write_text(
                 "# Review\n\nApproved for this release.\n",
                 encoding="utf-8",
             )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "release candidate"],
+                cwd=root,
+                check=True,
+            )
+            candidate_commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                text=True,
+            ).strip()
             changed_paths = [
                 CHECK_MODULE.DEFAULT_AUTHORIZATION_PATH,
                 "skills/demo-skill/SKILL.md",
+                "skills/demo-skill/CHANGELOG.md",
                 "review.md",
             ]
             authorization_path, authorization = make_authorization(
@@ -865,6 +1396,7 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 base_catalog,
                 changed_paths=changed_paths,
                 baseCommit=base_commit,
+                candidateCommit=candidate_commit,
                 observationNotBefore=policy["notBefore"],
             )
             now = datetime.now(timezone.utc)
@@ -873,6 +1405,8 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
             authorization["review"]["reviewedAt"] = (
                 now - timedelta(hours=2)
             ).isoformat()
+            authorization["releaseId"] = "demo-skill-1.0.2"
+            authorization["targets"][0]["version"] = "1.0.2"
             authorization["contentDigest"] = CHECK_MODULE.compute_content_digest(
                 root,
                 base_catalog,
@@ -905,18 +1439,8 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertTrue(result["authorized"], result)
 
-            released_commit = subprocess.check_output(
-                ["git", "rev-parse", "HEAD"],
-                cwd=root,
-                text=True,
-            ).strip()
-            skill_path.write_text(
-                skill_path.read_text(encoding="utf-8") + "\nReplay.\n",
-                encoding="utf-8",
-            )
-            subprocess.run(["git", "add", "."], cwd=root, check=True)
             subprocess.run(
-                ["git", "commit", "-qm", "later unapproved change"],
+                ["git", "commit", "--allow-empty", "-qm", "later empty commit"],
                 cwd=root,
                 check=True,
             )
@@ -927,7 +1451,7 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                     "--repo-root",
                     str(root),
                     "--base",
-                    released_commit,
+                    base_commit,
                     "--mode",
                     "publish",
                 ],
@@ -940,16 +1464,8 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
         self.assertEqual(replay.returncode, 2)
         self.assertFalse(replay_result["authorized"])
         self.assertIn(
-            "authorization file must change in the evaluated commit range",
-            replay_result["errors"],
-        )
-        self.assertIn(
-            "authorization baseCommit does not match evaluated base",
-            replay_result["errors"],
-        )
-        self.assertIn(
-            "contentDigest does not match authorized Skill content",
-            replay_result["errors"],
+            "head must contain exactly one authorization commit after candidate",
+            replay_result["errors"][0],
         )
         self.assertNotIn("Traceback", replay.stderr)
 

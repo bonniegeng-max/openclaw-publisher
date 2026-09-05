@@ -25,8 +25,9 @@ dry-run 之前完成一次发布内联授权检查。
 一次变更授权必须绑定：
 
 - 本次 diff 的完整 base commit。
-- 本次实际变化的正式 Skill 集合。
-- 每个目标的正式三段式版本。
+- 授权前的唯一 candidate commit。
+- 恰好一个实际变化的正式 Skill。
+- 高于 base 版本的正式三段式版本。
 - catalog 是否发生有效条目变化。
 - 目标 Skill 全部文件及对应 catalog 条目的 SHA-256 摘要。
 - 除授权文件外完整 changed-path 集合及每个文件内容的 SHA-256 摘要。
@@ -43,16 +44,36 @@ dry-run 之前完成一次发布内联授权检查。
 - base commit 不匹配。
 - Skill 内容摘要或完整变更集摘要不匹配。
 
+`releaseId` 必须精确等于 `<slug>-<version>`。最终 HEAD 必须只比 candidate
+多一个提交，且该提交只能修改授权 JSON；额外提交即使不改变文件树也会失败。
+
 观察策略、授权检查器、catalog 预检器及任意发布 workflow 不允许与 Skill
 发布处于同一个 diff；这些控制面必须先独立合并并验证。生产 CLI 不提供
 `--now` 或自定义 policy 路径，避免调用方伪造时钟或替换观察策略。
 
-模板见 `authorization-template.json`。模板保持 `status: pending`，不能直接用于
-发布。
+模板见 `authorization-template.json`。模板保持 `status: pending`，并把
+`issuedAt`、`expiresAt`、`reviewedAt` 留为 `null`，不能直接用于发布。
 
 ## 本地调用
 
-准备好一次真实变更及其授权文件后：
+先把 Skill 变更和 review 证据提交到本地候选 commit，再自动生成 pending 草稿：
+
+```bash
+python3 scripts/prepare_skill_release_authorization.py \
+  --base <变更前完整提交> \
+  --release-id <本次发布标识> \
+  --mode dry-run \
+  --change-class correctness-fix \
+  --reason "<已验证的变更原因>" \
+  --evidence <本次 diff 中的 review 证据>
+```
+
+准备器要求显式选择模式，不会默认附带 `publish` 权限。它自动计算目标、版本、
+catalog 状态、候选提交、Skill 内容摘要、完整变更集摘要和证据摘要，但不会填写
+审批时间或把状态改为 approved。若仓库已经保留上一轮授权文件，必须显式传入
+`--force` 才会原子替换，避免静默覆盖。
+
+完成仓外 fresh review 后，填写审批字段并提交授权文件，再执行：
 
 ```bash
 python3 scripts/check_skill_release_authorization.py \
@@ -63,19 +84,24 @@ python3 scripts/check_skill_release_authorization.py \
 
 退出码：
 
-- `0`：合同有效，且当前模式已获一次性授权。
+- `0`：合同有效，且当前模式已获本次变更授权。
 - `1`：合同结构有效，但被观察期、fresh review、模式或时效阻断。
 - `2`：合同、diff、版本、catalog、证据或内容摘要不一致。
 
 输出字段 `authorized: true` 是未来 workflow 可以消费的仓内完整性条件，但
 不是批准者身份凭据。
 
+review evidence 只提供与候选提交绑定的支持材料，不能证明 reviewer 身份。
+`status`、`modes` 和时间字段最终必须由受保护环境绑定的审批步骤确认；提交者
+自行把 pending 改成 approved 不构成可信批准。
+
 ## 计划接入顺序
 
 观察窗口结束并完成统一增长监控后：
 
 1. fresh review 只选择一个最高优先级正式变更。
-2. 生成与该 diff 绑定的 `.clawhub/skill-release-authorization.json`。
+2. 生成与该候选 commit 绑定的 `.clawhub/skill-release-authorization.json`。
+   最终 HEAD 只能在候选 commit 后增加一个仅修改授权 JSON 的提交。
 3. 在可复用发布 workflow 的首次 checkout 后执行 catalog 预检和本门禁。
 4. 使用 GitHub protected environment 或等价的仓外审批绑定最终 head SHA；
    仓内 JSON 只证明变更完整性，不能单独证明批准者身份。

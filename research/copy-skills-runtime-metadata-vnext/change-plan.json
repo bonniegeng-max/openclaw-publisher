@@ -1,0 +1,55 @@
+{
+  "status": "observation-window-hold",
+  "observationNotBefore": "2026-09-12T02:26:39+00:00",
+  "targets": [
+    {
+      "slug": "skill-summary-rewriter",
+      "currentVersion": "1.0.2",
+      "remove": [
+        "metadata.openclaw.os",
+        "metadata.openclaw.requires",
+        "metadata.openclaw.install"
+      ],
+      "retain": [
+        "metadata.openclaw.emoji",
+        "metadata.openclaw.homepage"
+      ]
+    },
+    {
+      "slug": "skill-positioning-audit",
+      "currentVersion": "1.0.4",
+      "remove": [
+        "metadata.openclaw.os",
+        "metadata.openclaw.requires",
+        "metadata.openclaw.install"
+      ],
+      "retain": [
+        "metadata.openclaw.emoji",
+        "metadata.openclaw.homepage"
+      ]
+    }
+  ],
+  "evidence": {
+    "officialSkillFormat": "https://docs.openclaw.ai/clawhub/skill-format",
+    "officialSkillLoading": "https://docs.openclaw.ai/tools/skills",
+    "minimumFrontmatter": [
+      "name",
+      "description"
+    ],
+    "runtimeMetadataPurpose": "Declare actual runtime requirements used for eligibility filtering.",
+    "localArtifactType": "markdown-only"
+  },
+  "claims": {
+    "compatibilityRestrictionConfirmed": true,
+    "downloadImpactConfirmed": false,
+    "searchImpactConfirmed": false
+  },
+  "promotionRequirements": [
+    "观察窗口结束",
+    "统一增长监控完成且证据质量可判定",
+    "确认两个 Skill 不调用 git 或 clawhub",
+    "更新版本与 changelog",
+    "本地测试与 dry-run 通过",
+    "发布后完成一次限定 E4 验收"
+  ]
+}

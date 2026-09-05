@@ -64,10 +64,20 @@
 `macos`、`git`、`clawhub` 和 ClawHub CLI 安装步骤。正文没有说明这些
 依赖参与哪一步。
 
-这是“能力叙述与依赖声明不一致”的静态事实。平台是否据此过滤兼容性或
-增加安装摩擦尚未验证，因此观察窗内不直接修改。后续应先确认当前
-ClawHub schema 是否允许省略这些字段；若允许，在一次实质版本中删除
-无用硬依赖，若不允许，则在首屏解释真实用途。
+官方 Skill format 确认基础 frontmatter 不要求这些运行字段，并要求
+`requires.bins`、`os` 和 `install` 只描述真实运行条件；官方 Skills 文档
+同时确认加载阶段会按 OS 与二进制是否存在过滤 Skill：
+
+- https://docs.openclaw.ai/clawhub/skill-format
+- https://docs.openclaw.ai/tools/skills
+
+本地文件审计确认两个目录只有 Markdown 与 `.clawhubignore`，没有需要
+Git 或 ClawHub CLI 的可执行资源。因此“当前依赖声明会造成不真实的
+兼容性限制”已得到高置信证据；它是否已经影响下载或搜索仍未验证。
+
+候选修改和机器可验计划位于
+`research/copy-skills-runtime-metadata-vnext/`。观察窗结束后，可在一次
+实质版本中删除无用硬依赖，再按 E0–E4 进行一次限定验收。
 
 ### 相邻产品首屏边界重叠
 

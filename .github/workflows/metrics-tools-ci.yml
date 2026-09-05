@@ -9,6 +9,7 @@ on:
       - "skills/**"
       - ".clawhub/skill-catalog.json"
       - "research/package-publish-doctor/**"
+      - "research/published-skills-runtime-metadata-vnext/**"
       - "AGENTS.md"
       - "README.md"
       - ".github/workflows/metrics-tools-ci.yml"
@@ -22,6 +23,7 @@ on:
       - "skills/**"
       - ".clawhub/skill-catalog.json"
       - "research/package-publish-doctor/**"
+      - "research/published-skills-runtime-metadata-vnext/**"
       - "AGENTS.md"
       - "README.md"
       - ".github/workflows/metrics-tools-ci.yml"
@@ -47,7 +49,7 @@ jobs:
         run: python scripts/validate_skill_catalog.py
 
       - name: Compile Python sources
-        run: python -m py_compile scripts/*.py tests/*.py research/package-publish-doctor/*.py research/package-publish-doctor/draft/scripts/*.py
+        run: python -m py_compile scripts/*.py tests/*.py research/package-publish-doctor/*.py research/package-publish-doctor/draft/scripts/*.py research/published-skills-runtime-metadata-vnext/*.py
 
       - name: Run offline tests
         run: python -m unittest discover -s tests

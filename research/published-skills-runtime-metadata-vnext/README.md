@@ -73,6 +73,31 @@ Linux 有本仓库 workflow 证据；Windows 尚未验证，本草案不放开 W
 
 机器可验计划见 `change-plan.json`。
 
+## 离线审计
+
+只读审计器会核对计划、观察策略、正式 catalog、7 个当前
+`SKILL.md` 基线、Linux workflow 证据、声明边界和发布策略：
+
+```bash
+python3 research/published-skills-runtime-metadata-vnext/check_runtime_plan.py
+```
+
+默认模式只在计划或仓库事实失效时返回非零：
+
+- `0`：计划有效；输出中的 `readyForFreshReview` 表示时间闸门状态。
+- `2`：计划、证据或当前正式 metadata 已漂移，不能据此继续。
+
+需要把“观察窗口已经到期”作为调用方前置条件时使用：
+
+```bash
+python3 research/published-skills-runtime-metadata-vnext/check_runtime_plan.py \
+  --require-review-window
+```
+
+此模式在计划有效但尚未到期时返回 `1`，到期后返回 `0`。无论日期是否到达，
+`readyToApply` 都固定为 `false`，且 `fresh-need-review` 始终保留；审计器不会
+修改正式 Skill、catalog、版本或发布状态，也不会调用网络、ClawHub 或安装命令。
+
 ## 声明边界
 
 已确认：

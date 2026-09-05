@@ -66,6 +66,19 @@ python3 research/package-publish-doctor/diagnose.py \
 
 输出只包含诊断层、证据、建议和来源，不执行网络请求或修复动作。无法满足完整判定条件时必须返回 `UNKNOWN`，不能根据单个错误关键词猜测根因。
 
+## 草案包
+
+`draft/` 已按正式 Skill 的结构准备：
+
+- `SKILL.md`
+- `CHANGELOG.md`
+- `.clawhubignore`
+- `references/failure-map.md`
+- `templates/package_diagnosis_report.md`
+- `examples/three_layer_diagnosis.md`
+
+草案不在 `skills/` 目录，也没有 catalog 条目，因此不会被发布 workflow 发现。GitHub 侧同类产品预筛见 `competitor-screen.md`；该预筛不能替代正式发布前的 ClawHub 站内检索。
+
 ## 启动门槛
 
 只有同时满足以下条件，才把研究包升级为正式 Skill：

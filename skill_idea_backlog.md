@@ -82,18 +82,20 @@
 - `package-publish-doctor`：只负责 package/plugin artifact 的打包、上传、审核与验证链路。
 - `skill-catalog-governor`：只负责多个 Skill 的 catalog metadata 一致性。
 
-已完成的研究准备：
+已完成的研究与草案准备：
 
 1. 已建立版本化故障矩阵。
 2. 已为 3 个外部核心案例和 1 个本仓库权限案例建立离线 fixture。
 3. 已实现只读诊断原型，并用负例约束误判。
+4. GitHub 精确名称与 slug 预筛未发现同名产品，且已记录证据限制。
+5. 已建立包含 `SKILL.md`、changelog、ignore、reference、template 和 example 的完整草案包。
 
-进入正式 Skill 开发前仍需完成：
+进入正式发布候选前仍需完成：
 
 1. 等待当前 7 天自然增长观察窗口结束，避免连续发布污染采用判断。
 2. 只读确认届时 ClawHub 最新 release/workflow ref，刷新版本到已知故障的映射。
-3. 用一次同口径搜索确认没有直接同任务竞品。
-4. 把原型转换为完整 Skill 包并通过本地回归。
+3. 用一次同口径 ClawHub 搜索确认没有直接同任务竞品。
+4. 将草案提升到 `skills/`、同步 catalog，并完成本地回归。
 5. ClawHub dry-run 通过后，才决定是否作为第 8 个 Skill 发布。
 
 ## 已进入仓库

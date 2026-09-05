@@ -151,7 +151,15 @@ skills/<stable-slug>/
 └── templates/
 ```
 
-在 `.clawhub/skill-catalog.json` 中补充展示名、categories 和 topics，然后先执行：
+在 `.clawhub/skill-catalog.json` 中补充展示名、categories 和 topics，然后先执行离线 catalog 预检：
+
+```bash
+python3 scripts/validate_skill_catalog.py
+```
+
+预检会核对 metadata 类型、目录覆盖、必需文件、stable slug 规则以及
+`SKILL.md` 的 name/slug 身份；失败时输出结构化 JSON 并以退出码 `2` 结束，
+不访问 ClawHub。通过后再执行：
 
 ```bash
 clawhub skill publish ./skills/<stable-slug> \
@@ -181,7 +189,8 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 │   ├── collect_clawhub_metrics.py
 │   ├── collect_clawhub_search_visibility.py
 │   ├── compare_clawhub_metrics.py
-│   └── run_clawhub_growth_monitor.py
+│   ├── run_clawhub_growth_monitor.py
+│   └── validate_skill_catalog.py
 ├── metrics/
 │   └── README.md
 ├── skill_growth_monitor.md

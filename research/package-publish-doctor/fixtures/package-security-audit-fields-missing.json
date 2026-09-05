@@ -22,6 +22,7 @@
     "layer": "verification",
     "confidence": "high",
     "versionStatus": "fix-merged-deployment-unverified",
+    "conclusion": "published-unverified",
     "doNotRecommend": "fabricate audit text or bypass the fail-closed trust policy"
   }
 }

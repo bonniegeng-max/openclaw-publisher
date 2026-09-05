@@ -25,6 +25,7 @@
     "layer": "pack",
     "confidence": "high",
     "versionStatus": "unknown",
+    "conclusion": "blocked",
     "doNotClaim": "npm pack failed to create the tarball"
   }
 }

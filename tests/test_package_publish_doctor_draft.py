@@ -56,7 +56,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.6")
+        self.assertEqual(values["version"], "0.1.7")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))
@@ -134,6 +134,16 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
             result["diagnosis"],
             "REUSABLE_WORKFLOW_ACTIONS_PERMISSION",
         )
+        self.assertEqual(result["conclusion"], "blocked")
+        self.assertEqual(
+            result["observedContext"],
+            {
+                "workflowRef": "package-publish.yml@v0.23.3"
+            },
+        )
+        self.assertTrue(result["rejectedShortcuts"])
+        self.assertTrue(result["verificationSteps"])
+        self.assertTrue(result["doNotClaim"])
         self.assertEqual(result["caseId"], "anonymous-workflow-startup-failure")
 
     def test_wrapper_and_canonical_cli_outputs_are_identical(self):

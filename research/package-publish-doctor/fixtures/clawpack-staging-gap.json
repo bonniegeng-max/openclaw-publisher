@@ -21,6 +21,7 @@
     "layer": "upload",
     "confidence": "high",
     "versionStatus": "main-only-fix",
+    "conclusion": "blocked",
     "artifactExceedsPublicEdgeBudget": true,
     "artifactBelowLegacyStagingThreshold": true,
     "doNotRecommend": "depend on an unreleased main branch for production publishing"

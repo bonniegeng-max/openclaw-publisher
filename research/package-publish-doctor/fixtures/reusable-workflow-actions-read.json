@@ -17,6 +17,7 @@
     "layer": "workflow-permission",
     "confidence": "high",
     "versionStatus": "current-release",
+    "conclusion": "blocked",
     "requiredPermission": "actions: read",
     "doNotRecommend": "grant broad write permissions"
   }

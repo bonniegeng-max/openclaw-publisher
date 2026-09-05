@@ -1,6 +1,7 @@
 # Package release 扫描卡住
 
 这个例子用于区分旧版 package 扫描故障与普通 Skill 的 pending publication。
+以下结论块是完整 canonical CLI JSON 报告的可读摘录。
 
 ## 输入
 
@@ -19,9 +20,11 @@ republish same version: already exists
 
 ```text
 diagnosis: PACKAGE_RELEASE_SCAN_STALLED
+conclusion: partial
 layer: moderation
 confidence: high
 versionStatus: fixed-in-release
+observedContext: {clawhubVersion: 0.23.1, family: bundle-plugin}
 ```
 
 旧版 package 发布已经保留 release，但扫描和公开投影没有完成；`v0.23.2` 已包含对应修复。该规则只适用于明确的 package surface、`bundle-plugin`、受影响版本和完整状态组合。

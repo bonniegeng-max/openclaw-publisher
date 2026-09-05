@@ -8,6 +8,40 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 RESEARCH = ROOT / "research" / "package-publish-doctor"
 FIXTURES = RESEARCH / "fixtures"
+OUTPUT_FIELDS = {
+    "matched",
+    "caseId",
+    "diagnosis",
+    "conclusion",
+    "layer",
+    "confidence",
+    "versionStatus",
+    "observedContext",
+    "evidence",
+    "recommendation",
+    "rejectedShortcuts",
+    "verificationSteps",
+    "doNotClaim",
+    "missingEvidence",
+    "source",
+}
+EXPECTED_CONCLUSIONS = {
+    "TRUSTED_PUBLISH_TAG_REF_REGRESSION": "blocked",
+    "REUSABLE_WORKFLOW_ACTIONS_PERMISSION": "blocked",
+    "NPM_PACK_JSON_SHAPE": "blocked",
+    "BUNDLE_NATIVE_MANIFEST_CONTRACT": "blocked",
+    "CLAWPACK_STAGING_GAP": "blocked",
+    "PACKAGE_RELEASE_SCAN_STALLED": "partial",
+    "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING": "published-unverified",
+}
+OBSERVED_CONTEXT_FIELDS = {
+    "clawhubVersion",
+    "npmVersion",
+    "workflowRef",
+    "family",
+    "sourceValidatorCommit",
+    "sourceCommit",
+}
 
 SPEC = importlib.util.spec_from_file_location(
     "package_publish_doctor_diagnose",
@@ -23,6 +57,37 @@ def load_fixture(name):
 
 
 class PackagePublishDoctorResearchTests(unittest.TestCase):
+    def assert_output_schema(self, result):
+        self.assertEqual(set(result), OUTPUT_FIELDS)
+        self.assertIsInstance(result["matched"], bool)
+        self.assertTrue(
+            result["caseId"] is None or isinstance(result["caseId"], str)
+        )
+        self.assertTrue(
+            result["source"] is None or isinstance(result["source"], str)
+        )
+        for field in (
+            "diagnosis",
+            "conclusion",
+            "layer",
+            "confidence",
+            "versionStatus",
+            "recommendation",
+        ):
+            self.assertIsInstance(result[field], str)
+        self.assertIsInstance(result["observedContext"], dict)
+        for field in (
+            "evidence",
+            "rejectedShortcuts",
+            "verificationSteps",
+            "doNotClaim",
+            "missingEvidence",
+        ):
+            self.assertIsInstance(result[field], list)
+            self.assertTrue(
+                all(isinstance(item, str) for item in result[field])
+            )
+
     def test_research_pack_has_distinct_extensible_package_cases(self):
         paths = sorted(FIXTURES.glob("*.json"))
         fixtures = [
@@ -92,7 +157,101 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                     result["versionStatus"],
                     fixture["expected"]["versionStatus"],
                 )
+                self.assert_output_schema(result)
+                self.assertEqual(
+                    result["conclusion"],
+                    fixture["expected"]["conclusion"],
+                )
+                self.assertEqual(
+                    result["conclusion"],
+                    EXPECTED_CONCLUSIONS[result["diagnosis"]],
+                )
+                self.assertTrue(result["rejectedShortcuts"])
+                self.assertTrue(result["verificationSteps"])
+                self.assertTrue(result["doNotClaim"])
+                guidance = DIAGNOSE_MODULE.DIAGNOSIS_GUIDANCE[
+                    result["diagnosis"]
+                ]
+                self.assertEqual(
+                    result["rejectedShortcuts"],
+                    guidance["rejectedShortcuts"],
+                )
+                self.assertEqual(
+                    result["verificationSteps"],
+                    guidance["verificationSteps"],
+                )
+                self.assertEqual(result["doNotClaim"], guidance["doNotClaim"])
+                self.assertIsInstance(result["observedContext"], dict)
+                self.assertTrue(
+                    set(result["observedContext"]).issubset(
+                        OBSERVED_CONTEXT_FIELDS
+                    )
+                )
                 self.assertEqual(result["missingEvidence"], [])
+
+    def test_observed_context_is_a_strict_non_sensitive_allowlist(self):
+        fixture = load_fixture("trusted-publish-tag-ref-regression.json")
+        fixture["input"].update(
+            {
+                "accessToken": "secret",
+                "authorization": "Bearer secret",
+                "repository": "private/repository",
+                "privateUrl": "https://private.example.invalid/evidence",
+            }
+        )
+
+        context = diagnose(fixture)["observedContext"]
+
+        self.assertEqual(
+            set(context),
+            {"sourceValidatorCommit", "sourceCommit"},
+        )
+        self.assertNotIn("secret", json.dumps(context))
+
+    def test_observed_context_rejects_sensitive_values_in_allowlisted_fields(self):
+        result = diagnose(
+            {
+                "id": {"not": "a string"},
+                "source": ["not", "a string"],
+                "input": {
+                    "surface": "package",
+                    "clawhubVersion": "secret-token",
+                    "npmVersion": "Bearer secret",
+                    "workflowRef": "private/repository/.github/workflows/x.yml@main",
+                    "family": "private-account",
+                    "sourceValidatorCommit": "not-a-commit",
+                    "sourceCommit": "authorization-secret",
+                },
+            }
+        )
+
+        self.assert_output_schema(result)
+        self.assertEqual(result["observedContext"], {})
+        self.assertIsNone(result["caseId"])
+        self.assertIsNone(result["source"])
+
+    def test_workflow_context_omits_owner_and_repository(self):
+        fixture = load_fixture("reusable-workflow-actions-read.json")
+
+        context = diagnose(fixture)["observedContext"]
+
+        self.assertEqual(
+            context,
+            {"workflowRef": "package-publish.yml@v0.23.3"},
+        )
+
+    def test_version_context_is_normalized_instead_of_copied(self):
+        fixture = load_fixture("npm-pack-json-shape.json")
+        fixture["input"]["npmVersion"] = "12.0.0+owner-private-repository"
+
+        result = diagnose(fixture)
+
+        self.assertTrue(result["matched"])
+        self.assertEqual(
+            result["observedContext"],
+            {"clawhubVersion": "0.23.1", "npmVersion": "12.x"},
+        )
+        self.assertNotIn("private", json.dumps(result["observedContext"]))
 
     def test_npm_pack_fixture_preserves_both_output_shapes(self):
         fixture = load_fixture("npm-pack-json-shape.json")
@@ -442,7 +601,16 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertEqual(result["diagnosis"], "UNKNOWN")
         self.assertEqual(result["confidence"], "low")
         self.assertEqual(result["versionStatus"], "unknown")
-        self.assertTrue(result["missingEvidence"])
+        self.assert_output_schema(result)
+        self.assertEqual(result["conclusion"], "partial")
+        self.assertEqual(len(result["missingEvidence"]), 1)
+        self.assertEqual(
+            result["missingEvidence"][0],
+            result["verificationSteps"][0],
+        )
+        self.assertTrue(result["rejectedShortcuts"])
+        self.assertTrue(result["doNotClaim"])
+        self.assertEqual(result["observedContext"], {})
 
 
 if __name__ == "__main__":

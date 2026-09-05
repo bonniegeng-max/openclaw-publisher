@@ -22,6 +22,7 @@
     "layer": "source-resolution",
     "confidence": "high",
     "versionStatus": "source-reproduced-at-commit",
+    "conclusion": "blocked",
     "doNotRecommend": "weaken split-candidate provenance or replace a verified tag ref with unrelated metadata"
   }
 }

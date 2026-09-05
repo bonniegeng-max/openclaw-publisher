@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.6
+version: 0.1.7
 metadata:
   openclaw:
     os: [macos]
@@ -73,7 +73,9 @@ Input is one UTF-8 JSON object with an `input` object and
 `input.surface: "package"`. Output is one JSON object containing the diagnosis,
 failed layer, confidence, version status, evidence, recommendation, and missing
 evidence. A successful process exit means evaluation completed; check
-`matched`, because `UNKNOWN` also exits successfully.
+`matched`, because `UNKNOWN` also exits successfully. Every result also carries
+a deterministic `conclusion`, `rejectedShortcuts`, `verificationSteps`,
+`doNotClaim`, and a strict non-sensitive `observedContext`.
 
 This executable is offline and read-only. It does not access GitHub, ClawHub,
 the registry, environment credentials, or the network; it does not publish,
@@ -166,17 +168,26 @@ A green workflow alone is not proof that the package is public or authentic. A s
 
 Return one report using `templates/package_diagnosis_report.md`:
 
-1. Conclusion: blocked / partial / published-unverified / verified.
+1. Deterministic conclusion: prerequisite failures are `blocked`,
+   `PACKAGE_RELEASE_SCAN_STALLED` is `partial`, and
+   `PACKAGE_SECURITY_AUDIT_FIELDS_MISSING` is `published-unverified`.
 2. Failed layer.
 3. Diagnosis code and confidence.
-4. Direct evidence.
-5. Version applicability.
-6. Safest minimal repair.
-7. Explicitly rejected shortcuts.
-8. Verification steps.
-9. Missing evidence.
+4. Non-sensitive observed context containing only values used by the winning
+   rule and accepted by the version, normalized workflow ref, family, or
+   commit format allowlist. Omit owner/repository and keep it empty for
+   `UNKNOWN`.
+5. Direct evidence.
+6. Version applicability.
+7. Safest minimal repair.
+8. Deterministic rejected shortcuts.
+9. Deterministic verification steps.
+10. Explicit claims the evidence does not support.
+11. Missing evidence.
 
-If no rule has enough evidence, return `UNKNOWN` and specify the smallest missing fact. Do not guess.
+If no rule has enough evidence, return `UNKNOWN` with the same structure,
+`conclusion: partial`, and exactly one smallest missing fact repeated as the
+first verification step. Do not guess.
 
 ## Safety rules
 

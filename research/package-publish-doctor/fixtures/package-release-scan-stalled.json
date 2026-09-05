@@ -18,6 +18,7 @@
     "layer": "moderation",
     "confidence": "high",
     "versionStatus": "fixed-in-release",
+    "conclusion": "partial",
     "doNotRecommend": "bump versions repeatedly to bypass a stalled release"
   }
 }

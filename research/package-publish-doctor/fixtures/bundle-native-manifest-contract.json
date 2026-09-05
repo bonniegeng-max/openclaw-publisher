@@ -19,6 +19,7 @@
     "layer": "family-detection",
     "confidence": "high",
     "versionStatus": "product-decision",
+    "conclusion": "blocked",
     "requiresMaintainerDecision": true,
     "doNotRecommend": "create a fake native manifest"
   }

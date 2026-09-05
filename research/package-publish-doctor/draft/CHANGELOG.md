@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.7 - 2026-09-05
+
+- 为每个诊断代码增加确定性的 `conclusion`、`rejectedShortcuts`、`verificationSteps` 和 `doNotClaim`。
+- 固定结论映射：前置失败为 `blocked`，scan stalled 为 `partial`，security audit 字段缺失为 `published-unverified`。
+- 让 `UNKNOWN` 返回同一完整结构，并只指出一个与首个验证步骤完全一致的最小补证项。
+- 增加按诊断收窄且规范化值的 `observedContext`；workflow ref 会移除 owner/repository，npm 版本只保留 major，`UNKNOWN` 恒为空。
+- 非字符串 `id` 与 `source` 统一输出为 `null`，固定完整 schema 的字段类型。
+- 更新输入契约、报告模板、Skill、研究 README、fixtures 和测试，覆盖完整输出 schema。
+
 ## 0.1.6 - 2026-09-05
 
 - 将唯一诊断实现迁入 `scripts/diagnose.py`，根研究脚本仅保留兼容转发。

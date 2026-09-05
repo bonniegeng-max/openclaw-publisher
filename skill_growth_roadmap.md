@@ -93,6 +93,21 @@
 
 当前不进入开发。`clawhub package explore` 暂未返回公开 package 样本，既缺市场参照，也缺稳定消费路径。只有 package 生态可验证且出现至少 3 个独立维护案例后才启动。
 
+## 下一 Skill 候选
+
+### `package-publish-doctor`
+
+GitHub issue 证据已经显示，ClawHub Package 发布不是 Skill 发布链路的简单变体：
+
+- npm 12 会让旧版 CLI 误判 `npm pack` 没有生成 tarball
+- `bundle-plugin` family 与 native manifest 要求可能出现合约冲突
+- 中等体积 ClawPack 可能因 CLI/workflow 版本差异走错上传路径并返回 413
+- reusable workflow 还需要 `actions: read`、`contents: read` 和 `id-token: write`
+
+它应独立诊断 `validate / pack / publish / wait / verify`，并输出失败层、版本适用性、最小修复和 artifact hash 验证路径。它不吸收 catalog metadata 治理，也不重复现有 Skill 发布 Doctor。
+
+当前状态：`research-ready`，暂不发布。先完成当前 7 天自然观察窗口，再复核最新 ClawHub release、直接竞品和离线 fixture；通过后可作为第 8 个 Skill 开发。
+
 ## 当前组合建议
 
 1. `skill-launch-checklist`
@@ -112,8 +127,9 @@
 1. 观察 `Skill Publish Readiness 1.0.7` 至少 7 天，不再用主动安装制造增长信号。
 2. 用验收前基线和新的自然观察起点判断主入口是否继续领先。
 3. topic fit 与单页 benchmark 作为现有 Positioning / Portfolio Skill 的能力，不创建新 slug。
-4. 继续收集 catalog 漂移案例，为 `skill-catalog-governor` 判断真实需求。
-5. package registry 出现可验证消费路径前，不发布第一个 Plugin。
+4. 为 `package-publish-doctor` 建立版本化失败映射和 3 个离线 fixture，但观察窗口结束前不发布。
+5. 继续收集 catalog 漂移案例，为 `skill-catalog-governor` 判断真实需求。
+6. package registry 出现可验证消费路径前，不发布第一个 Plugin。
 
 ## 当前增长判断
 

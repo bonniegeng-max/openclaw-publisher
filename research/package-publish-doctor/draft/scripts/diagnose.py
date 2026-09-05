@@ -168,6 +168,19 @@ RULE_REQUIRED_INPUT_PATHS = {
         ("reportedError",),
     ),
 }
+RULE_REQUIRED_INPUT_PATH_VARIANTS = {
+    diagnosis: (paths,)
+    for diagnosis, paths in RULE_REQUIRED_INPUT_PATHS.items()
+}
+RULE_REQUIRED_INPUT_PATH_VARIANTS["CLAWPACK_STAGING_GAP"] = (
+    RULE_REQUIRED_INPUT_PATHS["CLAWPACK_STAGING_GAP"],
+    tuple(
+        ("localValidation",) + path[1:]
+        if path[:1] == ("inspector",)
+        else path
+        for path in RULE_REQUIRED_INPUT_PATHS["CLAWPACK_STAGING_GAP"]
+    ),
+)
 DIAGNOSIS_GUIDANCE = {
     "TRUSTED_PUBLISH_TAG_REF_REGRESSION": {
         "conclusion": "blocked",
@@ -520,15 +533,17 @@ def _format_input_path(path):
 
 
 def _single_missing_required_evidence(inputs):
-    candidates = []
-    for paths in RULE_REQUIRED_INPUT_PATHS.values():
-        missing = [path for path in paths if not _path_exists(inputs, path)]
-        if len(missing) == 1:
-            candidates.append(missing[0])
+    candidates = set()
+    for diagnosis, variants in RULE_REQUIRED_INPUT_PATH_VARIANTS.items():
+        for paths in variants:
+            missing = [path for path in paths if not _path_exists(inputs, path)]
+            if len(missing) == 1:
+                candidates.add((diagnosis, missing[0]))
     if len(candidates) != 1:
         return None
+    _, missing_path = next(iter(candidates))
     return (
-        f"补充并核验 {_format_input_path(candidates[0])}；"
+        f"补充并核验 {_format_input_path(missing_path)}；"
         "当前证据仍不足以确定根因"
     )
 

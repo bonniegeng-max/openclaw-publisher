@@ -71,6 +71,13 @@ the rule predicate. If multiple rules are each one field short, or all fields
 are present but a value is invalid or contradictory, the command keeps the
 generic evidence request rather than guessing a candidate diagnosis.
 
+Rules may declare more than one valid field structure. In particular,
+`CLAWPACK_STAGING_GAP` accepts matching `status` and `artifactHash` fields
+under either `input.inspector` or `input.localValidation`. Missing-evidence
+selection evaluates these as separate complete variants; it never requires
+both validation sources and never reports the absent alternative when the
+other variant is complete.
+
 ### `observedContext` allowlist
 
 `observedContext` is empty for `UNKNOWN`. For a known diagnosis it may contain

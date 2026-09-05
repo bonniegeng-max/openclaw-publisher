@@ -254,6 +254,23 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                 set(DIAGNOSE_MODULE.RULE_REQUIRED_INPUT_PATHS[diagnosis]),
                 expected_paths,
             )
+            self.assertEqual(
+                DIAGNOSE_MODULE.RULE_REQUIRED_INPUT_PATH_VARIANTS[diagnosis][0],
+                DIAGNOSE_MODULE.RULE_REQUIRED_INPUT_PATHS[diagnosis],
+            )
+
+        staging_variants = (
+            DIAGNOSE_MODULE.RULE_REQUIRED_INPUT_PATH_VARIANTS[
+                "CLAWPACK_STAGING_GAP"
+            ]
+        )
+        self.assertEqual(len(staging_variants), 2)
+        self.assertIn(("inspector", "status"), staging_variants[0])
+        self.assertIn(("inspector", "artifactHash"), staging_variants[0])
+        self.assertNotIn(("localValidation", "status"), staging_variants[0])
+        self.assertIn(("localValidation", "status"), staging_variants[1])
+        self.assertIn(("localValidation", "artifactHash"), staging_variants[1])
+        self.assertNotIn(("inspector", "status"), staging_variants[1])
 
     def test_all_fixtures_match_their_expected_diagnosis(self):
         for path in sorted(FIXTURES.glob("*.json")):
@@ -507,6 +524,34 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertEqual(
             diagnose(local_success)["diagnosis"],
             "CLAWPACK_STAGING_GAP",
+        )
+
+    def test_local_validation_variant_returns_exact_missing_evidence(self):
+        candidate = load_fixture("clawpack-staging-gap.json")
+        del candidate["input"]["inspector"]
+        candidate["input"]["localValidation"] = {
+            "status": "passed",
+            "artifactHash": candidate["input"]["artifactHash"],
+        }
+
+        missing_error = copy.deepcopy(candidate)
+        del missing_error["input"]["reportedError"]
+        self.assertEqual(
+            diagnose(missing_error)["missingEvidence"],
+            [
+                "补充并核验 input.reportedError；"
+                "当前证据仍不足以确定根因"
+            ],
+        )
+
+        missing_hash = copy.deepcopy(candidate)
+        del missing_hash["input"]["localValidation"]["artifactHash"]
+        self.assertEqual(
+            diagnose(missing_hash)["missingEvidence"],
+            [
+                "补充并核验 input.localValidation.artifactHash；"
+                "当前证据仍不足以确定根因"
+            ],
         )
 
     def test_permission_fixture_requires_missing_actions_read(self):

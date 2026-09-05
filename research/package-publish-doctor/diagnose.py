@@ -13,23 +13,57 @@ BUNDLE_MARKERS = {
 }
 
 
-def _result(case, diagnosis, layer, evidence, recommendation):
+def _result(
+    case,
+    diagnosis,
+    layer,
+    evidence,
+    recommendation,
+    version_status,
+):
     return {
         "matched": True,
         "caseId": case.get("id"),
         "diagnosis": diagnosis,
         "layer": layer,
         "confidence": "high",
+        "versionStatus": version_status,
         "evidence": evidence,
         "recommendation": recommendation,
+        "missingEvidence": [],
         "source": case.get("source"),
     }
+
+
+def _unknown(case, missing_evidence):
+    return {
+        "matched": False,
+        "caseId": case.get("id"),
+        "diagnosis": "UNKNOWN",
+        "layer": "unknown",
+        "confidence": "low",
+        "versionStatus": "unknown",
+        "evidence": [],
+        "recommendation": "证据不足；保留原始日志并继续定位，不要套用已知 workaround。",
+        "missingEvidence": missing_evidence,
+        "source": case.get("source"),
+    }
+
+
+def _version_tuple(value):
+    parts = str(value or "").lstrip("v").split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
 
 
 def diagnose(case):
     """Return one conservative diagnosis for a normalized fixture."""
     inputs = case.get("input") or {}
     affected = case.get("affected") or {}
+    if inputs.get("surface") != "package":
+        return _unknown(case, ["input.surface=package"])
+
     error = str(inputs.get("reportedError") or "")
     error_lower = error.lower()
 
@@ -50,6 +84,7 @@ def diagnose(case):
                 "调用方未授予 actions 权限",
             ],
             "在调用方 workflow 顶层显式加入 actions: read；不要扩大为 write。",
+            "current-release",
         )
 
     npm12_output = inputs.get("npm12")
@@ -69,6 +104,7 @@ def diagnose(case):
                 "旧解析器仍按数组读取第一个 filename",
             ],
             "升级到包含兼容解析的正式 CLI；临时方案只在发布 job 内固定 npm 11。",
+            "unknown",
         )
 
     files = set(inputs.get("files") or [])
@@ -88,6 +124,7 @@ def diagnose(case):
                 "根目录不存在 openclaw.plugin.json",
             ],
             "标记为产品合约阻塞并等待维护者决策；不要伪造 native manifest。",
+            "product-decision",
         )
 
     artifact_bytes = inputs.get("artifactBytes")
@@ -114,18 +151,48 @@ def diagnose(case):
                 "修复仅存在于 main，当前 release 未包含",
             ],
             "等待并升级到包含 staging 修复的正式 release；不要把未发布 main 当生产依赖。",
+            "main-only-fix",
         )
 
-    return {
-        "matched": False,
-        "caseId": case.get("id"),
-        "diagnosis": "UNKNOWN",
-        "layer": "unknown",
-        "confidence": "low",
-        "evidence": [],
-        "recommendation": "证据不足；保留原始日志并继续定位，不要套用已知 workaround。",
-        "source": case.get("source"),
-    }
+    installed_version = _version_tuple(inputs.get("clawhubVersion"))
+    fixed_version = _version_tuple(affected.get("fixedIn"))
+    pending_hours = inputs.get("pendingHours")
+    if (
+        affected.get("family") == "bundle-plugin"
+        and inputs.get("publishAccepted") is True
+        and bool(inputs.get("releaseId"))
+        and inputs.get("scanStatus") == "pending"
+        and isinstance(pending_hours, (int, float))
+        and pending_hours >= 24
+        and inputs.get("latestRelease") is None
+        and inputs.get("inspectVisible") is False
+        and inputs.get("duplicateOnRepublish") is True
+        and installed_version is not None
+        and fixed_version is not None
+        and installed_version < fixed_version
+    ):
+        return _result(
+            case,
+            "PACKAGE_RELEASE_SCAN_STALLED",
+            "moderation",
+            [
+                "package publish 已返回 release ID",
+                f"安全扫描持续 pending 至少 {pending_hours:g} 小时",
+                "latestRelease 仍为空且指定版本不可 inspect",
+                "同版本重发被 duplicate guard 拒绝",
+                f"当前 CLI {inputs.get('clawhubVersion')} 早于修复版本 {affected.get('fixedIn')}",
+            ],
+            "升级到包含修复的正式 CLI 后核验原 release 的最终状态；不要通过连续 bump 版本制造更多孤立 release。",
+            "fixed-in-release",
+        )
+
+    return _unknown(
+        case,
+        [
+            "可证明首个失败层的完整状态组合",
+            "与已知规则对应的 CLI 或 workflow 版本",
+        ],
+    )
 
 
 def main():

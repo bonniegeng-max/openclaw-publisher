@@ -1,0 +1,27 @@
+{
+  "id": "package-release-scan-stalled",
+  "source": "https://github.com/openclaw/clawhub/issues/3288",
+  "affected": {
+    "clawhub": "0.23.1",
+    "fixedIn": "0.23.2",
+    "family": "bundle-plugin"
+  },
+  "input": {
+    "surface": "package",
+    "clawhubVersion": "0.23.1",
+    "publishAccepted": true,
+    "releaseId": "rd7abka2cmrgys87a85kz390498bchva",
+    "scanStatus": "pending",
+    "pendingHours": 24,
+    "latestRelease": null,
+    "inspectVisible": false,
+    "duplicateOnRepublish": true
+  },
+  "expected": {
+    "diagnosis": "PACKAGE_RELEASE_SCAN_STALLED",
+    "layer": "moderation",
+    "confidence": "high",
+    "versionStatus": "fixed-in-release",
+    "doNotRecommend": "bump versions repeatedly to bypass a stalled release"
+  }
+}

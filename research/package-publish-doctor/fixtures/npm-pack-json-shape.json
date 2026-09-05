@@ -6,6 +6,7 @@
     "npm": "12.x"
   },
   "input": {
+    "surface": "package",
     "npm11": [
       {
         "id": "my-plugin@0.4.0",
@@ -25,6 +26,7 @@
     "diagnosis": "NPM_PACK_JSON_SHAPE",
     "layer": "pack",
     "confidence": "high",
+    "versionStatus": "unknown",
     "doNotClaim": "npm pack failed to create the tarball"
   }
 }

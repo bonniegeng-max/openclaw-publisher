@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.0
+version: 0.1.1
 metadata:
   openclaw:
     os: [macos]
@@ -41,14 +41,14 @@ Do not invoke for ordinary Skill content review, generic plugin implementation, 
 
 Collect existing evidence before rerunning anything:
 
-1. Exact command or reusable workflow reference.
-2. ClawHub CLI version and workflow ref.
+1. Explicit surface confirmation: the failing command is `clawhub package ...`, not `clawhub skill ...`.
+2. Exact command, ClawHub CLI version, and reusable workflow ref.
 3. Node and npm versions when packing is involved.
 4. Package family and source type: folder, repository, npm artifact, or prebuilt ClawPack.
 5. `package.json`, `openclaw.plugin.json`, and compatible bundle marker presence.
 6. Artifact byte size and hash when an archive exists.
 7. Full error text, exit code, job creation state, and relevant permissions.
-8. Publish response, publication status, Inspector result, and `package verify` result when available.
+8. Publish response, release ID, publication status, scan age, Inspector result, and `package verify` result when available.
 
 Never request tokens, cookies, authorization headers, or raw secret values.
 
@@ -152,4 +152,5 @@ If no rule has enough evidence, return `UNKNOWN` and specify the smallest missin
 - `references/failure-map.md`: evidence signatures, version status, and safe responses.
 - `templates/package_diagnosis_report.md`: stable report structure.
 - `examples/three_layer_diagnosis.md`: examples that distinguish pack, contract, and upload failures.
+- `examples/package_release_scan_stalled.md`: version-bounded package scan stall with explicit Skill-surface counterexamples.
 - `CHANGELOG.md`: draft evolution history.

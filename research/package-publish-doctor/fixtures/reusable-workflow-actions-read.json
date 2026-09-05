@@ -5,6 +5,7 @@
     "workflow": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3"
   },
   "input": {
+    "surface": "package",
     "event": "push",
     "jobsCreated": 0,
     "callerPermissions": {
@@ -17,6 +18,7 @@
     "diagnosis": "REUSABLE_WORKFLOW_ACTIONS_PERMISSION",
     "layer": "workflow-permission",
     "confidence": "high",
+    "versionStatus": "current-release",
     "requiredPermission": "actions: read",
     "doNotRecommend": "grant broad write permissions"
   }

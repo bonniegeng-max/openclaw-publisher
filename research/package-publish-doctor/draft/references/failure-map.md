@@ -69,6 +69,21 @@ permissions:
 
 最小修复：等待并升级到包含 staging 修复的正式 release。不要把未发布 `main` 当作长期生产依赖。
 
+### `PACKAGE_RELEASE_SCAN_STALLED`
+
+必须同时满足：
+
+- 证据明确来自 `package` surface，而不是普通 Skill 发布
+- family 为 `bundle-plugin`
+- `clawhub@0.23.1` publish 已返回 release ID
+- package scan 持续 pending 至少 24 小时
+- `latestRelease` 为空，指定版本无法 inspect
+- 同版本重新发布被 duplicate guard 拒绝
+
+当前分类：`fixed-in-release`，修复随 `v0.23.2` 发布。
+
+最小修复：升级到包含修复的正式 CLI，再核验原 release 的 scan、latest 与 inspect 状态。不要连续 bump 版本；这只会保留更多不可见 release。
+
 ## 冲突状态
 
 ### Publish 成功但 index 缺失
@@ -101,6 +116,8 @@ permissions:
 - `code-plugin` 缺少 native manifest
 - tarball 实际不存在
 - 调用方已经授予 `actions: read`
+- package scan 卡住案例使用 `v0.23.2+`，或 pending 未满 24 小时
+- 输入未明确标记 `surface: package`
 - source、Inspector、moderation 和 upload 多层同时失败，无法确认首个失败点
 
 输出最小缺失证据，不要推荐多个互相冲突的修复。

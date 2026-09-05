@@ -31,6 +31,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
             "references/failure-map.md",
             "templates/package_diagnosis_report.md",
             "examples/three_layer_diagnosis.md",
+            "examples/package_release_scan_stalled.md",
         }
         present = {
             path.relative_to(DRAFT).as_posix()
@@ -44,7 +45,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.0")
+        self.assertEqual(values["version"], "0.1.1")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))

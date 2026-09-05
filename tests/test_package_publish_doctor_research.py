@@ -23,17 +23,26 @@ def load_fixture(name):
 
 
 class PackagePublishDoctorResearchTests(unittest.TestCase):
-    def test_research_pack_has_four_distinct_cases(self):
+    def test_research_pack_has_five_distinct_package_cases(self):
         fixtures = [
             json.loads(path.read_text(encoding="utf-8"))
             for path in sorted(FIXTURES.glob("*.json"))
         ]
 
-        self.assertEqual(len(fixtures), 4)
-        self.assertEqual(len({fixture["id"] for fixture in fixtures}), 4)
+        self.assertEqual(len(fixtures), 5)
+        self.assertEqual(len({fixture["id"] for fixture in fixtures}), 5)
+        self.assertTrue(
+            all(fixture["input"]["surface"] == "package" for fixture in fixtures)
+        )
         self.assertEqual(
             {fixture["expected"]["layer"] for fixture in fixtures},
-            {"pack", "family-detection", "upload", "workflow-permission"},
+            {
+                "pack",
+                "family-detection",
+                "upload",
+                "workflow-permission",
+                "moderation",
+            },
         )
 
     def test_all_fixtures_match_their_expected_diagnosis(self):
@@ -50,6 +59,11 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                     result["layer"],
                     fixture["expected"]["layer"],
                 )
+                self.assertEqual(
+                    result["versionStatus"],
+                    fixture["expected"]["versionStatus"],
+                )
+                self.assertEqual(result["missingEvidence"], [])
 
     def test_npm_pack_fixture_preserves_both_output_shapes(self):
         fixture = load_fixture("npm-pack-json-shape.json")
@@ -111,6 +125,30 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         already_fixed["input"]["callerPermissions"]["actions"] = "read"
         self.assertEqual(diagnose(already_fixed)["diagnosis"], "UNKNOWN")
 
+    def test_stalled_release_only_matches_affected_package_version(self):
+        fixture = load_fixture("package-release-scan-stalled.json")
+        self.assertEqual(
+            diagnose(fixture)["diagnosis"],
+            "PACKAGE_RELEASE_SCAN_STALLED",
+        )
+
+        fixed_release = copy.deepcopy(fixture)
+        fixed_release["input"]["clawhubVersion"] = "0.23.2"
+        self.assertEqual(diagnose(fixed_release)["diagnosis"], "UNKNOWN")
+
+        short_wait = copy.deepcopy(fixture)
+        short_wait["input"]["pendingHours"] = 2
+        self.assertEqual(diagnose(short_wait)["diagnosis"], "UNKNOWN")
+
+    def test_skill_surface_is_never_classified_as_package_failure(self):
+        fixture = load_fixture("package-release-scan-stalled.json")
+        fixture["input"]["surface"] = "skill"
+
+        result = diagnose(fixture)
+
+        self.assertEqual(result["diagnosis"], "UNKNOWN")
+        self.assertEqual(result["missingEvidence"], ["input.surface=package"])
+
     def test_generic_413_is_not_misclassified_as_staging_gap(self):
         fixture = load_fixture("clawpack-staging-gap.json")
         below_edge_limit = copy.deepcopy(fixture)
@@ -143,6 +181,8 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertFalse(result["matched"])
         self.assertEqual(result["diagnosis"], "UNKNOWN")
         self.assertEqual(result["confidence"], "low")
+        self.assertEqual(result["versionStatus"], "unknown")
+        self.assertTrue(result["missingEvidence"])
 
 
 if __name__ == "__main__":

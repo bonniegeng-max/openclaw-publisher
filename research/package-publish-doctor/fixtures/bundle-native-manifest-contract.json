@@ -6,6 +6,7 @@
     "family": "bundle-plugin"
   },
   "input": {
+    "surface": "package",
     "files": [
       ".codex-plugin/plugin.json",
       ".claude-plugin/plugin.json",
@@ -19,6 +20,7 @@
     "diagnosis": "BUNDLE_NATIVE_MANIFEST_CONTRACT",
     "layer": "family-detection",
     "confidence": "high",
+    "versionStatus": "product-decision",
     "requiresMaintainerDecision": true,
     "doNotRecommend": "create a fake native manifest"
   }

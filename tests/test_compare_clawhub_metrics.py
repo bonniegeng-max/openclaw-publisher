@@ -1,8 +1,10 @@
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "compare_clawhub_metrics.py"
@@ -248,6 +250,46 @@ class CompareClawHubMetricsTests(unittest.TestCase):
         self.assertIn("1.0.0 → 1.1.0", report)
         self.assertIn("证据质量：`eligible`", report)
         self.assertIn("## 需处理", report)
+
+    def test_cli_writes_markdown_and_json_sidecar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            previous = root / "previous.json"
+            current = root / "current.json"
+            report = root / "report.md"
+            sidecar = root / "comparison.json"
+            previous.write_text(
+                json.dumps(snapshot([skill("alpha")])),
+                encoding="utf-8",
+            )
+            current.write_text(
+                json.dumps(
+                    snapshot(
+                        [skill("alpha", downloads=1)],
+                        collected_at="2026-09-12T00:00:00+00:00",
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    str(SCRIPT),
+                    str(previous),
+                    str(current),
+                    "--output",
+                    str(report),
+                    "--json-output",
+                    str(sidecar),
+                ],
+            ):
+                self.assertEqual(MODULE.main(), 0)
+
+            self.assertIn("# ClawHub 指标变化", report.read_text())
+            comparison = json.loads(sidecar.read_text())
+            self.assertTrue(comparison["evidenceQuality"]["decisionReady"])
 
 
 class CompareClawHubSearchVisibilityTests(unittest.TestCase):

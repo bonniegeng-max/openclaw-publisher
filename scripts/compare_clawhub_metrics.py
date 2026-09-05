@@ -632,6 +632,11 @@ def parse_args() -> argparse.Namespace:
         help="输出格式。",
     )
     parser.add_argument("--output", type=Path, help="将结果写入指定文件。")
+    parser.add_argument(
+        "--json-output",
+        type=Path,
+        help="额外写入机器可读的完整对比 JSON。",
+    )
     return parser.parse_args()
 
 
@@ -655,12 +660,16 @@ def main() -> int:
                 previous_source=str(args.previous),
                 current_source=str(args.current),
             )
+        json_output = json.dumps(comparison, ensure_ascii=False, indent=2) + "\n"
         if args.format == "json":
-            output = json.dumps(comparison, ensure_ascii=False, indent=2) + "\n"
+            output = json_output
         elif kind == "search":
             output = render_search_markdown(comparison)
         else:
             output = render_markdown(comparison)
+        if args.json_output:
+            args.json_output.parent.mkdir(parents=True, exist_ok=True)
+            args.json_output.write_text(json_output, encoding="utf-8")
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(output, encoding="utf-8")

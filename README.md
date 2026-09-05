@@ -226,7 +226,9 @@ python3 scripts/collect_clawhub_search_visibility.py
 python3 scripts/run_clawhub_growth_monitor.py
 ```
 
-它会先在临时目录完成两类采集和可用的差异报告，全部成功后才轮换正式快照。任一采集或对比失败时，现有 latest、previous 和报告保持不变。
+它会先在临时目录完成两类采集、Markdown 差异报告和机器可读 JSON 对比结果，全部成功后才轮换正式快照。任一采集或对比失败时，现有 latest、previous 和报告保持不变。
+
+统一入口还会生成 `metrics/clawhub-growth-decision.json` 和 `metrics/clawhub-growth-decision.md`。只有指标与搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，组合闸门才会返回 `decisionReady: true`；单侧合格只能继续观察，污染、口径不一致或证据格式错误会优先要求修复数据质量。
 
 默认情况下，距离最近一次完整采集不足 144 小时会直接跳过，且不执行任何 ClawHub 请求，防止手动重跑覆盖有效基线。只有确有异常核验需求时才使用 `--force`；强制采集不会绕过对比器的 7 天决策门槛。
 

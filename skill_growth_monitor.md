@@ -113,7 +113,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 - 默认 144 小时防重复门槛不得在常规周检中绕过；`--force` 仅用于明确的版本或审核异常复核。
 - 常规采样优先运行 `python3 scripts/collect_clawhub_metrics.py`，生成只读 JSON 快照。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。
-- 只有对比结果的 `evidenceQuality.decisionReady` 为 `true` 时，才进入加码、合并或停更判断。
+- 统一入口生成 `clawhub-growth-decision.json` 与 Markdown 报告；只有指标和搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，组合结果才允许进入加码、合并或停更判断。
 - 搜索排名使用 `python3 scripts/collect_clawhub_search_visibility.py` 按 `metrics/search-queries.json` 每轮各查询一次。
 - 周检先读取 `inspect` 和搜索结果，不重复安装未变化的版本。
 - 只有 latest 变化、moderation 异常、公开文件缺失或用户明确要求时，才执行一次隔离安装。

@@ -144,6 +144,110 @@ def promote_snapshot(
     write_json_atomic(latest_path, staged_payload)
 
 
+def combine_decisions(
+    metrics_comparison: dict[str, Any] | None,
+    search_comparison: dict[str, Any] | None,
+) -> dict[str, Any]:
+    components: dict[str, dict[str, Any]] = {}
+    reasons: list[str] = []
+    for name, label, comparison in (
+        ("metrics", "指标", metrics_comparison),
+        ("search", "搜索", search_comparison),
+    ):
+        evidence = (
+            comparison.get("evidenceQuality")
+            if isinstance(comparison, dict)
+            else None
+        )
+        status = evidence.get("status") if isinstance(evidence, dict) else None
+        decision_ready = (
+            evidence.get("decisionReady")
+            if isinstance(evidence, dict)
+            else None
+        )
+        component_reasons = (
+            evidence.get("reasons")
+            if isinstance(evidence, dict)
+            else None
+        )
+        valid_reasons = (
+            isinstance(component_reasons, list)
+            and all(isinstance(reason, str) for reason in component_reasons)
+        )
+        if (
+            not isinstance(status, str)
+            or not isinstance(decision_ready, bool)
+            or not valid_reasons
+        ):
+            component = {
+                "available": False,
+                "status": "insufficient",
+                "decisionReady": False,
+                "reasons": ["缺少有效的可比较证据"],
+            }
+        else:
+            component = {
+                "available": True,
+                "status": status,
+                "decisionReady": decision_ready,
+                "reasons": component_reasons,
+            }
+        components[name] = component
+        reasons.extend(f"{label}：{reason}" for reason in component["reasons"])
+
+    decision_ready = all(
+        component["decisionReady"] for component in components.values()
+    )
+    statuses = {component["status"] for component in components.values()}
+    data_quality_statuses = {"contaminated", "incomparable", "insufficient"}
+    if decision_ready:
+        status = "eligible"
+        recommended_action = "review-growth-signals"
+    elif statuses.intersection(data_quality_statuses):
+        status = "data-quality-blocked"
+        recommended_action = "repair-data-quality"
+    else:
+        status = "observing"
+        recommended_action = "continue-observation"
+
+    return {
+        "schemaVersion": 1,
+        "status": status,
+        "decisionReady": decision_ready,
+        "recommendedAction": recommended_action,
+        "components": components,
+        "reasons": reasons,
+        "attribution": (
+            "只有指标与搜索两侧同时通过证据门槛，才允许进入增长或产品组合决策。"
+        ),
+    }
+
+
+def render_combined_decision(decision: dict[str, Any]) -> str:
+    metrics = decision["components"]["metrics"]
+    search = decision["components"]["search"]
+    lines = [
+        "# ClawHub 组合决策闸门",
+        "",
+        f"- 状态：`{decision['status']}`",
+        (
+            "- 是否可进入增长决策："
+            f"`{'true' if decision['decisionReady'] else 'false'}`"
+        ),
+        f"- 唯一下一步：`{decision['recommendedAction']}`",
+        f"- 指标证据：`{metrics['status']}`",
+        f"- 搜索证据：`{search['status']}`",
+        "",
+        "> downloads、installs、stars 与搜索排名必须分开解释；"
+        "单侧合格不能替代组合闸门。",
+        "",
+        "## 原因",
+        "",
+    ]
+    lines.extend(f"- {reason}" for reason in decision["reasons"])
+    return "\n".join(lines) + "\n"
+
+
 def run_monitor(
     root: Path,
     python_bin: str,
@@ -166,6 +270,8 @@ def run_monitor(
     search_latest = metrics_dir / "clawhub-search-latest.json"
     search_previous = metrics_dir / "clawhub-search-previous.json"
     search_report = metrics_dir / "clawhub-search-change-report.md"
+    decision_json = metrics_dir / "clawhub-growth-decision.json"
+    decision_report = metrics_dir / "clawhub-growth-decision.md"
 
     old_metrics = load_existing_snapshot(metrics_latest)
     old_search = load_existing_snapshot(search_latest)
@@ -183,6 +289,9 @@ def run_monitor(
             "ageHours": guard["ageHours"],
             "metricsCompared": False,
             "searchCompared": False,
+            "decisionReady": None,
+            "decisionStatus": "skipped",
+            "recommendedAction": "wait-for-next-window",
         }
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
@@ -195,6 +304,8 @@ def run_monitor(
         staged_search = staging / "search.json"
         staged_metrics_report = staging / "metrics-report.md"
         staged_search_report = staging / "search-report.md"
+        staged_metrics_comparison = staging / "metrics-comparison.json"
+        staged_search_comparison = staging / "search-comparison.json"
 
         run_child(
             [
@@ -247,6 +358,8 @@ def run_monitor(
                     str(staged_metrics),
                     "--output",
                     str(staged_metrics_report),
+                    "--json-output",
+                    str(staged_metrics_comparison),
                 ],
                 timeout,
                 runner,
@@ -260,6 +373,8 @@ def run_monitor(
                     str(staged_search),
                     "--output",
                     str(staged_search_report),
+                    "--json-output",
+                    str(staged_search_comparison),
                 ],
                 timeout,
                 runner,
@@ -275,6 +390,21 @@ def run_monitor(
             if staged_search_report.exists()
             else None
         )
+        metrics_comparison = (
+            read_json_object(staged_metrics_comparison)
+            if staged_metrics_comparison.exists()
+            else None
+        )
+        search_comparison = (
+            read_json_object(staged_search_comparison)
+            if staged_search_comparison.exists()
+            else None
+        )
+        combined_decision = combine_decisions(
+            metrics_comparison,
+            search_comparison,
+        )
+        combined_report_text = render_combined_decision(combined_decision)
 
         promote_snapshot(
             new_metrics,
@@ -292,6 +422,8 @@ def run_monitor(
             write_text_atomic(metrics_report, metrics_report_text)
         if search_report_text is not None:
             write_text_atomic(search_report, search_report_text)
+        write_json_atomic(decision_json, combined_decision)
+        write_text_atomic(decision_report, combined_report_text)
 
     return {
         "skipped": False,
@@ -301,6 +433,9 @@ def run_monitor(
         "searchCollectedAt": new_search.get("collectedAt"),
         "metricsCompared": old_metrics is not None,
         "searchCompared": old_search is not None,
+        "decisionReady": combined_decision["decisionReady"],
+        "decisionStatus": combined_decision["status"],
+        "recommendedAction": combined_decision["recommendedAction"],
     }
 
 
@@ -367,7 +502,9 @@ def main() -> int:
         print(
             "被动监控完成："
             f"指标对比={'是' if result['metricsCompared'] else '首次采集'}，"
-            f"搜索对比={'是' if result['searchCompared'] else '首次采集'}"
+            f"搜索对比={'是' if result['searchCompared'] else '首次采集'}，"
+            f"组合闸门={result['decisionStatus']}，"
+            f"下一步={result['recommendedAction']}"
         )
     return 0
 

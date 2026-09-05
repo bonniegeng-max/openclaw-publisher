@@ -45,7 +45,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 - 默认 144 小时防重复门槛不得绕过。
 - 不执行 install、download、publish、dry-run 或隔离安装。
 - 不修改 Skill 文件、版本号或 catalog。
-- 只读取生成的 latest、previous 和差异报告。
+- 只读取生成的 latest、previous、差异报告和 `clawhub-growth-decision` 组合闸门。
 - 任一子步骤失败时保留上一轮完整基线，不用部分结果做判断。
 
 只有版本变化、moderation 异常、公开文件缺失或用户明确要求时，才允许使用：
@@ -58,7 +58,7 @@ python3 scripts/run_clawhub_growth_monitor.py --force
 
 ## 增长判断
 
-采用指标和搜索可见性必须同时满足：
+采用指标和搜索可见性必须同时满足，且以 `clawhub-growth-decision.json` 的组合结果为唯一决策入口：
 
 - `evidenceQuality.decisionReady` 为 `true`
 - 采集方法一致

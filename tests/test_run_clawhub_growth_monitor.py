@@ -43,9 +43,24 @@ def write_json(path, payload):
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def comparison_snapshot(status="eligible", decision_ready=True):
+    return {
+        "schemaVersion": 1,
+        "evidenceQuality": {
+            "status": status,
+            "decisionReady": decision_ready,
+            "reasons": [f"fixture status: {status}"],
+        },
+    }
+
+
 class FakeRunner:
-    def __init__(self, fail_on=None):
+    def __init__(self, fail_on=None, comparison_statuses=None):
         self.fail_on = fail_on
+        self.comparison_statuses = comparison_statuses or {
+            "metrics": ("eligible", True),
+            "search": ("eligible", True),
+        }
         self.commands = []
 
     def __call__(self, command, **kwargs):
@@ -67,6 +82,13 @@ class FakeRunner:
         elif script == "compare_clawhub_metrics.py":
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(f"report for {output.name}\n", encoding="utf-8")
+            kind = "search" if "search" in Path(command[2]).name else "metrics"
+            status, decision_ready = self.comparison_statuses[kind]
+            json_output = Path(command[command.index("--json-output") + 1])
+            write_json(
+                json_output,
+                comparison_snapshot(status, decision_ready),
+            )
         else:
             raise AssertionError(f"unexpected child script: {script}")
         return subprocess.CompletedProcess(
@@ -107,8 +129,17 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             self.assertFalse(
                 (metrics / "clawhub-search-change-report.md").exists()
             )
+            decision = json.loads(
+                (metrics / "clawhub-growth-decision.json").read_text()
+            )
+            self.assertFalse(decision["decisionReady"])
+            self.assertEqual(decision["status"], "data-quality-blocked")
+            self.assertTrue(
+                (metrics / "clawhub-growth-decision.md").exists()
+            )
             self.assertFalse(result["metricsCompared"])
             self.assertFalse(result["searchCompared"])
+            self.assertFalse(result["decisionReady"])
             self.assertEqual(len(runner.commands), 2)
 
     def test_existing_snapshots_are_rotated_after_all_stages_succeed(self):
@@ -154,6 +185,12 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             )
             self.assertTrue(result["metricsCompared"])
             self.assertTrue(result["searchCompared"])
+            self.assertTrue(result["decisionReady"])
+            self.assertEqual(result["decisionStatus"], "eligible")
+            self.assertEqual(
+                result["recommendedAction"],
+                "review-growth-signals",
+            )
             self.assertEqual(len(runner.commands), 4)
 
     def test_collection_failure_preserves_all_existing_outputs(self):
@@ -166,8 +203,12 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             write_json(metrics / "clawhub-search-latest.json", old_search)
             metrics_report = metrics / "clawhub-change-report.md"
             search_report = metrics / "clawhub-search-change-report.md"
+            decision_json = metrics / "clawhub-growth-decision.json"
+            decision_report = metrics / "clawhub-growth-decision.md"
             metrics_report.write_text("old metrics report\n", encoding="utf-8")
             search_report.write_text("old search report\n", encoding="utf-8")
+            write_json(decision_json, {"decisionReady": False, "old": True})
+            decision_report.write_text("old decision report\n", encoding="utf-8")
             runner = FakeRunner(
                 fail_on="collect_clawhub_search_visibility.py"
             )
@@ -198,8 +239,49 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                 search_report.read_text(encoding="utf-8"),
                 "old search report\n",
             )
+            self.assertEqual(
+                json.loads(decision_json.read_text()),
+                {"decisionReady": False, "old": True},
+            )
+            self.assertEqual(
+                decision_report.read_text(encoding="utf-8"),
+                "old decision report\n",
+            )
             self.assertFalse((metrics / "clawhub-previous.json").exists())
             self.assertFalse((metrics / "clawhub-search-previous.json").exists())
+
+    def test_comparison_failure_preserves_existing_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            old_metrics = metrics_snapshot(OLD_TIME)
+            old_search = search_snapshot(OLD_TIME)
+            write_json(metrics / "clawhub-latest.json", old_metrics)
+            write_json(metrics / "clawhub-search-latest.json", old_search)
+
+            with self.assertRaisesRegex(RuntimeError, "simulated failure"):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=FakeRunner(fail_on="compare_clawhub_metrics.py"),
+                )
+
+            self.assertEqual(
+                json.loads((metrics / "clawhub-latest.json").read_text()),
+                old_metrics,
+            )
+            self.assertEqual(
+                json.loads((metrics / "clawhub-search-latest.json").read_text()),
+                old_search,
+            )
+            self.assertFalse((metrics / "clawhub-previous.json").exists())
+            self.assertFalse((metrics / "clawhub-search-previous.json").exists())
+            self.assertFalse(
+                (metrics / "clawhub-growth-decision.json").exists()
+            )
 
     def test_recent_complete_run_is_skipped_without_child_commands(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -223,6 +305,12 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
 
             self.assertTrue(result["skipped"])
             self.assertIn("小于默认门槛 144 小时", result["skipReason"])
+            self.assertIsNone(result["decisionReady"])
+            self.assertEqual(result["decisionStatus"], "skipped")
+            self.assertEqual(
+                result["recommendedAction"],
+                "wait-for-next-window",
+            )
             self.assertEqual(runner.commands, [])
 
     def test_force_bypasses_recent_run_guard(self):
@@ -269,6 +357,49 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                     now=NOW,
                     runner=FakeRunner(),
                 )
+
+    def test_combined_gate_rejects_one_ineligible_component(self):
+        decision = MODULE.combine_decisions(
+            comparison_snapshot("eligible", True),
+            comparison_snapshot("premature", False),
+        )
+
+        self.assertFalse(decision["decisionReady"])
+        self.assertEqual(decision["status"], "observing")
+        self.assertEqual(
+            decision["recommendedAction"],
+            "continue-observation",
+        )
+
+    def test_combined_gate_prioritizes_data_quality(self):
+        decision = MODULE.combine_decisions(
+            comparison_snapshot("eligible", True),
+            comparison_snapshot("incomparable", False),
+        )
+
+        self.assertFalse(decision["decisionReady"])
+        self.assertEqual(decision["status"], "data-quality-blocked")
+        self.assertEqual(
+            decision["recommendedAction"],
+            "repair-data-quality",
+        )
+
+    def test_combined_gate_rejects_malformed_component_evidence(self):
+        malformed = {
+            "evidenceQuality": {
+                "status": "eligible",
+                "decisionReady": "true",
+                "reasons": "not-a-list",
+            }
+        }
+        decision = MODULE.combine_decisions(
+            comparison_snapshot("eligible", True),
+            malformed,
+        )
+
+        self.assertFalse(decision["decisionReady"])
+        self.assertEqual(decision["status"], "data-quality-blocked")
+        self.assertFalse(decision["components"]["search"]["available"])
 
 
 if __name__ == "__main__":

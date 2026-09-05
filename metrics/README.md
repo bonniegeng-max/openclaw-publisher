@@ -48,7 +48,8 @@ metrics/clawhub-previous.json
 python3 scripts/compare_clawhub_metrics.py \
   metrics/clawhub-previous.json \
   metrics/clawhub-latest.json \
-  --output metrics/clawhub-change-report.md
+  --output metrics/clawhub-change-report.md \
+  --json-output metrics/clawhub-change-report.json
 ```
 
 也可以输出机器可读 JSON：
@@ -122,10 +123,20 @@ python3 scripts/run_clawhub_growth_monitor.py
 
 1. 在 `metrics` 下的临时目录采集采用指标。
 2. 在同一临时目录采集搜索可见性。
-3. 如果已有 latest，则先在临时目录生成两份差异报告。
-4. 全部步骤成功后，才轮换正式 latest、previous 和报告。
+3. 如果已有 latest，则先在临时目录生成两份 Markdown 报告和对应 JSON sidecar。
+4. 合并指标与搜索证据，生成唯一组合闸门。
+5. 全部步骤成功后，才轮换正式 latest、previous 和报告。
 
-任何子命令失败都会中止本轮，保留上一次完整输出。首次运行只生成 latest；第二次开始才会生成 previous 和差异报告。
+任何子命令失败都会中止本轮，保留上一次完整输出。首次运行生成 latest 和不可决策的组合闸门；第二次开始才会生成 previous 和差异报告。
+
+组合结果写入：
+
+```text
+metrics/clawhub-growth-decision.json
+metrics/clawhub-growth-decision.md
+```
+
+只有指标与搜索两侧都返回 `decisionReady: true`，组合闸门才会给出 `review-growth-signals`。任一侧观察窗口不足时返回 `continue-observation`；污染、口径不一致、配置变化或证据格式错误时返回 `repair-data-quality`。
 
 为防止同日重跑覆盖有效基线，统一入口默认要求距离两类 latest 中较新的采集时间至少 144 小时。不满足时会在发起任何 ClawHub 请求前退出：
 

@@ -119,6 +119,10 @@ macOS 专用可执行资源；两个纯文案 Skill 也没有需要 Git 或 Claw
 
 补充示例必须来自真实或明确匿名化的失败记录，不制造平台结果。
 
+`research/skill-summary-rewriter-example-vnext/` 已使用仓库历史中的真实
+`Skill Publish Readiness 1.0.0` description，准备包含 4 个候选、唯一推荐
+版本、使用位置和增长声明边界的完整替换示例。
+
 ### Positioning 示例标题自相矛盾
 
 `skills/skill-positioning-audit/examples/weak_vs_strong_positioning.md`

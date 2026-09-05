@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "status": "observation-window-hold",
+  "observationNotBefore": "2026-09-12T10:45:38+00:00",
+  "source": {
+    "type": "git-history",
+    "commit": "77a4b1864655693b860f731dd2fd51e4c182cbd9",
+    "path": "skills/skill-publish-readiness/SKILL.md",
+    "version": "1.0.0",
+    "field": "description",
+    "text": "在发布到 ClawHub 之前，帮你揪出那些“能过 dry-run，但其实还不该发”的问题，包括文件缺失、版本不一致、环境声明脱节、安全风险和同质化定位。"
+  },
+  "diagnosis": [
+    {
+      "id": "long-single-sentence",
+      "finding": "核心钩子与五类检查项挤在一个长句中，首次阅读成本偏高。"
+    },
+    {
+      "id": "feature-enumeration",
+      "finding": "句尾连续枚举能力，弱化了“能过 dry-run、却还不该发”的记忆点。"
+    },
+    {
+      "id": "placement-unspecified",
+      "finding": "原文没有区分商店 summary、标题下文案与 README 首段的长度需求。"
+    }
+  ],
+  "rewriteDirection": [
+    "保留真实的 dry-run 反差钩子。",
+    "把结果放在功能枚举之前。",
+    "为不同页面位置提供不同密度的版本。",
+    "不承诺下载或安装增长。"
+  ],
+  "candidates": [
+    {
+      "id": "A",
+      "text": "在发布到 ClawHub 前，找出那些能过 dry-run、却还不该上线的文件、版本、环境与安全问题。",
+      "placement": "ClawHub summary",
+      "tradeoff": "保留原始记忆点并显著缩短枚举；没有展开差异化检查。"
+    },
+    {
+      "id": "B",
+      "text": "发布 ClawHub Skill 或 Plugin 前，检查文件、版本、环境、安全风险与差异化缺口。",
+      "placement": "搜索导向的商店摘要",
+      "tradeoff": "任务词最完整，但品牌语气弱于版本 A。"
+    },
+    {
+      "id": "C",
+      "text": "Dry-run 通过不等于值得上线。发布前先找出文件、版本、环境和安全阻塞项。",
+      "placement": "README 首段或标题下文案",
+      "tradeoff": "开头最有节奏，但没有直接点名 ClawHub。"
+    },
+    {
+      "id": "D",
+      "text": "Publish-ready review for ClawHub skills and plugins. 在上线前找出版本、环境、安全与差异化缺口。",
+      "placement": "中英双语 storefront summary",
+      "tradeoff": "兼顾英文任务词与中文解释，但视觉长度最长。"
+    }
+  ],
+  "recommendation": {
+    "candidateId": "A",
+    "reason": "它最完整保留真实故障语境和原始反差钩子，同时比历史版本更短，最适合作为默认 ClawHub summary。"
+  },
+  "claims": {
+    "sourceTextVerifiedInGitHistory": true,
+    "candidateCountMeetsContract": true,
+    "uniqueRecommendationPresent": true,
+    "platformABTestCompleted": false,
+    "downloadImpactConfirmed": false,
+    "searchImpactConfirmed": false
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "status": "pending",
+  "releaseId": "replace-with-release-id",
+  "issuedAt": "2026-09-12T11:00:00+00:00",
+  "expiresAt": "2026-09-15T11:00:00+00:00",
+  "observationNotBefore": "2026-09-12T10:45:38+00:00",
+  "baseCommit": "0000000000000000000000000000000000000000",
+  "modes": [
+    "dry-run",
+    "publish"
+  ],
+  "targets": [
+    {
+      "slug": "replace-with-skill-slug",
+      "version": "1.0.0"
+    }
+  ],
+  "catalogChanged": false,
+  "contentDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "changeSetDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "review": {
+    "completed": false,
+    "reviewedAt": "2026-09-12T11:00:00+00:00",
+    "changeClass": "correctness-fix",
+    "reason": "Replace with the verified reason for this release.",
+    "evidence": [
+      {
+        "path": "replace-with-review-evidence.md",
+        "sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ]
+  }
+}

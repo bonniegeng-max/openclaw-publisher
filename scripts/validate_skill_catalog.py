@@ -60,6 +60,15 @@ def reject_nonstandard_number(value):
     raise ValueError(f"non-standard JSON number: {value}")
 
 
+def reject_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def issue(code, path, message):
     return {
         "code": code,
@@ -73,6 +82,7 @@ def load_catalog(path):
         value = json.loads(
             path.read_text(encoding="utf-8"),
             parse_constant=reject_nonstandard_number,
+            object_pairs_hook=reject_duplicate_keys,
         )
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
         raise ValueError(f"catalog cannot be read as strict JSON: {error}") from error
@@ -94,7 +104,12 @@ def parse_frontmatter(path):
         if ":" not in line or line.startswith(" "):
             continue
         key, value = line.split(":", 1)
-        values[key.strip()] = value.strip()
+        normalized_key = key.strip()
+        if normalized_key in values:
+            raise ValueError(
+                f"SKILL.md frontmatter has duplicate key: {normalized_key}"
+            )
+        values[normalized_key] = value.strip()
     return values
 
 
@@ -116,16 +131,28 @@ def resolve_skill_directory(repo_root, catalog_key):
     if not match:
         return None, None
     slug = match.group(1)
-    candidate = (repo_root / catalog_key).resolve()
+    candidate = repo_root / catalog_key
     try:
-        candidate.relative_to(repo_root.resolve())
+        candidate.resolve().relative_to(repo_root.resolve())
     except ValueError:
         return None, None
     return candidate, slug
 
 
-def inspect_package_hygiene(skill_dir, catalog_key):
+def inspect_package_hygiene(repo_root, skill_dir, catalog_key):
     errors = []
+    current = skill_dir
+    while current != repo_root:
+        if current.is_symlink():
+            errors.append(
+                issue(
+                    "SYMLINK_FORBIDDEN",
+                    catalog_key,
+                    "published skill source path must not contain symlinks",
+                )
+            )
+            return errors
+        current = current.parent
     for path in sorted(skill_dir.rglob("*")):
         relative = path.relative_to(skill_dir).as_posix()
         result_path = f"{catalog_key}/{relative}"
@@ -250,7 +277,9 @@ def validate(repo_root, catalog_path):
                         "published skill is missing a required file",
                     )
                 )
-        errors.extend(inspect_package_hygiene(skill_dir, catalog_key))
+        errors.extend(
+            inspect_package_hygiene(repo_root, skill_dir, catalog_key)
+        )
 
         if not isinstance(entry, dict):
             errors.append(

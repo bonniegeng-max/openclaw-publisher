@@ -230,6 +230,27 @@ class ValidateSkillCatalogTests(unittest.TestCase):
         )
         self.assertNotIn("must-not-appear-in-output", json.dumps(result))
 
+    def test_skill_root_symlink_is_rejected(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            original_skill_dir = root / first_key
+            relocated = root / "relocated-skill"
+            original_skill_dir.rename(relocated)
+            original_skill_dir.symlink_to(relocated, target_is_directory=True)
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(
+                error["code"] == "SYMLINK_FORBIDDEN"
+                and error["path"] == first_key
+                for error in result["errors"]
+            )
+        )
+
     def test_frontmatter_version_requires_three_part_semver(self):
         original = json.loads(CATALOG.read_text(encoding="utf-8"))
         first_key = sorted(original)[0]
@@ -270,6 +291,32 @@ class ValidateSkillCatalogTests(unittest.TestCase):
         self.assertTrue(
             any(
                 error["code"] == "CHANGELOG_VERSION_MISSING"
+                for error in result["errors"]
+            )
+        )
+
+    def test_duplicate_frontmatter_keys_are_rejected(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            skill_path = root / first_key / "SKILL.md"
+            text = skill_path.read_text(encoding="utf-8")
+            version_line = next(
+                line for line in text.splitlines() if line.startswith("version:")
+            )
+            skill_path.write_text(
+                text.replace(version_line, f"version: 9.9.9\n{version_line}", 1),
+                encoding="utf-8",
+            )
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(
+                error["code"] == "SKILL_FRONTMATTER_INVALID"
+                and "duplicate key: version" in error["message"]
                 for error in result["errors"]
             )
         )
@@ -397,6 +444,29 @@ class ValidateSkillCatalogTests(unittest.TestCase):
                     result["errors"][0]["code"],
                     "CATALOG_INPUT_INVALID",
                 )
+
+    def test_duplicate_catalog_keys_are_rejected(self):
+        raw = (
+            '{"skills/example":{"displayName":"First"},'
+            '"skills/example":{"displayName":"Second"}}'
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog_path = root / "catalog.json"
+            catalog_path.write_text(raw, encoding="utf-8")
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["entryCount"], 0)
+        self.assertEqual(
+            result["errors"][0]["code"],
+            "CATALOG_INPUT_INVALID",
+        )
+        self.assertIn(
+            "duplicate JSON key: skills/example",
+            result["errors"][0]["message"],
+        )
 
     def test_invalid_cli_returns_two_without_stderr_traceback(self):
         with tempfile.TemporaryDirectory() as directory:

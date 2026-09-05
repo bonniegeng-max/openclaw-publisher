@@ -110,6 +110,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 ## 巡检采样规则
 
 - 完整周检优先运行 `python3 scripts/run_clawhub_growth_monitor.py`，避免两类快照只更新一半。
+- `metrics/observation-policy.json` 将首次允许采样时间锁定为 `2026-09-12T02:26:39+00:00`；在此之前，常规入口即使没有历史快照也必须零请求退出。
 - 默认 144 小时防重复门槛不得在常规周检中绕过；`--force` 仅用于明确的版本或审核异常复核。
 - 常规采样优先运行 `python3 scripts/collect_clawhub_metrics.py`，生成只读 JSON 快照。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。

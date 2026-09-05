@@ -118,6 +118,26 @@ def load_existing_snapshot(path: Path) -> dict[str, Any] | None:
     return read_json_object(path)
 
 
+def load_observation_policy(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    payload = read_json_object(path)
+    if payload.get("schemaVersion") != 1:
+        raise ValueError(f"{path}：schemaVersion 必须为 1")
+    reason = payload.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(f"{path}：reason 必须是非空字符串")
+    not_before = parse_collected_at(
+        {"collectedAt": payload.get("notBefore")},
+        f"{path} 的 notBefore",
+    )
+    return {
+        "notBefore": not_before,
+        "notBeforeText": payload["notBefore"],
+        "reason": reason.strip(),
+    }
+
+
 def parse_collected_at(snapshot: dict[str, Any], source: str) -> datetime:
     value = snapshot.get("collectedAt")
     if not isinstance(value, str) or not value:
@@ -138,15 +158,47 @@ def evaluate_run_guard(
     now: datetime,
     min_interval_hours: float,
     force: bool,
+    observation_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if min_interval_hours <= 0:
         raise ValueError("min-interval-hours 必须大于 0")
     if now.tzinfo is None:
         raise ValueError("当前时间必须包含时区")
     if force:
-        return {"skip": False, "reason": "显式强制运行", "ageHours": None}
+        return {
+            "skip": False,
+            "reason": "显式强制运行",
+            "ageHours": None,
+            "notBefore": (
+                observation_policy["notBeforeText"]
+                if observation_policy is not None
+                else None
+            ),
+        }
+    if observation_policy is not None:
+        not_before = observation_policy["notBefore"]
+        if now < not_before:
+            return {
+                "skip": True,
+                "reason": (
+                    f"自然观察窗口尚未结束；最早采样时间为 "
+                    f"{observation_policy['notBeforeText']}；"
+                    f"原因：{observation_policy['reason']}"
+                ),
+                "ageHours": None,
+                "notBefore": observation_policy["notBeforeText"],
+            }
     if old_metrics is None or old_search is None:
-        return {"skip": False, "reason": "至少缺少一类历史快照", "ageHours": None}
+        return {
+            "skip": False,
+            "reason": "至少缺少一类历史快照",
+            "ageHours": None,
+            "notBefore": (
+                observation_policy["notBeforeText"]
+                if observation_policy is not None
+                else None
+            ),
+        }
 
     latest_time = max(
         parse_collected_at(old_metrics, "指标 latest"),
@@ -163,11 +215,21 @@ def evaluate_run_guard(
                 f"小于默认门槛 {min_interval_hours:g} 小时"
             ),
             "ageHours": age_hours,
+            "notBefore": (
+                observation_policy["notBeforeText"]
+                if observation_policy is not None
+                else None
+            ),
         }
     return {
         "skip": False,
         "reason": f"距最近成功采集 {age_hours:.2f} 小时",
         "ageHours": age_hours,
+        "notBefore": (
+            observation_policy["notBeforeText"]
+            if observation_policy is not None
+            else None
+        ),
     }
 
 
@@ -336,6 +398,9 @@ def run_monitor(
     metrics_dir = root / "metrics"
     catalog = root / ".clawhub" / "skill-catalog.json"
     queries = metrics_dir / "search-queries.json"
+    observation_policy = load_observation_policy(
+        metrics_dir / "observation-policy.json"
+    )
 
     metrics_latest = metrics_dir / "clawhub-latest.json"
     metrics_previous = metrics_dir / "clawhub-previous.json"
@@ -354,12 +419,14 @@ def run_monitor(
         now or datetime.now(timezone.utc),
         min_interval_hours,
         force,
+        observation_policy,
     )
     if guard["skip"]:
         return {
             "skipped": True,
             "skipReason": guard["reason"],
             "ageHours": guard["ageHours"],
+            "notBefore": guard["notBefore"],
             "metricsCompared": False,
             "searchCompared": False,
             "decisionReady": None,
@@ -506,6 +573,7 @@ def run_monitor(
         "skipped": False,
         "skipReason": None,
         "ageHours": guard["ageHours"],
+        "notBefore": guard["notBefore"],
         "metricsCollectedAt": new_metrics.get("collectedAt"),
         "searchCollectedAt": new_search.get("collectedAt"),
         "metricsCompared": old_metrics is not None,
@@ -547,7 +615,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="忽略最短间隔并立即执行一次采集。",
+        help="忽略观察窗口与最短间隔并立即执行一次异常复核采集。",
     )
     return parser.parse_args()
 

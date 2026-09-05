@@ -16,6 +16,7 @@ SPEC.loader.exec_module(MODULE)
 OLD_TIME = "2026-08-20T00:00:00+00:00"
 NEW_TIME = "2026-09-05T00:00:00+00:00"
 NOW = datetime.fromisoformat("2026-09-05T01:00:00+00:00")
+OBSERVATION_END = "2026-09-12T02:26:39+00:00"
 
 
 def metrics_snapshot(label):
@@ -41,6 +42,17 @@ def search_snapshot(label):
 def write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def write_observation_policy(root, not_before=OBSERVATION_END):
+    write_json(
+        root / "metrics" / "observation-policy.json",
+        {
+            "schemaVersion": 1,
+            "notBefore": not_before,
+            "reason": "维护后的自然观察窗口",
+        },
+    )
 
 
 def comparison_snapshot(
@@ -107,6 +119,15 @@ class FakeRunner:
 
 
 class RunClawHubGrowthMonitorTests(unittest.TestCase):
+    def test_repository_observation_policy_is_valid(self):
+        policy = MODULE.load_observation_policy(
+            SCRIPT.parents[1] / "metrics" / "observation-policy.json"
+        )
+
+        self.assertIsNotNone(policy)
+        self.assertEqual(policy["notBeforeText"], OBSERVATION_END)
+        self.assertIsNotNone(policy["notBefore"].tzinfo)
+
     def test_output_bundle_rolls_back_mid_commit_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -223,6 +244,70 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             self.assertFalse(result["metricsCompared"])
             self.assertFalse(result["searchCompared"])
             self.assertFalse(result["decisionReady"])
+            self.assertEqual(len(runner.commands), 2)
+
+    def test_first_run_before_observation_window_is_skipped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_observation_policy(root)
+            runner = FakeRunner()
+
+            result = MODULE.run_monitor(
+                root,
+                python_bin="python3",
+                clawhub_bin="clawhub",
+                timeout=10,
+                now=NOW,
+                runner=runner,
+            )
+
+            self.assertTrue(result["skipped"])
+            self.assertEqual(result["notBefore"], OBSERVATION_END)
+            self.assertIn("自然观察窗口尚未结束", result["skipReason"])
+            self.assertEqual(
+                result["recommendedAction"],
+                "wait-for-next-window",
+            )
+            self.assertEqual(runner.commands, [])
+            self.assertFalse((root / "metrics" / "clawhub-latest.json").exists())
+
+    def test_first_run_at_observation_boundary_proceeds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_observation_policy(root)
+            runner = FakeRunner()
+
+            result = MODULE.run_monitor(
+                root,
+                python_bin="python3",
+                clawhub_bin="clawhub",
+                timeout=10,
+                now=datetime.fromisoformat(OBSERVATION_END),
+                runner=runner,
+            )
+
+            self.assertFalse(result["skipped"])
+            self.assertEqual(result["notBefore"], OBSERVATION_END)
+            self.assertEqual(len(runner.commands), 2)
+
+    def test_force_bypasses_observation_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_observation_policy(root)
+            runner = FakeRunner()
+
+            result = MODULE.run_monitor(
+                root,
+                python_bin="python3",
+                clawhub_bin="clawhub",
+                timeout=10,
+                force=True,
+                now=NOW,
+                runner=runner,
+            )
+
+            self.assertFalse(result["skipped"])
+            self.assertEqual(result["notBefore"], OBSERVATION_END)
             self.assertEqual(len(runner.commands), 2)
 
     def test_existing_snapshots_are_rotated_after_all_stages_succeed(self):

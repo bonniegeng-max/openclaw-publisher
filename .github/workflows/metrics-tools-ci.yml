@@ -5,7 +5,7 @@ on:
     paths:
       - "scripts/**"
       - "tests/**"
-      - "metrics/README.md"
+      - "metrics/**"
       - "AGENTS.md"
       - "README.md"
       - ".github/workflows/metrics-tools-ci.yml"
@@ -15,7 +15,7 @@ on:
     paths:
       - "scripts/**"
       - "tests/**"
-      - "metrics/README.md"
+      - "metrics/**"
       - "AGENTS.md"
       - "README.md"
       - ".github/workflows/metrics-tools-ci.yml"

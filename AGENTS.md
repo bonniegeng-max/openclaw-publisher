@@ -42,6 +42,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 执行要求：
 
 - 不在同一轮再次单独运行指标或搜索采集器。
+- 遵守 `metrics/observation-policy.json` 的 `notBefore`；无历史快照时也不得提前首次采样。
 - 默认 144 小时防重复门槛不得绕过。
 - 不执行 install、download、publish、dry-run 或隔离安装。
 - 不修改 Skill 文件、版本号或 catalog。

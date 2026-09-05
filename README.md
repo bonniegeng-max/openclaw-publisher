@@ -18,10 +18,10 @@ Ship ClawHub skills with evidence, not guesswork.
 |---|---|
 | 已发布 Skill | 7 |
 | ClawHub moderation | 全部 `clean` |
-| 安装验证 | 此前 7 个 latest 基线达到 `E4`；本次候选版本尚未发布验收 |
+| 安装验证 | 7 个 current latest 均达到 `E4` |
 | 自动发布 | GitHub `main` → ClawHub |
 | 差分发布 | 只发布发生实质变化的 Skill |
-| 主入口 | 仓库候选 `Skill Publish Readiness 1.0.8` |
+| 主入口 | `Skill Publish Readiness 1.0.8` |
 
 公开数据会变化，当前快照、口径限制和决策记录在 [`skill_growth_monitor.md`](skill_growth_monitor.md)。
 
@@ -245,4 +245,4 @@ python3 -m unittest discover -s tests
 - 竞品成熟且差异不足时，不复制同类产品
 - 新方向必须强化“ClawHub 发布与增长工具作者”这条主线
 
-`Skill Publish Readiness 1.0.8` 当前仅为仓库候选版本，尚未进入发布后的自然观察窗口。下一个产品或插件会由真实采用数据和竞争缺口决定。
+`Skill Publish Readiness 1.0.8`、`Skill Launch Checklist 1.0.3`、`Release Proof Builder 1.0.3` 和 `Skill Portfolio Growth Audit 1.0.2` 已完成 E4 验收。新自然观察起点为 `2026-09-05 10:26:39`（北京时间）；验收流量不计入自然增长，下一个产品或插件仍由完整观察窗口后的真实采用数据和竞争缺口决定。

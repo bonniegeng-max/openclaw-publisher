@@ -39,7 +39,7 @@
 - 后面应连续发布 2 到 3 个同一主题下的 skill
 - 这样下载量不一定立刻暴涨，但会明显提高账号辨识度
 
-## 优先级最高的下一个 skill
+## 已发布核心 Skill
 
 ### 1. `github-actions-clawhub-doctor`
 
@@ -124,8 +124,8 @@ GitHub issue 证据已经显示，ClawHub Package 发布不是 Skill 发布链�
 
 ## 下一阶段
 
-1. 观察 `Skill Publish Readiness 1.0.7` 至少 7 天，不再用主动安装制造增长信号。
-2. 用验收前基线和新的自然观察起点判断主入口是否继续领先。
+1. 从 `2026-09-05 10:26:39`（北京时间）起观察 `Skill Publish Readiness 1.0.8` 至少 7 天，不再用主动安装制造增长信号。
+2. 最早于 `2026-09-12 10:26:39`（北京时间）做下一次增长判断，且必须同时满足 `decisionReady: true`、同采集方法、双快照 `activeInstall: false`、相同 query/limit/query set。
 3. topic fit 与单页 benchmark 作为现有 Positioning / Portfolio Skill 的能力，不创建新 slug。
 4. 继续验证 `package-publish-doctor` 的离线原型，但观察窗口结束前不加入 catalog 或发布。
 5. 继续收集 catalog 漂移案例，为 `skill-catalog-governor` 判断真实需求。
@@ -141,7 +141,7 @@ GitHub issue 证据已经显示，ClawHub Package 发布不是 Skill 发布链�
 
 ## 每个 skill 上线前都统一执行
 
-1. `clawhub skill publish <path> --dry-run --owner <owner>`
+1. `clawhub skill publish <path> --dry-run --owner <owner> --slug <stable-slug> --name "<Human Readable Name>"`
 2. 检查是否已设置 categories / topics
 3. 检查首屏前三段是否够短、够具体
 4. 检查是否能一句话说清楚目标用户

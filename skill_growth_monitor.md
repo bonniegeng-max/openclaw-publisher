@@ -1,18 +1,46 @@
 # ClawHub 作品集增长基线
 
-更新时间：2026-09-05 05:43（Asia/Shanghai）
+更新时间：2026-09-05 10:26（Asia/Shanghai）
 发布者：`@bonniegeng-max`  
-GitHub 基线提交：`029fb2763b6d8530f6efd29dea6e5aa8d42ec7d3`
+GitHub 基线提交：`617239c623fbf95374286a0695cc342aa47aadec`
 
 ## 当前结论
 
-作品集已经形成一条清晰主线：发布前审查、发布链路排障、发布后证明和商店页增长。`skill-publish-readiness` 是当前下载信号最强的入口；两个最新增长类 skill 已在搜索接口出现首次安装信号，但平台不同接口尚未同步一致。
+作品集已经形成一条清晰主线：发布前审查、发布链路排障、发布后证明和商店页增长。当前 7 个 latest 均已达到 E4；其中 4 个 Skill 在本轮完成正确性修复和版本升级。
 
-本轮最高优先级“统一展示名”已完成。7 个 skill 均保留稳定 slug，同时使用人类可读展示名；下一阶段进入观察窗口，不用短期波动过早判断增长效果。
+本轮修复了增长决策闸门、显式 slug/name 命令合同、Plugin 发布分支和 E2/E3/E4 证据定义。`skill-publish-readiness 1.0.8`、`skill-launch-checklist 1.0.3`、`release-proof-builder 1.0.3`、`skill-portfolio-growth-audit 1.0.2` 均已发布、moderation `clean` 且通过指定版本隔离安装。
 
-主入口加码动作也已完成：`skill-publish-readiness` 发布 `1.0.7`，新增真实复合失败审查案例和证据矩阵模板，并通过 ClawHub `clean` 审核及 E4 独立安装验证。该版本刚上线，暂不把下载量未变化解释为优化无效。
+本轮主动维护发生在北京时间 `2026-09-05 10:10–10:26`。该时段及紧随其后的 downloads / installs 变化全部视为维护污染；新的自然观察起点是 `2026-09-05 10:26:39`，最早在 7 天后且五项决策闸门全部通过时才允许增长或产品组合结论。
 
-## 修复验收
+## 合同修复验收
+
+GitHub 修复提交：`617239c623fbf95374286a0695cc342aa47aadec`
+
+| Skill | Latest | Display | Moderation | 安装验证 |
+|---|---:|---|---|---|
+| `skill-publish-readiness` | 1.0.8 | Skill Publish Readiness | clean | 通过 |
+| `skill-launch-checklist` | 1.0.3 | Skill Launch Checklist | clean | 通过 |
+| `release-proof-builder` | 1.0.3 | Release Proof Builder | clean | 通过 |
+| `skill-portfolio-growth-audit` | 1.0.2 | Skill Portfolio Growth Audit | clean | 通过 |
+
+4 个指定版本各执行一次隔离安装，安装后的 `SKILL.md` 与提交文件 SHA-256 一致。完整证据见 `release_evidence/2026-09-05-skill-contract-fixes.md`。
+
+本轮未修改另外 3 个 Skill，因此未对它们重复执行 dry-run、inspect 或安装；此前 E4 证据继续有效。
+
+### 主动维护后局部读数
+
+以下数值来自本轮 E3 inspect，随后又发生一次 E4 install，只用于保存原始状态，不作为自然增长基线：
+
+| Skill | Downloads | Installs | Versions | Latest |
+|---|---:|---:|---:|---:|
+| `skill-publish-readiness` | 108 | 1 | 9 | 1.0.8 |
+| `skill-launch-checklist` | 73 | 1 | 4 | 1.0.3 |
+| `release-proof-builder` | 75 | 1 | 4 | 1.0.3 |
+| `skill-portfolio-growth-audit` | 65 | 1 | 3 | 1.0.2 |
+
+这 4 个 Skill 的本轮操作包括 dry-run、publish workflow、inspect 和指定版本 install。任何紧随其后的计数变化均不得解释为外部采用。
+
+## 首次全量修复验收（历史）
 
 GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
@@ -28,7 +56,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 7 个 latest 版本均完成隔离安装，安装后的 `SKILL.md` 与该 GitHub 提交中的文件一致，证据等级达到 `E4`。
 
-## 当前数据快照
+## 首次全量验收后快照（历史）
 
 | Skill | Downloads | Inspect installs | Search installs / 60d | Stars | Versions | Latest | DisplayName | Topics | Moderation | 可安装 |
 |---|---:|---:|---:|---:|---:|---|---|---|---|---|
@@ -107,7 +135,9 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 这些查询只验证当前可发现性，不代表稳定排名。skills.sh lifetime installs 与 ClawHub 60 天 installs 不是同一统计口径，未参与数值比较。
 
-## 决策
+## 历史决策（已失效）
+
+以下表格形成于本轮合同修复和主动验收之前，只保留为历史记录，不满足新的 `decisionReady` 闸门，不能用于当前产品动作。
 
 | Skill | 决策 | 依据 |
 |---|---|---|
@@ -129,4 +159,4 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 唯一下一步
 
-保持作品集结构不变，等待 `skill-publish-readiness 1.0.7` 至少一个完整 7 天观察窗口；下一次周检只比较自然 downloads、installs 与搜索可见性变化，再决定是否继续加码主入口或转向 `github-actions-clawhub-doctor`。
+保持作品集结构不变，不再发布同类优化版本。下一次增长决策不得早于 `2026-09-12 10:26:39`（北京时间），并且必须满足同采集方法、前后快照均 `activeInstall: false`、间隔至少 7 天、相同 query/limit/query set 以及 `evidenceQuality.decisionReady: true`；否则唯一结论是继续观察或修复数据质量。

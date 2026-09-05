@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "status": "observation-window-hold",
+  "sourceEvidence": "release_evidence/2026-09-05-skill-publish-readiness-1.0.9.md",
+  "subject": {
+    "slug": "skill-publish-readiness",
+    "version": "1.0.9",
+    "sourceCommit": "2748f047c26c57f9aa85c00a640ed0f5ae45db16"
+  },
+  "evidenceMatrix": [
+    {
+      "level": "E0",
+      "status": "satisfied-as-foundation",
+      "evidence": "The versioned source files exist in the repository."
+    },
+    {
+      "level": "E1",
+      "status": "passed",
+      "evidence": "The target source commit exists on origin/main."
+    },
+    {
+      "level": "E2",
+      "status": "passed",
+      "evidence": {
+        "workflow": "ClawHub Skill Publish",
+        "runId": 33960781848,
+        "conclusion": "success"
+      }
+    },
+    {
+      "level": "E3",
+      "status": "passed",
+      "evidence": {
+        "latest": "1.0.9",
+        "displayName": "Skill Publish Readiness",
+        "topics": [
+          "publishing",
+          "release-review",
+          "github-actions",
+          "skill-audit",
+          "metadata"
+        ],
+        "moderationVerdict": "clean",
+        "registrySkillSha256": "7c58bfda06af8dd89665f74cada953b17d0b0eca90765b5e9fffb077447210ac",
+        "sourceSkillSha256": "7c58bfda06af8dd89665f74cada953b17d0b0eca90765b5e9fffb077447210ac"
+      }
+    },
+    {
+      "level": "E4",
+      "status": "passed",
+      "evidence": {
+        "installCountForVersion": 1,
+        "isolatedInstall": true,
+        "installedVersion": "1.0.9",
+        "installedPath": "skills/@bonniegeng-max/skill-publish-readiness",
+        "completedAt": "2026-09-05T18:45:38+08:00",
+        "temporaryDirectoryRemoved": true,
+        "coreFiles": {
+          "SKILL.md": "7c58bfda06af8dd89665f74cada953b17d0b0eca90765b5e9fffb077447210ac",
+          "CHANGELOG.md": "9c7fd6d7bbc63b3c0ec6586d0b88f5fa9275de116d5de2d24d4a3d2ebfd76550",
+          "references/security_review_guide.md": "1b0ac936c0505ff30e8e1752cb0b3172fc24a452c687878aa50eaaca2d344cf9"
+        }
+      }
+    }
+  ],
+  "maximumProvenLevel": "E4",
+  "publicClaimAllowed": "已上线、可下载使用",
+  "pollutionBoundary": {
+    "validationStartedAt": "2026-09-05T18:44:51+08:00",
+    "newObservationStart": "2026-09-05T18:45:38+08:00",
+    "observationNotBefore": "2026-09-12T10:45:38+00:00",
+    "preInstallRawCounts": {
+      "downloads": 150,
+      "installs": 1,
+      "stars": 0
+    },
+    "activeInstall": true,
+    "naturalAdoptionAttributionAllowed": false
+  },
+  "counterfactuals": [
+    {
+      "missing": [
+        "registry evidence",
+        "moderation evidence",
+        "install evidence"
+      ],
+      "maximumLevel": "E2",
+      "forbiddenClaim": "已上架或可下载"
+    },
+    {
+      "missing": [
+        "moderation.verdict: clean"
+      ],
+      "maximumLevel": "E2",
+      "forbiddenClaim": "已上架且审核正常"
+    },
+    {
+      "missing": [
+        "specified-version isolated install"
+      ],
+      "maximumLevel": "E3",
+      "forbiddenClaim": "可下载使用"
+    },
+    {
+      "missing": [
+        "installed core-file comparison"
+      ],
+      "maximumLevel": "E3",
+      "forbiddenClaim": "安装内容与源码一致"
+    }
+  ],
+  "claims": {
+    "e4ProvenForSpecifiedVersion": true,
+    "e4AutomaticallyTransfersToFutureVersions": false,
+    "naturalGrowthProven": false,
+    "repeatInstallRequired": false
+  }
+}

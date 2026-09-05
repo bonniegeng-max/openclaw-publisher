@@ -123,6 +123,11 @@ macOS 专用可执行资源；两个纯文案 Skill 也没有需要 Git 或 Claw
 `Skill Publish Readiness 1.0.0` description，准备包含 4 个候选、唯一推荐
 版本、使用位置和增长声明边界的完整替换示例。
 
+`research/release-proof-builder-example-vnext/` 已将
+`Skill Publish Readiness 1.0.9` 的真实验收记录整理为完整 E0–E4 正例，
+包括 workflow、moderation、核心文件哈希、限定安装、污染窗口和证据缺失时
+的降级规则。
+
 ### Positioning 示例标题自相矛盾
 
 `skills/skill-positioning-audit/examples/weak_vs_strong_positioning.md`

@@ -1,3 +1,4 @@
+import json
 import re
 import unittest
 from pathlib import Path
@@ -20,6 +21,38 @@ def frontmatter_version(relative):
 
 
 class SkillContentContractTests(unittest.TestCase):
+    def test_skills_readme_matches_repository_publish_contract(self):
+        readme = read("skills/README.md")
+        for phrase in (
+            "`SKILL.md`",
+            "`CHANGELOG.md`",
+            "`.clawhubignore`",
+            "`.clawhub/skill-catalog.json`",
+            "--slug",
+            "--name",
+            "`E4`",
+            "只有达到 `E4` 才能声明“已上线、可下载使用”",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, readme)
+
+    def test_all_published_skill_directories_satisfy_required_files_and_catalog(self):
+        catalog = json.loads(
+            read(".clawhub/skill-catalog.json")
+        )
+        skill_dirs = {
+            path.parent.relative_to(ROOT).as_posix()
+            for path in SKILLS.glob("*/SKILL.md")
+        }
+
+        self.assertEqual(set(catalog), skill_dirs)
+        for relative in sorted(skill_dirs):
+            skill_dir = ROOT / relative
+            with self.subTest(skill=relative):
+                self.assertTrue((skill_dir / "SKILL.md").is_file())
+                self.assertTrue((skill_dir / "CHANGELOG.md").is_file())
+                self.assertTrue((skill_dir / ".clawhubignore").is_file())
+
     def test_target_versions_and_readme_are_in_sync(self):
         expected = {
             "skill-portfolio-growth-audit": "1.0.2",

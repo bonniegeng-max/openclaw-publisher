@@ -115,7 +115,13 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertTrue(
             result["localEvidence"]["draftIdentityMatchesContract"]
         )
+        self.assertTrue(
+            result["localEvidence"]["stableSlugFormatValid"]
+        )
         self.assertTrue(result["localEvidence"]["stableSlugAllowed"])
+        self.assertTrue(
+            result["localEvidence"]["targetDirectoryMatchesStableSlug"]
+        )
         self.assertTrue(
             result["localEvidence"]["firstReleaseVersionValid"]
         )
@@ -538,6 +544,134 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertFalse(result["localEvidence"]["firstReleaseVersionValid"])
         self.assertIn(
             "candidate proposed first release version must be 1.0.0",
+            result["errors"],
+        )
+
+    def test_stable_slug_requires_lowercase_kebab_case(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        old_slug = original["candidate"]["stableSlug"]
+
+        for slug in (
+            "Package-Publish-Doctor",
+            "package_publish_doctor",
+            "package/publish-doctor",
+            "-package-publish-doctor",
+            "package-publish-doctor-",
+            "package--publish-doctor",
+        ):
+            with self.subTest(slug=slug):
+                contract = copy.deepcopy(original)
+                contract["candidate"]["stableSlug"] = slug
+                contract["candidate"]["targetDirectory"] = f"skills/{slug}"
+                contract["dryRunCommand"][3] = f"./skills/{slug}"
+                contract["dryRunCommand"][5] = slug
+                with tempfile.TemporaryDirectory() as directory:
+                    root, path = make_staged_repo(
+                        directory,
+                        contract,
+                        target=False,
+                        catalog=False,
+                    )
+                    skill_path = (
+                        root
+                        / contract["candidate"]["sourceDirectory"]
+                        / "SKILL.md"
+                    )
+                    skill_path.write_text(
+                        skill_path.read_text(encoding="utf-8").replace(
+                            f"slug: {old_slug}",
+                            f"slug: {slug}",
+                            1,
+                        ),
+                        encoding="utf-8",
+                    )
+                    result = CHECK_MODULE.evaluate(
+                        root,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(
+                    result["localEvidence"]["stableSlugFormatValid"]
+                )
+                self.assertFalse(
+                    result["localEvidence"]["stableSlugAllowed"]
+                )
+                self.assertIn(
+                    "candidate stable slug must use lowercase kebab-case",
+                    result["errors"],
+                )
+
+    def test_stable_slug_rejects_protected_namespaces(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        old_slug = original["candidate"]["stableSlug"]
+
+        for slug in ("clawhub-package-doctor", "package-doctor-clawhub"):
+            with self.subTest(slug=slug):
+                contract = copy.deepcopy(original)
+                contract["candidate"]["stableSlug"] = slug
+                contract["candidate"]["targetDirectory"] = f"skills/{slug}"
+                contract["dryRunCommand"][3] = f"./skills/{slug}"
+                contract["dryRunCommand"][5] = slug
+                with tempfile.TemporaryDirectory() as directory:
+                    root, path = make_staged_repo(
+                        directory,
+                        contract,
+                        target=False,
+                        catalog=False,
+                    )
+                    skill_path = (
+                        root
+                        / contract["candidate"]["sourceDirectory"]
+                        / "SKILL.md"
+                    )
+                    skill_path.write_text(
+                        skill_path.read_text(encoding="utf-8").replace(
+                            f"slug: {old_slug}",
+                            f"slug: {slug}",
+                            1,
+                        ),
+                        encoding="utf-8",
+                    )
+                    result = CHECK_MODULE.evaluate(
+                        root,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertTrue(
+                    result["localEvidence"]["stableSlugFormatValid"]
+                )
+                self.assertFalse(
+                    result["localEvidence"]["stableSlugAllowed"]
+                )
+                self.assertIn(
+                    "candidate stable slug uses a protected namespace",
+                    result["errors"],
+                )
+
+    def test_target_directory_must_match_stable_slug(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["candidate"]["targetDirectory"] = "skills/alternate"
+        contract["dryRunCommand"][3] = "./skills/alternate"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            result = CHECK_MODULE.evaluate(
+                ROOT,
+                path,
+                datetime(2026, 9, 5, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(
+            result["localEvidence"]["targetDirectoryMatchesStableSlug"]
+        )
+        self.assertIn(
+            "candidate targetDirectory must equal skills/<stableSlug>",
             result["errors"],
         )
 

@@ -225,15 +225,35 @@ def evaluate(repo_root, contract_path, now):
         errors.append("draft frontmatter does not match candidate identity")
 
     slug = candidate.get("stableSlug")
-    safe_slug = (
+    slug_format_valid = (
         isinstance(slug, str)
-        and bool(slug)
-        and not slug.startswith("clawhub-")
-        and not slug.endswith("-clawhub")
+        and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) is not None
     )
+    protected_slug_namespace = (
+        isinstance(slug, str)
+        and (
+            slug.startswith("clawhub-")
+            or slug.endswith("-clawhub")
+        )
+    )
+    safe_slug = slug_format_valid and not protected_slug_namespace
+    local_evidence["stableSlugFormatValid"] = slug_format_valid
     local_evidence["stableSlugAllowed"] = safe_slug
-    if not safe_slug:
+    if not slug_format_valid:
+        errors.append("candidate stable slug must use lowercase kebab-case")
+    if protected_slug_namespace:
         errors.append("candidate stable slug uses a protected namespace")
+
+    target_matches_slug = (
+        candidate.get("targetDirectory") == f"skills/{slug}"
+    )
+    local_evidence["targetDirectoryMatchesStableSlug"] = (
+        target_matches_slug
+    )
+    if not target_matches_slug:
+        errors.append(
+            "candidate targetDirectory must equal skills/<stableSlug>"
+        )
 
     first_release_version_valid = (
         candidate.get("proposedFirstReleaseVersion") == "1.0.0"

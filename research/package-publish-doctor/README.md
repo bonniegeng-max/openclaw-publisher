@@ -173,6 +173,10 @@ evidence/claims 也不得提前标为 `true`。
 本地测试均完成；`publication-pending` 还要求显式 slug/name dry-run；
 `verification-pending` 还要求授权发布完成；`complete` 要求全部八个 gate
 完成。状态字符串本身不构成完成证据。
+stable slug 必须使用小写 kebab-case、避开 `clawhub-` 前缀和 `-clawhub`
+后缀；`targetDirectory` 必须精确等于 `skills/<stableSlug>`。这是因为自动
+发布 workflow 以目标目录名作为 slug，目录与合同 slug 分叉会导致 dry-run
+验证的身份和实际自动发布身份不一致。
 
 ## 启动门槛
 

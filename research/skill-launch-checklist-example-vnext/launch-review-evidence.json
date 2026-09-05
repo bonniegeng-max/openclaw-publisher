@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "status": "observation-window-hold",
+  "observationNotBefore": "2026-09-12T10:45:38+00:00",
+  "source": {
+    "candidateCommit": "e806aec8cd69a4a885a065ac41fab59596664fda",
+    "candidatePath": "skills/clawhub-launch-checklist",
+    "candidateName": "clawhub-launch-checklist",
+    "candidateVersion": "1.0.0",
+    "repairCommit": "33ead75f52ec36da2adf89f542425f2ed3cbd67b"
+  },
+  "review": {
+    "conclusion": "先别发",
+    "blockingItems": [
+      {
+        "id": "protected-slug-prefix",
+        "field": "slug",
+        "observed": "clawhub-launch-checklist",
+        "rule": "slug must not start with clawhub- or end with -clawhub",
+        "severity": "blocking"
+      }
+    ],
+    "nonBlockingGaps": [
+      {
+        "id": "directory-like-visible-name",
+        "observed": "clawhub-launch-checklist",
+        "recommended": "Skill Launch Checklist"
+      }
+    ],
+    "passedChecks": [
+      "SKILL.md present",
+      "CHANGELOG.md present",
+      ".clawhubignore present",
+      "example present",
+      "reference present",
+      "template present",
+      "version declared",
+      "catalog categories present",
+      "catalog topics present"
+    ]
+  },
+  "minimumFix": {
+    "directory": {
+      "from": "skills/clawhub-launch-checklist",
+      "to": "skills/skill-launch-checklist"
+    },
+    "stableSlug": "skill-launch-checklist",
+    "displayName": "Skill Launch Checklist",
+    "updateSurfaces": [
+      "directory",
+      "SKILL.md frontmatter",
+      "catalog key",
+      "repository references"
+    ],
+    "workflowGuardAdded": true
+  },
+  "nextCommand": [
+    "clawhub",
+    "skill",
+    "publish",
+    "./skills/skill-launch-checklist",
+    "--slug",
+    "skill-launch-checklist",
+    "--name",
+    "Skill Launch Checklist",
+    "--dry-run",
+    "--owner",
+    "<owner>"
+  ],
+  "postFixState": {
+    "conclusionBeforeDryRun": "基本可发",
+    "dryRunExecutedByThisFixture": false,
+    "publishedByThisFixture": false,
+    "e4ProvenByThisFixture": false
+  },
+  "claims": {
+    "protectedSlugBlockerConfirmed": true,
+    "completePackageAloneWasSufficient": false,
+    "downloadImpactConfirmed": false,
+    "searchImpactConfirmed": false
+  }
+}

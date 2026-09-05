@@ -128,6 +128,10 @@ macOS 专用可执行资源；两个纯文案 Skill 也没有需要 Git 或 Claw
 包括 workflow、moderation、核心文件哈希、限定安装、污染窗口和证据缺失时
 的降级规则。
 
+`research/skill-launch-checklist-example-vnext/` 已使用历史
+`clawhub-launch-checklist` 受保护 slug 故障，准备包含真实输入、检查矩阵、
+“先别发”结论、唯一阻塞项、最小修复和显式 dry-run 命令的完整上线评审。
+
 ### Positioning 示例标题自相矛盾
 
 `skills/skill-positioning-audit/examples/weak_vs_strong_positioning.md`

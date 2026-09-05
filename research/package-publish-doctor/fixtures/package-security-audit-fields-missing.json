@@ -5,6 +5,9 @@
     "surface": "package",
     "family": "code-plugin",
     "stage": "install-verification",
+    "releaseVersion": "2.1.4",
+    "securityReleaseVersion": "2.1.4",
+    "publicationStatus": "published",
     "exactReleaseSecurityEndpoint": true,
     "trust": {
       "blockedFromDownload": false,

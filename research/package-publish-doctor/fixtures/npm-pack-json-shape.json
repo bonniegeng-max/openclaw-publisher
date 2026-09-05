@@ -3,6 +3,7 @@
   "source": "https://github.com/openclaw/clawhub/issues/3275",
   "input": {
     "surface": "package",
+    "command": "clawhub package publish",
     "clawhubVersion": "0.23.1",
     "npmVersion": "12.x",
     "npm11": [
@@ -18,13 +19,14 @@
       }
     },
     "artifactExists": true,
+    "artifactFilename": "my-plugin-0.4.0.tgz",
     "reportedError": "npm pack did not return a tarball filename"
   },
   "expected": {
     "diagnosis": "NPM_PACK_JSON_SHAPE",
     "layer": "pack",
     "confidence": "high",
-    "versionStatus": "unknown",
+    "versionStatus": "fixed-in-release",
     "conclusion": "blocked",
     "doNotClaim": "npm pack failed to create the tarball"
   }

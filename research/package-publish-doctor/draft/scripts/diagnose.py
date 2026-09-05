@@ -20,13 +20,25 @@ TRUSTED_SOURCE_COMPARISON = {
     "operator": "!==",
     "right": "candidateSha ?? token.sha",
 }
+TRUSTED_SOURCE_VALIDATION_OUTCOME = "source-ref-mismatch"
+TAG_REF_PATTERN = re.compile(r"^refs/tags/[^\s]+$")
 NPM_PACK_JSON_SHAPE_CLI_VERSION = (0, 23, 1)
 NPM_PACK_JSON_SHAPE_NPM_MAJOR = 12
+NPM_PACK_COMMAND = "clawhub package publish"
+NPM_PACK_JSON_SHAPE_FIXED_VERSION = (0, 23, 3)
 BUNDLE_NATIVE_MANIFEST_CLI_VERSION = (0, 23, 3)
 PACKAGE_PUBLISH_WORKFLOW_REF = (
     "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3"
 )
+CLAWPACK_UPLOAD_TARGET = "clawhub-public-edge"
+CLAWPACK_PUBLIC_REGISTRY = "https://clawhub.ai"
+PUBLIC_EDGE_BUDGET_BYTES = 4 * 1024 * 1024
+LEGACY_STAGING_THRESHOLD_BYTES = 18 * 1024 * 1024
+SHA256_PATTERN = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
+VERSION_NUMBER_PATTERN = r"(?:0|[1-9]\d*)"
+PACKAGE_RELEASE_SCAN_AFFECTED_VERSION = (0, 23, 1)
 PACKAGE_RELEASE_SCAN_FIXED_VERSION = (0, 23, 2)
+PACKAGE_SECURITY_PUBLICATION_STATUS = "published"
 FAILURE_LAYERS = frozenset(
     {
         "workflow-permission",
@@ -287,17 +299,26 @@ def _unknown(case, missing_evidence, evidence=None):
 def _version_tuple(value):
     if not _is_non_empty_string(value):
         return None
-    parts = value.lstrip("v").split(".")
-    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+    match = re.fullmatch(
+        rf"v?({VERSION_NUMBER_PATTERN})\.({VERSION_NUMBER_PATTERN})\."
+        rf"({VERSION_NUMBER_PATTERN})",
+        value,
+    )
+    if match is None:
         return None
-    return tuple(int(part) for part in parts)
+    return tuple(int(part) for part in match.groups())
 
 
 def _version_major(value):
     if not _is_non_empty_string(value):
         return None
-    first = value.lstrip("v").split(".", 1)[0]
-    return int(first) if first.isdigit() else None
+    match = re.fullmatch(
+        rf"v?({VERSION_NUMBER_PATTERN})"
+        rf"(?:\.(?:{VERSION_NUMBER_PATTERN}|x)){{1,2}}",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return int(match.group(1)) if match is not None else None
 
 
 def _is_non_empty_string(value):
@@ -308,6 +329,10 @@ def _is_commit(value):
     return _is_non_empty_string(value) and bool(
         COMMIT_CONTEXT_PATTERN.fullmatch(value)
     )
+
+
+def _is_sha256(value):
+    return _is_non_empty_string(value) and bool(SHA256_PATTERN.fullmatch(value))
 
 
 def _is_integer(value):
@@ -322,27 +347,32 @@ def _is_number(value):
     )
 
 
-def _single_pack_filename(value, expected_type):
+def _single_pack_entry(value, expected_type):
     if not isinstance(value, expected_type) or not value:
         return None
     entries = list(value.values()) if isinstance(value, dict) else value
     if len(entries) != 1 or not isinstance(entries[0], dict):
         return None
+    package_id = entries[0].get("id")
     filename = entries[0].get("filename")
-    return filename if _is_non_empty_string(filename) else None
+    if not _is_non_empty_string(package_id) or not _is_non_empty_string(filename):
+        return None
+    return package_id, filename
 
 
 def _same_artifact_validation(inputs):
     artifact_hash = inputs.get("artifactHash")
-    if not _is_non_empty_string(artifact_hash):
+    if not _is_sha256(artifact_hash):
         return None
     for name, label in (("inspector", "Inspector"), ("localValidation", "本地验证")):
         validation = inputs.get(name)
         if not isinstance(validation, dict):
             continue
         if (
-            str(validation.get("status") or "").lower() in {"success", "passed"}
+            _is_non_empty_string(validation.get("status"))
+            and validation.get("status").lower() in {"success", "passed"}
             and validation.get("artifactHash") == artifact_hash
+            and _is_sha256(validation.get("artifactHash"))
         ):
             return f"同一 artifact（{artifact_hash}）的 {label} 已成功"
     return None
@@ -413,10 +443,14 @@ def diagnose(case):
         inputs.get("publishMode") == "trusted-github-actions"
         and inputs.get("candidateShaPresent") is False
         and inputs.get("rejected") is True
+        and inputs.get("rejectionStage") == "source-validation"
+        and inputs.get("sourceValidationOutcome")
+        == TRUSTED_SOURCE_VALIDATION_OUTCOME
         and inputs.get("sourceValidatorCommit") == TRUSTED_SOURCE_VALIDATOR_COMMIT
         and inputs.get("sourceValidationComparison") == TRUSTED_SOURCE_COMPARISON
         and _is_commit(inputs.get("tokenSha"))
         and _is_non_empty_string(inputs.get("tokenRef"))
+        and TAG_REF_PATTERN.fullmatch(inputs.get("tokenRef"))
         and inputs.get("sourceCommit") == inputs.get("tokenSha")
         and inputs.get("sourceRef") == inputs.get("tokenRef")
         and inputs.get("sourceRef") != inputs.get("tokenSha")
@@ -438,10 +472,10 @@ def diagnose(case):
             )
         )
 
-    permissions_value = inputs.get("callerPermissions")
+    permissions_value = inputs.get("effectiveCallerPermissions")
     permissions = permissions_value if isinstance(permissions_value, dict) else {}
     actions_value = permissions.get("actions")
-    actions_missing = "actions" not in permissions or (
+    actions_missing = (
         _is_non_empty_string(actions_value)
         and actions_value.strip().lower() == "none"
     )
@@ -469,13 +503,15 @@ def diagnose(case):
             )
         )
 
-    npm11_filename = _single_pack_filename(inputs.get("npm11"), list)
-    npm12_filename = _single_pack_filename(inputs.get("npm12"), dict)
+    npm11_entry = _single_pack_entry(inputs.get("npm11"), list)
+    npm12_entry = _single_pack_entry(inputs.get("npm12"), dict)
     if (
         inputs.get("artifactExists") is True
-        and npm11_filename is not None
-        and npm12_filename is not None
-        and npm11_filename == npm12_filename
+        and inputs.get("command") == NPM_PACK_COMMAND
+        and npm11_entry is not None
+        and npm12_entry is not None
+        and npm11_entry == npm12_entry
+        and inputs.get("artifactFilename") == npm11_entry[1]
         and "npm pack did not return a tarball filename" in error_lower
         and _version_tuple(inputs.get("clawhubVersion"))
         == NPM_PACK_JSON_SHAPE_CLI_VERSION
@@ -489,11 +525,14 @@ def diagnose(case):
                 [
                     "npm pack 已生成 tarball",
                     "npm 12 的 JSON 输出是对象而不是数组",
-                    "npm 11 与 npm 12 记录同一非空 tarball filename",
+                    "npm 11 与 npm 12 记录同一 package id 和 tarball filename",
+                    "实际 artifact filename 与两侧 npm 输出一致",
                     "旧解析器仍按数组读取第一个 filename",
+                    "正式修复版本为 "
+                    f"{'.'.join(map(str, NPM_PACK_JSON_SHAPE_FIXED_VERSION))}",
                 ],
                 "升级到包含兼容解析的正式 CLI；临时方案只在发布 job 内固定 npm 11。",
-                "unknown",
+                "fixed-in-release",
             )
         )
 
@@ -508,8 +547,10 @@ def diagnose(case):
         inputs.get("family") == "bundle-plugin"
         and _version_tuple(inputs.get("clawhubVersion"))
         == BUNDLE_NATIVE_MANIFEST_CLI_VERSION
+        and inputs.get("filesObservationComplete") is True
         and files.intersection(BUNDLE_MARKERS)
         and inputs.get("openclawPluginManifestPresent") is False
+        and "openclaw.plugin.json" not in files
         and "openclaw.plugin.json required" in error_lower
     ):
         matches.append(
@@ -528,18 +569,17 @@ def diagnose(case):
         )
 
     artifact_bytes = inputs.get("artifactBytes")
-    edge_budget = inputs.get("publicEdgeBudgetBytes")
-    legacy_threshold = inputs.get("legacyStagingThresholdBytes")
     validation_evidence = _same_artifact_validation(inputs)
     if (
         inputs.get("reportedStatus") == 413
         and "request entity too large" in error_lower
-        and all(
-            _is_integer(value) and value > 0
-            for value in (artifact_bytes, edge_budget, legacy_threshold)
-        )
-        and edge_budget < artifact_bytes < legacy_threshold
+        and _is_integer(artifact_bytes)
+        and PUBLIC_EDGE_BUDGET_BYTES
+        < artifact_bytes
+        < LEGACY_STAGING_THRESHOLD_BYTES
         and inputs.get("workflowRef") == PACKAGE_PUBLISH_WORKFLOW_REF
+        and inputs.get("uploadTarget") == CLAWPACK_UPLOAD_TARGET
+        and inputs.get("registry") == CLAWPACK_PUBLIC_REGISTRY
         and validation_evidence
     ):
         matches.append(
@@ -549,8 +589,9 @@ def diagnose(case):
                 "upload",
                 [
                     f"artifact 为 {artifact_bytes} bytes",
-                    f"超过公共边缘预算 {edge_budget} bytes",
-                    f"低于旧 staging 阈值 {legacy_threshold} bytes",
+                    f"超过内置公共边缘预算 {PUBLIC_EDGE_BUDGET_BYTES} bytes",
+                    f"低于内置旧 staging 阈值 {LEGACY_STAGING_THRESHOLD_BYTES} bytes",
+                    "上传目标明确为 ClawHub public edge",
                     validation_evidence,
                     "修复仅存在于 main，当前 release 未包含",
                 ],
@@ -568,11 +609,11 @@ def diagnose(case):
         and inputs.get("scanStatus") == "pending"
         and _is_number(pending_hours)
         and pending_hours >= 24
+        and "latestRelease" in inputs
         and inputs.get("latestRelease") is None
         and inputs.get("inspectVisible") is False
         and inputs.get("duplicateOnRepublish") is True
-        and installed_version is not None
-        and installed_version < PACKAGE_RELEASE_SCAN_FIXED_VERSION
+        and installed_version == PACKAGE_RELEASE_SCAN_AFFECTED_VERSION
     ):
         matches.append(
             _result(
@@ -585,7 +626,7 @@ def diagnose(case):
                     "latestRelease 仍为空且指定版本不可 inspect",
                     "同版本重发被 duplicate guard 拒绝",
                     "当前 CLI "
-                    f"{inputs.get('clawhubVersion')} 早于修复版本 "
+                    f"{inputs.get('clawhubVersion')} 是已证实受影响版本；修复版本为 "
                     f"{'.'.join(map(str, PACKAGE_RELEASE_SCAN_FIXED_VERSION))}",
                 ],
                 "升级到包含修复的正式 CLI 后核验原 release 的最终状态；不要通过连续 bump 版本制造更多孤立 release。",
@@ -603,11 +644,23 @@ def diagnose(case):
     audit_error_matches = (
         "malformed clawhub security response" in error_lower
         and "non-empty string" in error_lower
-        and any(name.lower() in error_lower for name in invalid_fields)
+        and any(
+            re.search(
+                rf"(?<![a-z0-9_]){re.escape(name.lower())}(?![a-z0-9_])",
+                error_lower,
+            )
+            for name in invalid_fields
+        )
     )
+    release_version = inputs.get("releaseVersion")
+    security_release_version = inputs.get("securityReleaseVersion")
     if (
         inputs.get("family") == "code-plugin"
         and inputs.get("stage") == "install-verification"
+        and inputs.get("publicationStatus")
+        == PACKAGE_SECURITY_PUBLICATION_STATUS
+        and _version_tuple(release_version) is not None
+        and security_release_version == release_version
         and inputs.get("exactReleaseSecurityEndpoint") is True
         and trust.get("scanStatus") == "clean"
         and trust.get("blockedFromDownload") is False

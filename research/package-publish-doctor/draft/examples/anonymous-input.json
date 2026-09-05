@@ -5,7 +5,8 @@
     "surface": "package",
     "workflowRef": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3",
     "jobsCreated": 0,
-    "callerPermissions": {
+    "effectiveCallerPermissions": {
+      "actions": "none",
       "contents": "read",
       "id-token": "write"
     },

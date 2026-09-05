@@ -15,7 +15,9 @@
     "tokenRef": "refs/tags/v1.2.3",
     "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "sourceRef": "refs/tags/v1.2.3",
-    "rejected": true
+    "rejected": true,
+    "rejectionStage": "source-validation",
+    "sourceValidationOutcome": "source-ref-mismatch"
   },
   "expected": {
     "diagnosis": "TRUSTED_PUBLISH_TAG_REF_REGRESSION",

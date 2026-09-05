@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.9 - 2026-09-05
+
+- 为七条高置信规则增加声明式 required-evidence deletion matrix，任一必要证据缺失都必须返回 `UNKNOWN`。
+- 将 ClawPack 4 MiB/18 MiB 阈值内置，要求 `clawhub.ai` 公共上传目标和标准 `sha256:` digest，不再信任调用方自报阈值。
+- trusted source 规则要求 source-validation 阶段、tag ref 与 `source-ref-mismatch` 源码复现结果；普通拒绝不得命中。
+- workflow 权限规则改用规范化 effective permissions，不再从部分 YAML map 推断。
+- npm 规则绑定 package command、两侧 package ID/filename 和实际 artifact filename，并记录 `v0.23.3` 已修复。
+- bundle 规则要求完整文件观测且 manifest 布尔值与清单一致。
+- scan stalled 精确限定已证实的 `0.23.1`，并区分显式 `latestRelease: null` 与字段缺失。
+- security audit 规则要求同一已发布 release，并使用字段名边界匹配错误文本。
+- 版本解析只允许零个或一个 `v` 前缀，拒绝 `vv...` 与冗余前导零等非规范值。
+
 ## 0.1.8 - 2026-09-05
 
 - 为不可读文件、无效 UTF-8/JSON、非对象顶层、缺失或非对象 `input` 增加稳定的 `INPUT_CONTRACT_ERROR` stderr JSON 与退出码 `2`。

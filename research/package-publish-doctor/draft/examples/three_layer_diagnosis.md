@@ -11,8 +11,10 @@ JSON schema，包括 guidance、禁止声明与补证字段。
 ```text
 clawhub 0.23.1
 npm 12.x
-npm 11 JSON: [{"filename": "my-plugin-0.4.0.tgz"}]
-npm 12 JSON: {"my-plugin": {"filename": "my-plugin-0.4.0.tgz"}}
+command: clawhub package publish
+npm 11 JSON: [{"id": "my-plugin@0.4.0", "filename": "my-plugin-0.4.0.tgz"}]
+npm 12 JSON: {"my-plugin": {"id": "my-plugin@0.4.0", "filename": "my-plugin-0.4.0.tgz"}}
+artifact filename: my-plugin-0.4.0.tgz
 错误：npm pack did not return a tarball filename
 输出目录中存在 my-plugin-0.4.0.tgz
 ```
@@ -24,6 +26,7 @@ diagnosis: NPM_PACK_JSON_SHAPE
 conclusion: blocked
 layer: pack
 confidence: high
+versionStatus: fixed-in-release
 observedContext: {clawhubVersion: 0.23.1, npmVersion: 12.x}
 ```
 
@@ -37,6 +40,7 @@ observedContext: {clawhubVersion: 0.23.1, npmVersion: 12.x}
 
 ```text
 family: bundle-plugin
+files observation: complete
 .codex-plugin/plugin.json: present
 .claude-plugin/plugin.json: present
 openclaw.plugin.json: absent
@@ -64,11 +68,13 @@ observedContext: {family: bundle-plugin}
 
 ```text
 workflow: package-publish.yml@v0.23.3
+upload target: clawhub-public-edge
+registry: https://clawhub.ai
 artifact: 8,032,797 bytes
-artifact hash: sha256:6e86...bdaf
-public edge budget: 4,194,304 bytes
-legacy staging threshold: 18,874,368 bytes
-Inspector: success, artifact hash sha256:6e86...bdaf
+artifact hash: sha256:6e86efb9a9802dddc0f424707b0e44b7f8f67c0d61e39d885aa0bb812d24bdaf
+rule public edge budget: 4,194,304 bytes
+rule legacy staging threshold: 18,874,368 bytes
+Inspector: success, artifact hash sha256:6e86efb9a9802dddc0f424707b0e44b7f8f67c0d61e39d885aa0bb812d24bdaf
 upload: 413 Request Entity Too Large
 ```
 

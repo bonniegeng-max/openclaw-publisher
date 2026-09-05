@@ -18,6 +18,8 @@ token ref: refs/tags/v1.2.3
 source commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 source ref: refs/tags/v1.2.3
 result: rejected
+rejection stage: source-validation
+source validation outcome: source-ref-mismatch
 ```
 
 结论：
@@ -47,6 +49,9 @@ ordinary token 的 commit 与 tag ref 都与已验证 token 一致，且指定 s
 surface: package
 stage: install-verification
 family: code-plugin
+release version: 2.1.4
+security release version: 2.1.4
+publication status: published
 trust.scanStatus: clean
 trust.blockedFromDownload: false
 trust.pending: false

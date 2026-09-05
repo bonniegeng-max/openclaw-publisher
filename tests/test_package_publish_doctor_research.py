@@ -42,6 +42,92 @@ OBSERVED_CONTEXT_FIELDS = {
     "sourceValidatorCommit",
     "sourceCommit",
 }
+RULE_REQUIRED_PATHS = {
+    "trusted-publish-tag-ref-regression.json": [
+        ("input", "surface"),
+        ("input", "publishMode"),
+        ("input", "candidateShaPresent"),
+        ("input", "rejected"),
+        ("input", "rejectionStage"),
+        ("input", "sourceValidationOutcome"),
+        ("input", "sourceValidatorCommit"),
+        ("input", "sourceValidationComparison", "left"),
+        ("input", "sourceValidationComparison", "operator"),
+        ("input", "sourceValidationComparison", "right"),
+        ("input", "tokenSha"),
+        ("input", "tokenRef"),
+        ("input", "sourceCommit"),
+        ("input", "sourceRef"),
+    ],
+    "reusable-workflow-actions-read.json": [
+        ("input", "surface"),
+        ("input", "workflowRef"),
+        ("input", "jobsCreated"),
+        ("input", "effectiveCallerPermissions", "actions"),
+        ("input", "reportedError"),
+    ],
+    "npm-pack-json-shape.json": [
+        ("input", "surface"),
+        ("input", "command"),
+        ("input", "clawhubVersion"),
+        ("input", "npmVersion"),
+        ("input", "npm11", 0, "id"),
+        ("input", "npm11", 0, "filename"),
+        ("input", "npm12", "my-plugin", "id"),
+        ("input", "npm12", "my-plugin", "filename"),
+        ("input", "artifactExists"),
+        ("input", "artifactFilename"),
+        ("input", "reportedError"),
+    ],
+    "bundle-native-manifest-contract.json": [
+        ("input", "surface"),
+        ("input", "clawhubVersion"),
+        ("input", "family"),
+        ("input", "filesObservationComplete"),
+        ("input", "files"),
+        ("input", "openclawPluginManifestPresent"),
+        ("input", "reportedError"),
+    ],
+    "clawpack-staging-gap.json": [
+        ("input", "surface"),
+        ("input", "workflowRef"),
+        ("input", "uploadTarget"),
+        ("input", "registry"),
+        ("input", "artifactBytes"),
+        ("input", "artifactHash"),
+        ("input", "inspector", "status"),
+        ("input", "inspector", "artifactHash"),
+        ("input", "reportedStatus"),
+        ("input", "reportedError"),
+    ],
+    "package-release-scan-stalled.json": [
+        ("input", "surface"),
+        ("input", "clawhubVersion"),
+        ("input", "family"),
+        ("input", "publishAccepted"),
+        ("input", "releaseId"),
+        ("input", "scanStatus"),
+        ("input", "pendingHours"),
+        ("input", "latestRelease"),
+        ("input", "inspectVisible"),
+        ("input", "duplicateOnRepublish"),
+    ],
+    "package-security-audit-fields-missing.json": [
+        ("input", "surface"),
+        ("input", "family"),
+        ("input", "stage"),
+        ("input", "releaseVersion"),
+        ("input", "securityReleaseVersion"),
+        ("input", "publicationStatus"),
+        ("input", "exactReleaseSecurityEndpoint"),
+        ("input", "trust", "blockedFromDownload"),
+        ("input", "trust", "pending"),
+        ("input", "trust", "stale"),
+        ("input", "trust", "scanStatus"),
+        ("input", "trust", "reasons"),
+        ("input", "reportedError"),
+    ],
+}
 
 SPEC = importlib.util.spec_from_file_location(
     "package_publish_doctor_diagnose",
@@ -54,6 +140,13 @@ diagnose = DIAGNOSE_MODULE.diagnose
 
 def load_fixture(name):
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def delete_path(value, path):
+    cursor = value
+    for key in path[:-1]:
+        cursor = cursor[key]
+    del cursor[path[-1]]
 
 
 class PackagePublishDoctorResearchTests(unittest.TestCase):
@@ -242,7 +335,7 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
     def test_version_context_is_normalized_instead_of_copied(self):
         fixture = load_fixture("npm-pack-json-shape.json")
-        fixture["input"]["npmVersion"] = "12.0.0+owner-private-repository"
+        fixture["input"]["npmVersion"] = "v12.0.0"
 
         result = diagnose(fixture)
 
@@ -251,7 +344,10 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
             result["observedContext"],
             {"clawhubVersion": "0.23.1", "npmVersion": "12.x"},
         )
-        self.assertNotIn("private", json.dumps(result["observedContext"]))
+
+        metadata = load_fixture("npm-pack-json-shape.json")
+        metadata["input"]["npmVersion"] = "12.0.0+owner-private-repository"
+        self.assertEqual(diagnose(metadata)["diagnosis"], "UNKNOWN")
 
     def test_npm_pack_fixture_preserves_both_output_shapes(self):
         fixture = load_fixture("npm-pack-json-shape.json")
@@ -260,11 +356,23 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
         self.assertEqual(fixture["input"]["clawhubVersion"], "0.23.1")
         self.assertEqual(fixture["input"]["npmVersion"], "12.x")
+        self.assertEqual(
+            fixture["input"]["command"],
+            "clawhub package publish",
+        )
         self.assertIsInstance(npm11, list)
         self.assertIsInstance(npm12, dict)
         self.assertEqual(
             npm11[0]["filename"],
             next(iter(npm12.values()))["filename"],
+        )
+        self.assertEqual(
+            npm11[0]["id"],
+            next(iter(npm12.values()))["id"],
+        )
+        self.assertEqual(
+            fixture["input"]["artifactFilename"],
+            npm11[0]["filename"],
         )
         self.assertTrue(fixture["input"]["artifactExists"])
         self.assertEqual(
@@ -281,6 +389,8 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertIn(".codex-plugin/plugin.json", files)
         self.assertIn(".claude-plugin/plugin.json", files)
         self.assertFalse(fixture["input"]["openclawPluginManifestPresent"])
+        self.assertTrue(fixture["input"]["filesObservationComplete"])
+        self.assertNotIn("openclaw.plugin.json", files)
         self.assertTrue(fixture["expected"]["requiresMaintainerDecision"])
         self.assertEqual(
             fixture["expected"]["diagnosis"],
@@ -293,12 +403,14 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
         self.assertGreater(
             values["artifactBytes"],
-            values["publicEdgeBudgetBytes"],
+            DIAGNOSE_MODULE.PUBLIC_EDGE_BUDGET_BYTES,
         )
         self.assertLess(
             values["artifactBytes"],
-            values["legacyStagingThresholdBytes"],
+            DIAGNOSE_MODULE.LEGACY_STAGING_THRESHOLD_BYTES,
         )
+        self.assertEqual(values["uploadTarget"], "clawhub-public-edge")
+        self.assertEqual(values["registry"], "https://clawhub.ai")
         self.assertEqual(
             values["workflowRef"],
             "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3",
@@ -308,6 +420,7 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
             values["inspector"]["artifactHash"],
         )
         self.assertEqual(values["inspector"]["status"], "success")
+        self.assertRegex(values["artifactHash"], r"^sha256:[0-9a-f]{64}$")
         self.assertEqual(
             fixture["expected"]["diagnosis"],
             "CLAWPACK_STAGING_GAP",
@@ -346,7 +459,7 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         )
 
         already_fixed = copy.deepcopy(fixture)
-        already_fixed["input"]["callerPermissions"]["actions"] = "read"
+        already_fixed["input"]["effectiveCallerPermissions"]["actions"] = "read"
         self.assertEqual(diagnose(already_fixed)["diagnosis"], "UNKNOWN")
 
         wrong_workflow = copy.deepcopy(fixture)
@@ -354,6 +467,15 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
             "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.2"
         )
         self.assertEqual(diagnose(wrong_workflow)["diagnosis"], "UNKNOWN")
+
+        malformed_effective_permissions = copy.deepcopy(fixture)
+        malformed_effective_permissions["input"][
+            "effectiveCallerPermissions"
+        ] = {"actions": False}
+        self.assertEqual(
+            diagnose(malformed_effective_permissions)["diagnosis"],
+            "UNKNOWN",
+        )
 
     def test_version_bounded_rules_reject_other_cli_versions(self):
         npm_fixture = load_fixture("npm-pack-json-shape.json")
@@ -382,6 +504,13 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         short_wait = copy.deepcopy(fixture)
         short_wait["input"]["pendingHours"] = 2
         self.assertEqual(diagnose(short_wait)["diagnosis"], "UNKNOWN")
+
+        unsupported_older_release = copy.deepcopy(fixture)
+        unsupported_older_release["input"]["clawhubVersion"] = "0.23.0"
+        self.assertEqual(
+            diagnose(unsupported_older_release)["diagnosis"],
+            "UNKNOWN",
+        )
 
     def test_skill_surface_is_never_classified_as_package_failure(self):
         fixture = load_fixture("package-release-scan-stalled.json")
@@ -428,6 +557,16 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
             "source.commit"
         )
         self.assertEqual(diagnose(wrong_comparison)["diagnosis"], "UNKNOWN")
+
+        wrong_outcome = copy.deepcopy(fixture)
+        wrong_outcome["input"]["sourceValidationOutcome"] = (
+            "authentication-failed"
+        )
+        self.assertEqual(diagnose(wrong_outcome)["diagnosis"], "UNKNOWN")
+
+        wrong_stage = copy.deepcopy(fixture)
+        wrong_stage["input"]["rejectionStage"] = "authentication"
+        self.assertEqual(diagnose(wrong_stage)["diagnosis"], "UNKNOWN")
 
     def test_security_fields_rule_keeps_fail_closed_boundary(self):
         fixture = load_fixture("package-security-audit-fields-missing.json")
@@ -485,12 +624,30 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         wrong_endpoint["input"]["exactReleaseSecurityEndpoint"] = False
         self.assertEqual(diagnose(wrong_endpoint)["diagnosis"], "UNKNOWN")
 
+        unpublished = copy.deepcopy(fixture)
+        unpublished["input"]["publicationStatus"] = "draft"
+        self.assertEqual(diagnose(unpublished)["diagnosis"], "UNKNOWN")
+
     def test_generic_413_is_not_misclassified_as_staging_gap(self):
         fixture = load_fixture("clawpack-staging-gap.json")
         below_edge_limit = copy.deepcopy(fixture)
         below_edge_limit["input"]["artifactBytes"] = 1024
 
         self.assertEqual(diagnose(below_edge_limit)["diagnosis"], "UNKNOWN")
+
+        caller_defined_thresholds = copy.deepcopy(fixture)
+        caller_defined_thresholds["input"]["artifactBytes"] = 2
+        caller_defined_thresholds["input"]["publicEdgeBudgetBytes"] = 1
+        caller_defined_thresholds["input"]["legacyStagingThresholdBytes"] = 3
+        self.assertEqual(
+            diagnose(caller_defined_thresholds)["diagnosis"],
+            "UNKNOWN",
+        )
+
+        invalid_hash = copy.deepcopy(fixture)
+        invalid_hash["input"]["artifactHash"] = "same"
+        invalid_hash["input"]["inspector"]["artifactHash"] = "same"
+        self.assertEqual(diagnose(invalid_hash)["diagnosis"], "UNKNOWN")
 
     def test_missing_manifest_for_code_plugin_is_not_bundle_contract_case(self):
         fixture = load_fixture("bundle-native-manifest-contract.json")
@@ -574,16 +731,16 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         candidates.append(bundle)
 
         permissions = load_fixture("reusable-workflow-actions-read.json")
-        permissions["input"]["callerPermissions"] = ["actions: none"]
+        permissions["input"]["effectiveCallerPermissions"] = ["actions: none"]
         candidates.append(permissions)
 
         for actions_value in (None, False, 0, [], {}):
             nested_permissions = load_fixture(
                 "reusable-workflow-actions-read.json"
             )
-            nested_permissions["input"]["callerPermissions"]["actions"] = (
-                actions_value
-            )
+            nested_permissions["input"]["effectiveCallerPermissions"][
+                "actions"
+            ] = actions_value
             candidates.append(nested_permissions)
 
         security = load_fixture("package-security-audit-fields-missing.json")
@@ -651,6 +808,93 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                         candidate["input"][field] = replacement
                         self.assert_output_schema(diagnose(candidate))
 
+    def test_deleting_any_declared_required_evidence_returns_unknown(self):
+        self.assertEqual(
+            set(RULE_REQUIRED_PATHS),
+            {path.name for path in FIXTURES.glob("*.json")},
+        )
+        for fixture_name, required_paths in RULE_REQUIRED_PATHS.items():
+            fixture = load_fixture(fixture_name)
+            self.assertTrue(diagnose(fixture)["matched"])
+            for required_path in required_paths:
+                with self.subTest(
+                    fixture=fixture_name,
+                    required_path=required_path,
+                ):
+                    candidate = copy.deepcopy(fixture)
+                    delete_path(candidate, required_path)
+                    result = diagnose(candidate)
+                    self.assertFalse(result["matched"])
+                    self.assertEqual(result["diagnosis"], "UNKNOWN")
+
+    def test_semantically_contradictory_evidence_returns_unknown(self):
+        bundle = load_fixture("bundle-native-manifest-contract.json")
+        bundle["input"]["files"].append("openclaw.plugin.json")
+        self.assertEqual(diagnose(bundle)["diagnosis"], "UNKNOWN")
+
+        trusted = load_fixture("trusted-publish-tag-ref-regression.json")
+        trusted["input"]["tokenRef"] = "refs/heads/main"
+        trusted["input"]["sourceRef"] = "refs/heads/main"
+        self.assertEqual(diagnose(trusted)["diagnosis"], "UNKNOWN")
+
+        staging = load_fixture("clawpack-staging-gap.json")
+        staging["input"]["uploadTarget"] = "private-proxy"
+        self.assertEqual(diagnose(staging)["diagnosis"], "UNKNOWN")
+
+        staging = load_fixture("clawpack-staging-gap.json")
+        staging["input"]["registry"] = "https://private-proxy.example"
+        self.assertEqual(diagnose(staging)["diagnosis"], "UNKNOWN")
+
+        security = load_fixture("package-security-audit-fields-missing.json")
+        security["input"]["publicationStatus"] = "draft"
+        self.assertEqual(diagnose(security)["diagnosis"], "UNKNOWN")
+
+        security = load_fixture("package-security-audit-fields-missing.json")
+        security["input"]["securityReleaseVersion"] = "2.1.3"
+        self.assertEqual(diagnose(security)["diagnosis"], "UNKNOWN")
+
+        npm = load_fixture("npm-pack-json-shape.json")
+        npm["input"]["npm12"]["my-plugin"]["id"] = "other-plugin@9.9.9"
+        self.assertEqual(diagnose(npm)["diagnosis"], "UNKNOWN")
+
+        npm = load_fixture("npm-pack-json-shape.json")
+        npm["input"]["artifactFilename"] = "stale-artifact.tgz"
+        self.assertEqual(diagnose(npm)["diagnosis"], "UNKNOWN")
+
+    def test_versions_require_one_optional_v_prefix_and_exact_scope(self):
+        for fixture_name in (
+            "npm-pack-json-shape.json",
+            "bundle-native-manifest-contract.json",
+            "package-release-scan-stalled.json",
+        ):
+            fixture = load_fixture(fixture_name)
+            fixture["input"]["clawhubVersion"] = "vv0.23.1"
+            self.assertEqual(diagnose(fixture)["diagnosis"], "UNKNOWN")
+
+        stalled = load_fixture("package-release-scan-stalled.json")
+        stalled["input"]["clawhubVersion"] = "0.1.0"
+        self.assertEqual(diagnose(stalled)["diagnosis"], "UNKNOWN")
+
+        for noncanonical in ("00.23.1", "0.023.01", "v00.23.001"):
+            with self.subTest(clawhub_version=noncanonical):
+                stalled = load_fixture("package-release-scan-stalled.json")
+                stalled["input"]["clawhubVersion"] = noncanonical
+                self.assertEqual(diagnose(stalled)["diagnosis"], "UNKNOWN")
+
+        for noncanonical in ("012.x", "v012.0.0"):
+            with self.subTest(npm_version=noncanonical):
+                npm = load_fixture("npm-pack-json-shape.json")
+                npm["input"]["npmVersion"] = noncanonical
+                self.assertEqual(diagnose(npm)["diagnosis"], "UNKNOWN")
+
+    def test_security_error_names_the_exact_invalid_field(self):
+        fixture = load_fixture("package-security-audit-fields-missing.json")
+        fixture["input"]["reportedError"] = (
+            "Malformed ClawHub security response: expected overviewish "
+            "to be a non-empty string."
+        )
+        self.assertEqual(diagnose(fixture)["diagnosis"], "UNKNOWN")
+
     def test_conflicting_layers_without_failure_sequence_are_unknown(self):
         fixture = load_fixture("bundle-native-manifest-contract.json")
         fixture["input"].update(
@@ -660,7 +904,8 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                     "package-publish.yml@v0.23.3"
                 ),
                 "jobsCreated": 0,
-                "callerPermissions": {
+                "effectiveCallerPermissions": {
+                    "actions": "none",
                     "contents": "read",
                     "id-token": "write",
                 },
@@ -690,7 +935,8 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                     "package-publish.yml@v0.23.3"
                 ),
                 "jobsCreated": 0,
-                "callerPermissions": {
+                "effectiveCallerPermissions": {
+                    "actions": "none",
                     "contents": "read",
                     "id-token": "write",
                 },

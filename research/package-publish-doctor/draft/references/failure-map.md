@@ -12,7 +12,7 @@
 
 - GitHub 在创建 job 前拒绝 workflow
 - 错误明确包含 nested job 请求 `actions: read`
-- 调用方顶层没有 `actions: read`
+- 规范化的 effective permissions 明确为 `actions: none`
 
 最小修复：
 
@@ -33,7 +33,10 @@ permissions:
 - ordinary token 不含 `candidateSha`
 - `source.commit` 等于 token SHA
 - `source.ref` 等于 token 中已验证的 tag ref
+- token ref 与 source ref 都是 `refs/tags/...`
 - tag ref 与 commit SHA 字符串不同，服务端仍直接比较两者并拒绝
+- 拒绝阶段明确为 `source-validation`
+- 源码级复现结果明确为 `source-ref-mismatch`
 - 输入包含 source-validator commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720`
 - 该 commit 的源码比较证据明确为 `source.ref !== (candidateSha ?? token.sha)`
 
@@ -46,16 +49,18 @@ permissions:
 必须同时满足：
 
 - `npm pack` 已生成 tarball
+- 失败命令为 `clawhub package publish`
 - 输入的 ClawHub CLI 为 `0.23.1`
 - 输入的 npm 为 12.x
 - CLI 报 `npm pack did not return a tarball filename`
 - npm JSON 输出为包名到结果对象的映射，而不是旧数组
 - npm 11 数组与 npm 12 对象各自恰有一条结果
-- 两条结果都包含非空 `filename`，且值完全相同
+- 两条结果都包含非空且相同的 package `id` 与 `filename`
+- 实际存在的 `artifactFilename` 与两侧 `filename` 完全相同
 
 最小修复：
 
-- 优先升级到已确认兼容 npm 12 的正式 ClawHub CLI。
+- 优先升级到已确认兼容 npm 12 的正式 ClawHub CLI `v0.23.3+`。
 - 如果正式版本尚未确认，只在发布 job 内临时固定 npm 11。
 
 空输出、缺失/空白 `filename`、错误 entry 类型、多条结果或两侧
@@ -68,8 +73,9 @@ tarball，也不要全局降级开发机的 npm。
 
 - family 为 `bundle-plugin`
 - 输入的 ClawHub CLI 为 `0.23.3`
+- 文件观测明确为完整清单
 - 至少存在一个兼容 bundle marker
-- 根目录不存在 `openclaw.plugin.json`
+- 根目录清单不含 `openclaw.plugin.json`，且 manifest-present 状态为 false
 - CLI 报 `openclaw.plugin.json required`
 
 当前分类：`product-decision`。
@@ -81,10 +87,13 @@ tarball，也不要全局降级开发机的 npm。
 必须同时满足：
 
 - 输入的 workflow ref 为 `openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3`
-- 预构建 ClawPack 超过公共边缘预算
-- artifact 仍低于旧 staging 阈值
+- 归一化上传目标为 ClawHub public edge
+- registry 明确为 `https://clawhub.ai`
+- 预构建 ClawPack 超过规则内置的 4 MiB 公共边缘预算
+- artifact 仍低于规则内置的旧 18 MiB staging 阈值
 - 公共 registry 返回 `413 Request Entity Too Large`
 - 同一 artifact 的 Inspector 或本地验证明确成功
+- 上传与验证 hash 均为标准 `sha256:` 加 64 位十六进制
 - 成功验证记录中的 artifact hash 与上传失败 artifact 的 hash 完全一致
 
 当前版本事实：
@@ -100,9 +109,9 @@ tarball，也不要全局降级开发机的 npm。
 
 - 证据明确来自 `package` surface，而不是普通 Skill 发布
 - family 为 `bundle-plugin`
-- `clawhub@0.23.1` publish 已返回 release ID
+- 精确 `clawhub@0.23.1` publish 已返回 release ID
 - package scan 持续 pending 至少 24 小时
-- `latestRelease` 为空，指定版本无法 inspect
+- `latestRelease` 字段被明确观测为 null，指定版本无法 inspect
 - 同版本重新发布被 duplicate guard 拒绝
 
 当前分类：`fixed-in-release`，修复随 `v0.23.2` 发布。
@@ -114,10 +123,11 @@ tarball，也不要全局降级开发机的 npm。
 必须同时满足：
 
 - 证据来自精确版本的 code-plugin security endpoint
+- release 与 security endpoint 版本一致，且 publication status 为 `published`
 - trust verdict 为 clean，且 `blockedFromDownload`、`pending`、`stale` 均为 false
 - reasons 为空
 - `overview` 与 `securityAuditUrl` 均应为非空字符串，其中至少一个缺失、空白或类型错误
-- 安装器的 malformed-response 错误明确指向其中一个无效字段并要求非空字符串
+- 安装器的 malformed-response 错误以完整字段名明确指向其中一个无效字段并要求非空字符串
 - 对应修复已合并，但部署状态尚未独立验证
 
 当前分类：`fix-merged-deployment-unverified`。

@@ -4,10 +4,9 @@
   "input": {
     "surface": "package",
     "workflowRef": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3",
+    "uploadTarget": "clawhub-public-edge",
     "artifactBytes": 8032797,
     "artifactHash": "sha256:6e86efb9a9802dddc0f424707b0e44b7f8f67c0d61e39d885aa0bb812d24bdaf",
-    "publicEdgeBudgetBytes": 4194304,
-    "legacyStagingThresholdBytes": 18874368,
     "inspector": {
       "status": "success",
       "artifactHash": "sha256:6e86efb9a9802dddc0f424707b0e44b7f8f67c0d61e39d885aa0bb812d24bdaf"

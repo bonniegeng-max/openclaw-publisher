@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.8
+version: 0.1.9
 metadata:
   openclaw:
     os: [macos]
@@ -148,11 +148,38 @@ Treat these as evidence conflicts, not success:
 
 Do not bump a version merely to escape a stuck registry state. Do not create a fake native manifest to bypass a family contract.
 
-For `CLAWPACK_STAGING_GAP`, an Inspector or local-validation success only counts when its artifact hash exactly matches the artifact that received the 413. Missing validation, failed validation, or a different hash is insufficient for a high-confidence diagnosis.
+For `REUSABLE_WORKFLOW_ACTIONS_PERMISSION`, require normalized effective
+permissions with `actions: none`; do not infer effective permissions from a
+partial source YAML map.
 
-For `TRUSTED_PUBLISH_TAG_REF_REGRESSION`, require source-comparison evidence from source-validator commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720`, including the comparison of `source.ref` with `candidateSha ?? token.sha`. A bare `rejected: true` observation is insufficient.
+For `NPM_PACK_JSON_SHAPE`, bind the failing package command, matching npm 11/12
+package IDs and filenames, and the actual artifact filename.
 
-For `PACKAGE_SECURITY_AUDIT_FIELDS_MISSING`, both `overview` and `securityAuditUrl` are required to be non-empty strings. Treat either field as malformed when it is missing, blank, or not a string, but only match when the fail-closed error names an invalid field and the exact-release trust verdict is otherwise clean.
+For `BUNDLE_NATIVE_MANIFEST_CONTRACT`, require a complete file observation and
+reject contradictory evidence where `openclaw.plugin.json` is listed while the
+manifest-present flag is false.
+
+For `CLAWPACK_STAGING_GAP`, use the bundled 4 MiB public-edge and 18 MiB legacy
+staging constants, require the normalized public-edge target, and accept only a
+`sha256:` digest with 64 hexadecimal characters. Inspector or local-validation
+success only counts when its hash exactly matches the artifact that received
+the 413.
+
+For `TRUSTED_PUBLISH_TAG_REF_REGRESSION`, require a tag ref, the normalized
+`source-ref-mismatch` source-reproduction outcome, and source-comparison
+evidence from source-validator commit
+`845c6d3bdb1a36573d8d28be2a8fb85a3c476720`. A bare `rejected: true`
+observation is insufficient.
+
+For `PACKAGE_RELEASE_SCAN_STALLED`, only match the source-proven CLI `0.23.1`
+case and distinguish an explicitly observed `latestRelease: null` from a
+missing field.
+
+For `PACKAGE_SECURITY_AUDIT_FIELDS_MISSING`, bind the exact security endpoint
+to the same version with `publicationStatus: published`. Both `overview` and
+`securityAuditUrl` must be non-empty strings; only match when the fail-closed
+error names an invalid field at a token boundary and the exact-release trust
+verdict is otherwise clean.
 
 ### 5. Verify the repair
 

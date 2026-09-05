@@ -70,8 +70,11 @@ the next action is the smallest evidence addition, not a speculative repair.
 `observedContext` is empty for `UNKNOWN`. For a known diagnosis it may contain
 only fields used by that diagnosis, after value-format validation:
 
-- `clawhubVersion`: normalized to an exact three-part numeric version
-- `npmVersion`: normalized to `major.x`; prerelease/build metadata is discarded
+- `clawhubVersion`: exact three-part numeric version with at most one `v`
+  prefix and no redundant leading zeroes
+- `npmVersion`: accepts only `v?major.minor.patch` or `v?major.x`-style
+  normalized values without redundant leading zeroes and emits `major.x`;
+  prerelease/build metadata is rejected
 - `workflowRef`: only the built-in known workflow ref, normalized to
   `package-publish.yml@v0.23.3` so owner and repository are omitted
 - `family`: one of `skill`, `plugin`, `code-plugin`, or `bundle-plugin`

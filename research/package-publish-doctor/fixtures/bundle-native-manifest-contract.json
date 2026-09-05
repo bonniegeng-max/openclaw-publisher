@@ -5,6 +5,7 @@
     "surface": "package",
     "clawhubVersion": "0.23.3",
     "family": "bundle-plugin",
+    "filesObservationComplete": true,
     "files": [
       ".codex-plugin/plugin.json",
       ".claude-plugin/plugin.json",

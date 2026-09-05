@@ -12,15 +12,15 @@
   },
   "trustedControl": {
     "repository": "bonniegeng-max/openclaw-publisher",
-    "commit": null,
+    "commit": "956d79d8b31ed12f28db8d78ef6fb3cae1e3bea5",
     "files": [
       {
         "path": "scripts/check_skill_release_authorization.py",
-        "sha256": null
+        "sha256": "sha256:24ccc03d9533e77e78439459a17792e7a933c88c36d390a22970780d857c7477"
       },
       {
         "path": "scripts/validate_skill_catalog.py",
-        "sha256": null
+        "sha256": "sha256:d7deffd7f4bac8f0430ca8c4f3aeaa4c9eedc688a2a37718489ee5b04182e51d"
       }
     ]
   },

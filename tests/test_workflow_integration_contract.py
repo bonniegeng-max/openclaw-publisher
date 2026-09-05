@@ -114,8 +114,10 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         self.assertFalse(
             result["localEvidence"]["environmentConfigurationVerified"]
         )
+        self.assertTrue(
+            result["localEvidence"]["trustedControlAnchorVerified"]
+        )
         for gate in (
-            "trusted-control-anchor",
             "trusted-control-execution",
             "trusted-reusable-workflow",
             "trusted-clawhub-cli",
@@ -127,7 +129,7 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             with self.subTest(gate=gate):
                 self.assertIn(gate, result["blockingGates"])
 
-    def test_contract_uses_real_repository_and_no_fabricated_sha(self):
+    def test_contract_uses_verified_control_commit_and_no_future_fake_sha(self):
         contract = load_contract()
 
         self.assertEqual(
@@ -138,10 +140,14 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             contract["trustedControl"]["repository"],
             contract["targetRepository"],
         )
-        self.assertIsNone(contract["trustedControl"]["commit"])
+        self.assertRegex(
+            contract["trustedControl"]["commit"],
+            r"^[0-9a-f]{40}$",
+        )
         self.assertTrue(
             all(
-                item["sha256"] is None
+                isinstance(item["sha256"], str)
+                and item["sha256"].startswith("sha256:")
                 for item in contract["trustedControl"]["files"]
             )
         )

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "status": "observation-window-hold",
+  "observationNotBefore": "2026-09-12T10:45:38+00:00",
+  "incident": {
+    "failedSourceCommit": "77a4b1864655693b860f731dd2fd51e4c182cbd9",
+    "failedRunId": 33870318104,
+    "failedRunConclusion": "failure",
+    "failedStep": "Run skill publishes",
+    "failedAnnotation": "Process completed with exit code 1.",
+    "repairSourceCommit": "0a6ca43cc0ae519b5a6db6c601c11589a3fd2b2f",
+    "repairRunId": 33871495707,
+    "repairRunConclusion": "success"
+  },
+  "repositoryEvidence": {
+    "workflowPath": ".github/workflows/clawhub-skill-publish-local.yml",
+    "statusMapping": {
+      "pending-publication": "pendingPublication",
+      "published": "published",
+      "unchanged": "alreadySynced",
+      "would-publish": "wouldPublish"
+    },
+    "jobFailureCondition": "failed array is non-empty"
+  },
+  "evidenceLimits": {
+    "failedArtifactPayloadAvailableInRepository": false,
+    "exactFailedCliPayloadProven": false,
+    "registryLatestProvenByThisFixture": false,
+    "moderationCleanProvenByThisFixture": false,
+    "independentInstallProvenByThisFixture": false
+  },
+  "diagnosis": {
+    "layer": "workflow-result-classification",
+    "finding": "The repair explicitly separated pending-publication from failed results.",
+    "confidence": "high",
+    "releaseEvidenceLevel": "E2-only-after-repair-run"
+  },
+  "requiredVerification": [
+    "Inspect the exact slug and version in the registry.",
+    "Require moderation.verdict to be clean.",
+    "Install the exact changed version once in isolation.",
+    "Compare installed core files with the GitHub source commit.",
+    "Record validation traffic before making growth claims."
+  ],
+  "forbiddenClaims": [
+    "The failed run payload is known.",
+    "The version was publicly indexed based on the workflow result alone.",
+    "The version was downloadable based on the workflow result alone.",
+    "The run proves natural adoption or user growth."
+  ]
+}

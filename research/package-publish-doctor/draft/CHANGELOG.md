@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11 - 2026-09-05
+
+- 将输出中的 `source` 从调用者自担脱敏改为 fail-closed 安全归一化。
+- 只保留固定脱敏标签、ClawHub 官方公开 issue 和本仓库公开 Actions run 的规范 HTTPS 引用。
+- 带 userinfo、query、fragment、非 HTTPS、私有或未知 host/repository、任意文本和非法 Unicode 的来源统一输出为 `null`。
+- 增加安全来源保留与潜在秘密来源拒绝测试，诊断匹配逻辑保持不变。
+
 ## 0.1.10 - 2026-09-05
 
 - 为七条高置信规则增加运行时必要字段目录，使规则实现与 mutation 合同共享同一组可审计证据路径。

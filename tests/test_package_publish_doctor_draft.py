@@ -56,7 +56,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.10")
+        self.assertEqual(values["version"], "0.1.11")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))
@@ -145,6 +145,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
         self.assertTrue(result["verificationSteps"])
         self.assertTrue(result["doNotClaim"])
         self.assertEqual(result["caseId"], "anonymous-workflow-startup-failure")
+        self.assertEqual(result["source"], "redacted local observation")
 
     def test_wrapper_and_canonical_cli_outputs_are_identical(self):
         outputs = []

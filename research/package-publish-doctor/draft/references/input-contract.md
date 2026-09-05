@@ -9,7 +9,7 @@ resources.
 | Field | Type | Required | Meaning |
 |---|---|---:|---|
 | `id` | string | recommended | Caller-defined case identifier copied to `caseId`. |
-| `source` | string | no | Optional redacted evidence reference copied to output. |
+| `source` | string | no | Optional evidence reference retained only when it matches the safe source allowlist. |
 | `input` | object | yes | Normalized observations used by rules. |
 | `expected` | object | no | Fixture-only assertions; never used for matching. |
 | `affected` | any | no | Ignored. Caller claims cannot change rule applicability. |
@@ -49,7 +49,7 @@ The command writes one JSON object to stdout with this complete schema:
 | `verificationSteps` | array of strings | Ordered, diagnosis-specific checks. |
 | `doNotClaim` | array of strings | Claims not supported by the current evidence. |
 | `missingEvidence` | array of strings | Empty for a match; exactly one smallest next fact for `UNKNOWN`. |
-| `source` | string or null | Copy of a non-empty, caller-redacted string `source`; otherwise `null`. |
+| `source` | string or null | Safe normalized evidence reference; otherwise `null`. |
 
 Every known diagnosis has deterministic `conclusion`, `rejectedShortcuts`,
 `verificationSteps`, and `doNotClaim` values bundled with the rule. The current
@@ -112,9 +112,22 @@ The error does not echo the input path and does not include a Python traceback.
 Argument parsing failures that occur before an input path is accepted remain
 standard `argparse` errors.
 
-Caller-provided `id` and `source` strings that cannot be encoded as UTF-8,
-including isolated Unicode surrogates, are omitted as `null`; they cannot break
-JSON serialization or expose a traceback.
+Caller-provided `id` strings that cannot be encoded as UTF-8, including
+isolated Unicode surrogates, are omitted as `null`; they cannot break JSON
+serialization or expose a traceback.
+
+`source` is fail-closed. The command retains only:
+
+- the exact local label `redacted local observation`
+- canonical HTTPS issue URLs under `github.com/openclaw/clawhub/issues/<id>`
+- canonical HTTPS Actions run URLs under
+  `github.com/bonniegeng-max/openclaw-publisher/actions/runs/<id>`
+
+The URL must not contain userinfo, a query string, or a fragment. HTTP URLs,
+private or unknown hosts and repositories, arbitrary text, malformed URLs,
+and unencodable strings are emitted as `null`. The command does not attempt
+to strip suspected secrets and keep the remainder, because partial
+normalization can preserve sensitive path or parameter data.
 
 ## Offline and safety boundary
 

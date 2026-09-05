@@ -7,6 +7,7 @@ import math
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 BUNDLE_MARKERS = {
@@ -69,6 +70,13 @@ COMMIT_CONTEXT_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
 SAFE_WORKFLOW_CONTEXT = {
     PACKAGE_PUBLISH_WORKFLOW_REF: "package-publish.yml@v0.23.3",
 }
+SAFE_SOURCE_LABELS = frozenset({"redacted local observation"})
+SAFE_SOURCE_PATH_PATTERNS = (
+    re.compile(r"^/openclaw/clawhub/issues/[1-9]\d*$"),
+    re.compile(
+        r"^/bonniegeng-max/openclaw-publisher/actions/runs/[1-9]\d*$"
+    ),
+)
 OBSERVED_CONTEXT_BY_DIAGNOSIS = {
     "TRUSTED_PUBLISH_TAG_REF_REGRESSION": {
         "sourceValidatorCommit",
@@ -290,6 +298,30 @@ def _optional_string(value):
     return value
 
 
+def _safe_source(value):
+    value = _optional_string(value)
+    if value is None:
+        return None
+    if value in SAFE_SOURCE_LABELS:
+        return value
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "github.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    if not any(pattern.fullmatch(parsed.path) for pattern in SAFE_SOURCE_PATH_PATTERNS):
+        return None
+    return value
+
+
 def _normalized_context_value(field, value):
     if not _is_non_empty_string(value):
         return None
@@ -340,7 +372,7 @@ def _result(case, diagnosis, layer, evidence, recommendation, version_status):
         "verificationSteps": list(guidance["verificationSteps"]),
         "doNotClaim": list(guidance["doNotClaim"]),
         "missingEvidence": [],
-        "source": _optional_string(case.get("source")),
+        "source": _safe_source(case.get("source")),
     }
 
 
@@ -371,7 +403,7 @@ def _unknown(case, missing_evidence, evidence=None):
             "不得声称 package 已发布、可安装或已验证。",
         ],
         "missingEvidence": minimum_evidence,
-        "source": _optional_string(case.get("source")),
+        "source": _safe_source(case.get("source")),
     }
 
 

@@ -346,6 +346,41 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertIsNone(result["caseId"])
         self.assertIsNone(result["source"])
 
+    def test_known_public_sources_are_preserved(self):
+        for path in sorted(FIXTURES.glob("*.json")):
+            with self.subTest(fixture=path.name):
+                fixture = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    diagnose(fixture)["source"],
+                    fixture["source"],
+                )
+
+    def test_unsafe_source_references_are_omitted(self):
+        unsafe_sources = (
+            "https://github.com/openclaw/clawhub/issues/3275?token=secret",
+            "https://github.com/openclaw/clawhub/issues/3275#private",
+            "https://user:secret@github.com/openclaw/clawhub/issues/3275",
+            "http://github.com/openclaw/clawhub/issues/3275",
+            "https://private.example.invalid/evidence",
+            "https://github.com/private-owner/private-repo/issues/1",
+            "Bearer secret",
+            "redacted local observation secret",
+        )
+        for source in unsafe_sources:
+            with self.subTest(source=source):
+                fixture = load_fixture("reusable-workflow-actions-read.json")
+                fixture["source"] = source
+                self.assertIsNone(diagnose(fixture)["source"])
+
+    def test_only_exact_safe_local_source_label_is_preserved(self):
+        fixture = load_fixture("reusable-workflow-actions-read.json")
+        fixture["source"] = "redacted local observation"
+
+        self.assertEqual(
+            diagnose(fixture)["source"],
+            "redacted local observation",
+        )
+
     def test_workflow_context_omits_owner_and_repository(self):
         fixture = load_fixture("reusable-workflow-actions-read.json")
 

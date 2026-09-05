@@ -133,6 +133,24 @@ catalog：
 `pending` 或 `blocked-until-not-before` 闸门存在时，都不能据此创建正式
 目录、加入 catalog 或声明可下载。
 
+离线检查合同：
+
+```bash
+python3 research/package-publish-doctor/check_promotion_contract.py
+```
+
+默认模式在合同结构有效时退出 `0`，并用 `complete: false` 和
+`blockingGates` 报告尚未满足的闸门，适合观察期内审计。正式发布流程使用：
+
+```bash
+python3 research/package-publish-doctor/check_promotion_contract.py \
+  --require-complete
+```
+
+此模式在任何必需闸门未完成时退出 `1`，合同或本地证据无效时退出 `2`。
+检查器只读取本地文件，不联网、不修改 catalog、不执行 dry-run、publish
+或安装。
+
 ## 启动门槛
 
 只有同时满足以下条件，才把研究包升级为正式 Skill：

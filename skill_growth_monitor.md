@@ -109,14 +109,15 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 巡检采样规则
 
-- 完整周检优先运行 `python3 scripts/run_clawhub_growth_monitor.py`，避免两类快照只更新一半。
+- 完整周检只运行 `python3 scripts/run_clawhub_growth_monitor.py`，避免绕过观察闸门或只更新一半快照。
 - `metrics/observation-policy.json` 将首次允许采样时间锁定为 `2026-09-12T10:45:38+00:00`；在此之前，常规入口即使没有历史快照也必须零请求退出。
 - 默认 144 小时防重复门槛不得在常规周检中绕过；`--force` 仅用于明确的版本或审核异常复核。
-- 常规采样优先运行 `python3 scripts/collect_clawhub_metrics.py`，生成只读 JSON 快照。
+- 两个 `collect_clawhub_*.py` 采集器是内部子命令，必须验证统一入口签发的短时能力；不得直接运行。
+- 能力绑定本轮父进程、采集器和暂存输出路径，并在调用 ClawHub CLI 前从环境中移除；它只防误调用，不是本机恶意调用防线。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。
 - 统一入口生成 `clawhub-growth-decision.json` 与 Markdown 报告；只有指标和搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，组合结果才允许进入加码、合并或停更判断。
 - 前次与当前两组指标/搜索快照必须分别来自同一观察轮次，采集时间差均不得超过 15 分钟；超出时按跨轮次误拼处理，只能修复数据质量。
-- 搜索排名使用 `python3 scripts/collect_clawhub_search_visibility.py` 按 `metrics/search-queries.json` 每轮各查询一次。
+- 搜索排名由统一入口按 `metrics/search-queries.json` 每轮各查询一次。
 - 周检先读取 `inspect` 和搜索结果，不重复安装未变化的版本。
 - 只有 latest 变化、moderation 异常、公开文件缺失或用户明确要求时，才执行一次隔离安装。
 - 主动 dry-run、inspect、install 和工作流核验都要记录时间，避免与自然指标混为一谈。

@@ -4,6 +4,8 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "collect_clawhub_metrics.py"
@@ -59,7 +61,10 @@ class CollectClawHubMetricsTests(unittest.TestCase):
             "moderation": {"verdict": "clean"},
         }
 
+        observed_environment = {}
+
         def fake_runner(*args, **kwargs):
+            observed_environment.update(kwargs["env"])
             return subprocess.CompletedProcess(
                 args=args[0],
                 returncode=0,
@@ -67,17 +72,32 @@ class CollectClawHubMetricsTests(unittest.TestCase):
                 stderr="",
             )
 
-        result = MODULE.inspect_skill(
-            "clawhub",
-            "example-skill",
-            10,
-            runner=fake_runner,
-        )
+        with mock.patch.dict(
+            MODULE.os.environ,
+            {
+                "OPENCLAW_MONITOR_CAPABILITY_FILE": "/private/context.json",
+                "OPENCLAW_MONITOR_CAPABILITY_TOKEN": "secret-token",
+            },
+        ):
+            result = MODULE.inspect_skill(
+                "clawhub",
+                "example-skill",
+                10,
+                runner=fake_runner,
+            )
 
         self.assertEqual(result["slug"], "example-skill")
         self.assertEqual(result["latestVersion"], "1.2.0")
         self.assertEqual(result["moderation"], "clean")
         self.assertEqual(result["stats"]["downloads"], 12)
+        self.assertNotIn(
+            "OPENCLAW_MONITOR_CAPABILITY_FILE",
+            observed_environment,
+        )
+        self.assertNotIn(
+            "OPENCLAW_MONITOR_CAPABILITY_TOKEN",
+            observed_environment,
+        )
 
     def test_inspect_skill_surfaces_cli_failure(self):
         def fake_runner(*args, **kwargs):
@@ -156,6 +176,28 @@ class CollectClawHubMetricsTests(unittest.TestCase):
                 json.loads(previous.read_text(encoding="utf-8")),
                 {"collectedAt": "stable"},
             )
+
+    def test_main_rejects_direct_invocation_before_collection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "latest.json"
+            args = SimpleNamespace(
+                catalog=root / "catalog.json",
+                output=output,
+                previous_output=root / "previous.json",
+                clawhub_bin="clawhub",
+                timeout=10,
+            )
+            with (
+                mock.patch.object(MODULE, "parse_args", return_value=args),
+                mock.patch.object(MODULE, "build_snapshot") as build_snapshot,
+                mock.patch.dict(MODULE.os.environ, {}, clear=True),
+            ):
+                result = MODULE.main()
+
+            self.assertEqual(result, 1)
+            build_snapshot.assert_not_called()
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

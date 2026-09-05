@@ -4,6 +4,8 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 
 SCRIPT = (
@@ -127,7 +129,10 @@ class CollectClawHubSearchVisibilityTests(unittest.TestCase):
             MODULE.parse_search_output("unexpected output")
 
     def test_collect_query_records_target_rank(self):
+        observed_environment = {}
+
         def fake_runner(*args, **kwargs):
+            observed_environment.update(kwargs["env"])
             return subprocess.CompletedProcess(
                 args=args[0],
                 returncode=0,
@@ -138,16 +143,33 @@ class CollectClawHubSearchVisibilityTests(unittest.TestCase):
                 stderr="",
             )
 
-        result = MODULE.collect_query(
-            "clawhub",
-            {"slug": "alpha", "query": "alpha query", "limit": 20},
-            timeout=10,
-            runner=fake_runner,
-        )
+        with mock.patch.dict(
+            MODULE.os.environ,
+            {
+                "OPENCLAW_MONITOR_CAPABILITY_FILE": "/private/context.json",
+                "OPENCLAW_MONITOR_CAPABILITY_TOKEN": "secret-token",
+            },
+        ):
+            result = MODULE.collect_query(
+                "clawhub",
+                {"slug": "alpha", "query": "alpha query", "limit": 20},
+                timeout=10,
+                runner=fake_runner,
+            )
 
         self.assertEqual(result["rank"], 2)
         self.assertTrue(result["visible"])
         self.assertEqual(result["resultCount"], 2)
+        self.assertEqual(observed_environment["NO_COLOR"], "1")
+        self.assertEqual(observed_environment["FORCE_COLOR"], "0")
+        self.assertNotIn(
+            "OPENCLAW_MONITOR_CAPABILITY_FILE",
+            observed_environment,
+        )
+        self.assertNotIn(
+            "OPENCLAW_MONITOR_CAPABILITY_TOKEN",
+            observed_environment,
+        )
 
     def test_collect_query_surfaces_cli_failure(self):
         def fake_runner(*args, **kwargs):
@@ -219,6 +241,29 @@ class CollectClawHubSearchVisibilityTests(unittest.TestCase):
                     ["clawhub", "search", "alpha", "--limit", "5"],
                 ],
             )
+
+    def test_main_rejects_direct_invocation_before_collection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "latest.json"
+            args = SimpleNamespace(
+                queries=root / "queries.json",
+                catalog=root / "catalog.json",
+                output=output,
+                previous_output=root / "previous.json",
+                clawhub_bin="clawhub",
+                timeout=10,
+            )
+            with (
+                mock.patch.object(MODULE, "parse_args", return_value=args),
+                mock.patch.object(MODULE, "build_snapshot") as build_snapshot,
+                mock.patch.dict(MODULE.os.environ, {}, clear=True),
+            ):
+                result = MODULE.main()
+
+            self.assertEqual(result, 1)
+            build_snapshot.assert_not_called()
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

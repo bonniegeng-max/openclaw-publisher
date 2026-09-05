@@ -1,26 +1,28 @@
 # ClawHub 指标快照
 
-`scripts/collect_clawhub_metrics.py` 只调用 `clawhub inspect --json`，不会下载或安装 Skill。
-
-运行：
+唯一受支持的在线采集入口是：
 
 ```bash
-python3 scripts/collect_clawhub_metrics.py
+python3 scripts/run_clawhub_growth_monitor.py
 ```
+
+统一入口内部使用 `scripts/collect_clawhub_metrics.py` 调用 `clawhub inspect --json`，并使用 `scripts/collect_clawhub_search_visibility.py` 执行只读搜索；两者都不会下载或安装 Skill。内部采集器需要由统一入口签发短时能力，且能力绑定当前父进程、脚本名和本轮暂存输出路径；直接执行会在任何 ClawHub 请求和文件写入前失败。这个边界用于防止误操作，不用于抵御同一主机上的恶意调用者。
 
 默认输出：
 
 ```text
 metrics/clawhub-latest.json
+metrics/clawhub-search-latest.json
 ```
 
-下一次成功采集会先把旧的 latest 快照保存为：
+下一次成功采集会把旧的 latest 快照保存为：
 
 ```text
 metrics/clawhub-previous.json
+metrics/clawhub-search-previous.json
 ```
 
-任何一个 Skill 查询失败时，latest 和 previous 都不会轮换。
+任何一个 Skill 或搜索查询失败时，latest 和 previous 都不会轮换。
 
 快照包含：
 
@@ -83,11 +85,7 @@ latest、previous 和默认 Markdown 报告均为本地观察产物，已从 Git
 
 ## 搜索可见性
 
-`metrics/search-queries.json` 为每个已发布 Skill 保存一条真实任务查询。采集器会先确认查询配置与 catalog 的 slug 集合完全一致，再逐条执行只读搜索：
-
-```bash
-python3 scripts/collect_clawhub_search_visibility.py
-```
+`metrics/search-queries.json` 为每个已发布 Skill 保存一条真实任务查询。统一入口的内部采集器会先确认查询配置与 catalog 的 slug 集合完全一致，再逐条执行只读搜索。
 
 默认输出并自动轮换：
 
@@ -113,7 +111,7 @@ python3 scripts/compare_clawhub_metrics.py \
 
 ## 统一周检入口
 
-推荐使用统一入口完成两类采集：
+必须使用统一入口完成两类采集：
 
 ```bash
 python3 scripts/run_clawhub_growth_monitor.py

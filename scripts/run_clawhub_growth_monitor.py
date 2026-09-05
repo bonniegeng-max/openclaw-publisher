@@ -5,12 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+try:
+    from clawhub_monitor_capability import create_monitor_capability_env
+except ModuleNotFoundError:
+    from scripts.clawhub_monitor_capability import create_monitor_capability_env
 
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
@@ -23,14 +29,18 @@ def run_child(
     command: list[str],
     timeout: int,
     runner: RunCommand,
+    *,
+    env: dict[str, str] | None = None,
 ) -> None:
-    completed = runner(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    options: dict[str, Any] = {
+        "capture_output": True,
+        "text": True,
+        "timeout": timeout,
+        "check": False,
+    }
+    if env is not None:
+        options["env"] = env
+    completed = runner(command, **options)
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip()
         raise RuntimeError(f"子命令失败：{' '.join(command)}：{message}")
@@ -452,6 +462,20 @@ def run_monitor(
         staged_search_report = staging / "search-report.md"
         staged_metrics_comparison = staging / "metrics-comparison.json"
         staged_search_comparison = staging / "search-comparison.json"
+        collector_environment = create_monitor_capability_env(
+            staging / ".collector-capability.json",
+            os.getpid(),
+            {
+                scripts / "collect_clawhub_metrics.py": (
+                    staged_metrics,
+                    staging / "unused-metrics-previous.json",
+                ),
+                scripts / "collect_clawhub_search_visibility.py": (
+                    staged_search,
+                    staging / "unused-search-previous.json",
+                ),
+            },
+        )
 
         run_child(
             [
@@ -470,6 +494,7 @@ def run_monitor(
             ],
             timeout * 10,
             runner,
+            env=collector_environment,
         )
         run_child(
             [
@@ -490,6 +515,7 @@ def run_monitor(
             ],
             timeout * 10,
             runner,
+            env=collector_environment,
         )
 
         new_metrics = read_json_object(staged_metrics)

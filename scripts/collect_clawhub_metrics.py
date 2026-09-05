@@ -1,16 +1,28 @@
 #!/usr/bin/env python3
-"""Collect a passive ClawHub portfolio snapshot without installing skills."""
+"""统一增长监控入口使用的内部 ClawHub 指标采集器。"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+try:
+    from clawhub_monitor_capability import (
+        sanitized_environment,
+        validate_collector_capability,
+    )
+except ModuleNotFoundError:
+    from scripts.clawhub_monitor_capability import (
+        sanitized_environment,
+        validate_collector_capability,
+    )
 
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
@@ -45,6 +57,7 @@ def inspect_skill(
         text=True,
         timeout=timeout,
         check=False,
+        env=sanitized_environment(),
     )
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip()
@@ -131,7 +144,10 @@ def write_snapshot_with_previous(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Collect ClawHub metrics without downloading or installing skills."
+        description=(
+            "统一增长监控入口使用的内部指标采集器；"
+            "请运行 run_clawhub_growth_monitor.py。"
+        )
     )
     parser.add_argument(
         "--catalog",
@@ -168,6 +184,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        validate_collector_capability(
+            Path(__file__),
+            args.output,
+            args.previous_output,
+            environment=os.environ,
+        )
         snapshot = build_snapshot(
             catalog_path=args.catalog,
             clawhub_bin=args.clawhub_bin,

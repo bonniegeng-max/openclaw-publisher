@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""采集 ClawHub 搜索可见性，不下载或安装 Skill。"""
+"""统一增长监控入口使用的内部 ClawHub 搜索采集器。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,17 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+try:
+    from clawhub_monitor_capability import (
+        sanitized_environment,
+        validate_collector_capability,
+    )
+except ModuleNotFoundError:
+    from scripts.clawhub_monitor_capability import (
+        sanitized_environment,
+        validate_collector_capability,
+    )
 
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
@@ -151,7 +162,11 @@ def run_cli(
     timeout: int,
     runner: RunCommand,
 ) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "NO_COLOR": "1", "FORCE_COLOR": "0"}
+    env = {
+        **sanitized_environment(),
+        "NO_COLOR": "1",
+        "FORCE_COLOR": "0",
+    }
     completed = runner(
         args,
         capture_output=True,
@@ -263,7 +278,10 @@ def write_snapshot_with_previous(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="采集 ClawHub 搜索可见性，不下载或安装 Skill。"
+        description=(
+            "统一增长监控入口使用的内部搜索采集器；"
+            "请运行 run_clawhub_growth_monitor.py。"
+        )
     )
     parser.add_argument(
         "--queries",
@@ -302,6 +320,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        validate_collector_capability(
+            Path(__file__),
+            args.output,
+            args.previous_output,
+            environment=os.environ,
+        )
         snapshot = build_snapshot(
             query_path=args.queries,
             catalog_path=args.catalog,

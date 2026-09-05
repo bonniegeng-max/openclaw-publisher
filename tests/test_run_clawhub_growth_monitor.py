@@ -1,10 +1,13 @@
 import importlib.util
 import json
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "run_clawhub_growth_monitor.py"
@@ -81,9 +84,11 @@ class FakeRunner:
             "search": ("eligible", True),
         }
         self.commands = []
+        self.invocations = []
 
     def __call__(self, command, **kwargs):
         self.commands.append(command)
+        self.invocations.append((command, kwargs))
         script = Path(command[1]).name
         if script == self.fail_on:
             return subprocess.CompletedProcess(
@@ -246,13 +251,88 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             self.assertFalse(result["decisionReady"])
             self.assertEqual(len(runner.commands), 2)
 
-    def test_first_run_before_observation_window_is_skipped(self):
+    def test_real_subprocess_collectors_accept_only_issued_capability(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            write_observation_policy(root)
-            runner = FakeRunner()
+            scripts = root / "scripts"
+            scripts.mkdir()
+            source_scripts = SCRIPT.parent
+            for name in (
+                "clawhub_monitor_capability.py",
+                "collect_clawhub_metrics.py",
+                "collect_clawhub_search_visibility.py",
+            ):
+                (scripts / name).symlink_to(source_scripts / name)
+
+            write_json(
+                root / ".clawhub" / "skill-catalog.json",
+                {"skills/alpha": {}},
+            )
+            write_json(
+                root / "metrics" / "search-queries.json",
+                {
+                    "schemaVersion": 1,
+                    "queries": [
+                        {"slug": "alpha", "query": "alpha", "limit": 5}
+                    ],
+                },
+            )
+            fake_clawhub = root / "fake-clawhub"
+            fake_clawhub.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import json",
+                        "import sys",
+                        "if sys.argv[1:] == ['--cli-version']:",
+                        "    print('0.23.3')",
+                        "elif sys.argv[1:3] == ['inspect', 'alpha']:",
+                        "    print(json.dumps({",
+                        "        'skill': {'slug': 'alpha', 'stats': {}},",
+                        "        'latestVersion': {'version': '1.0.0'},",
+                        "        'moderation': {'verdict': 'clean'},",
+                        "    }))",
+                        "elif sys.argv[1:3] == ['search', 'alpha']:",
+                        "    print('alpha v1.0.0  @owner  Alpha  score 0.900')",
+                        "else:",
+                        "    raise SystemExit(2)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            os.chmod(fake_clawhub, 0o755)
 
             result = MODULE.run_monitor(
+                root,
+                python_bin=sys.executable,
+                clawhub_bin=str(fake_clawhub),
+                timeout=10,
+                now=NOW,
+            )
+
+            self.assertFalse(result["skipped"])
+            self.assertEqual(result["metricsCollectedAt"][:4], "2026")
+            self.assertEqual(result["searchCollectedAt"][:4], "2026")
+            self.assertTrue(
+                (root / "metrics" / "clawhub-latest.json").exists()
+            )
+            self.assertTrue(
+                (root / "metrics" / "clawhub-search-latest.json").exists()
+            )
+
+    def test_collectors_share_capability_but_compare_does_not_receive_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(OLD_TIME))
+            write_json(
+                metrics / "clawhub-search-latest.json",
+                search_snapshot(OLD_TIME),
+            )
+            runner = FakeRunner()
+
+            MODULE.run_monitor(
                 root,
                 python_bin="python3",
                 clawhub_bin="clawhub",
@@ -260,6 +340,53 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                 now=NOW,
                 runner=runner,
             )
+
+            self.assertEqual(len(runner.invocations), 4)
+            collector_environments = [
+                runner.invocations[index][1]["env"] for index in (0, 1)
+            ]
+            self.assertEqual(
+                collector_environments[0][
+                    "OPENCLAW_MONITOR_CAPABILITY_FILE"
+                ],
+                collector_environments[1][
+                    "OPENCLAW_MONITOR_CAPABILITY_FILE"
+                ],
+            )
+            self.assertEqual(
+                collector_environments[0][
+                    "OPENCLAW_MONITOR_CAPABILITY_TOKEN"
+                ],
+                collector_environments[1][
+                    "OPENCLAW_MONITOR_CAPABILITY_TOKEN"
+                ],
+            )
+            for command, options in runner.invocations[:2]:
+                token = options["env"][
+                    "OPENCLAW_MONITOR_CAPABILITY_TOKEN"
+                ]
+                self.assertNotIn(token, command)
+            for _, options in runner.invocations[2:]:
+                self.assertNotIn("env", options)
+
+    def test_first_run_before_observation_window_is_skipped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_observation_policy(root)
+            runner = FakeRunner()
+
+            with mock.patch.object(
+                MODULE,
+                "create_monitor_capability_env",
+            ) as create_capability:
+                result = MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=runner,
+                )
 
             self.assertTrue(result["skipped"])
             self.assertEqual(result["notBefore"], OBSERVATION_END)
@@ -269,6 +396,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                 "wait-for-next-window",
             )
             self.assertEqual(runner.commands, [])
+            create_capability.assert_not_called()
             self.assertFalse((root / "metrics" / "clawhub-latest.json").exists())
 
     def test_first_run_at_observation_boundary_proceeds(self):
@@ -417,6 +545,13 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             )
             self.assertFalse((metrics / "clawhub-previous.json").exists())
             self.assertFalse((metrics / "clawhub-search-previous.json").exists())
+            self.assertEqual(
+                [Path(command[1]).name for command in runner.commands],
+                [
+                    "collect_clawhub_metrics.py",
+                    "collect_clawhub_search_visibility.py",
+                ],
+            )
 
     def test_comparison_failure_preserves_existing_baseline(self):
         with tempfile.TemporaryDirectory() as directory:

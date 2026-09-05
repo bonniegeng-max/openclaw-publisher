@@ -202,13 +202,15 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 
 ## 被动指标采集
 
-常规观察不再安装未变化版本。使用只读采集器从 catalog 自动发现所有 Skill，并通过 `clawhub inspect --json` 生成统一快照：
+常规观察不再安装未变化版本。唯一受支持的在线采集入口是统一监控器：
 
 ```bash
-python3 scripts/collect_clawhub_metrics.py
+python3 scripts/run_clawhub_growth_monitor.py
 ```
 
-默认输出到 `metrics/clawhub-latest.json`，并在下一次成功采集时将旧快照保留为 `metrics/clawhub-previous.json`。脚本会记录采集方法、`activeInstall: false` 和数据边界，任何一个 Skill 查询失败时都不会轮换或写入不完整快照。
+它会从 catalog 自动发现所有 Skill，通过 `clawhub inspect --json` 生成采用指标快照，并按受版本控制的查询清单采集搜索可见性。两个 `collect_clawhub_*.py` 文件是统一入口的内部子命令，会校验短时、单轮且绑定暂存输出的能力上下文；直接运行会在任何 ClawHub 请求和文件写入前拒绝。该能力只用于防止误调用，不构成同一主机恶意调用者的安全边界。
+
+默认输出到 `metrics/clawhub-latest.json` 与 `metrics/clawhub-search-latest.json`，并在下一次成功采集时保留 previous。快照会记录采集方法、`activeInstall: false` 和数据边界；任何一个 Skill 或搜索查询失败时都不会轮换或写入不完整快照。
 
 保留两个不同时间的快照后，可在本地生成差异报告，不再访问 ClawHub：
 
@@ -221,21 +223,9 @@ python3 scripts/compare_clawhub_metrics.py \
 
 对比器把版本变化、非 `clean` moderation、Skill 消失和计数回退标为验证事项。downloads、installs 与 stars 的正向变化只记录为观察信号，不自动解释为自然增长；只有同口径、无主动安装且间隔至少 7 天的快照才标记为可进入增长决策。
 
-搜索可见性使用独立的只读采集器，并由受版本控制的真实任务查询清单驱动：
-
-```bash
-python3 scripts/collect_clawhub_search_visibility.py
-```
-
-脚本会确认查询配置完整覆盖 catalog 中的全部 Skill，再记录目标 Skill 的当前排名和同页结果。任何查询或输出解析失败时都不会写入部分快照。
+搜索可见性由统一入口内部调用的只读采集器完成，并由受版本控制的真实任务查询清单驱动。它会确认查询配置完整覆盖 catalog 中的全部 Skill，再记录目标 Skill 的当前排名和同页结果；任何查询或输出解析失败时都不会写入部分快照。
 
 同一个离线对比器会自动识别搜索快照，输出 `up`、`down`、`gained`、`lost` 或 `unchanged`；查询配置发生变化时拒绝把两轮排名当作可比证据。
-
-完整周检使用统一入口：
-
-```bash
-python3 scripts/run_clawhub_growth_monitor.py
-```
 
 它会先在临时目录完成两类采集、Markdown 差异报告和机器可读 JSON 对比结果，全部成功后再将 latest、previous、差异报告和组合闸门作为一个可回滚输出集合提交。任一采集、对比或正式文件替换失败时，现有完整基线都会恢复。
 

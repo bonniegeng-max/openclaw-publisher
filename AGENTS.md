@@ -126,6 +126,7 @@ git diff --check
 
 - 本地 `HEAD` 与 `origin/main` 一致
 - 对应 GitHub Actions 运行完成且成功
+- 检查 Actions annotations；运行时弃用或权限警告不能仅因结论为 success 而忽略
 - 若改动触发 ClawHub 发布，再按 E0-E4 逐级验收
 
 ## 通知规则

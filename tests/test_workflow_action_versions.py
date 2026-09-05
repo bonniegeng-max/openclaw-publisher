@@ -33,6 +33,15 @@ class WorkflowActionVersionTests(unittest.TestCase):
             references,
         )
 
+    def test_plugin_publish_grants_reusable_workflow_actions_read(self):
+        workflow = (WORKFLOWS / "clawhub-plugin-publish.yml").read_text(
+            encoding="utf-8"
+        )
+        permissions_block = workflow.split("permissions:", 1)[1].split(
+            "concurrency:", 1
+        )[0]
+        self.assertIn("actions: read", permissions_block)
+
 
 if __name__ == "__main__":
     unittest.main()

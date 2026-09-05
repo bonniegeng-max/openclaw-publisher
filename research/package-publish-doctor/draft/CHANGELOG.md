@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.14 - 2026-09-05
+
+- 修正 bundle manifest 示例遗漏 `clawhubVersion` 的输出漂移。
+- 增加由真实 fixtures 和 canonical 诊断器反向校验三个 Markdown 示例的合同测试。
+- 对示例中的 diagnosis、conclusion、layer、confidence、versionStatus 和完整 `observedContext` 建立同步门禁。
+
 ## 0.1.13 - 2026-09-05
 
 - 删除与离线诊断任务无关的 macOS 限制、Git/ClawHub 二进制要求和 ClawHub CLI 安装声明。

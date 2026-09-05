@@ -188,7 +188,7 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         frontmatter = skill.split("---", 2)[1]
         metadata = frontmatter.split("metadata:", 1)[1]
 
-        self.assertIn("version: 0.1.13", frontmatter)
+        self.assertIn("version: 0.1.14", frontmatter)
         self.assertIn("        - python3", metadata)
         self.assertNotIn("    os:", metadata)
         self.assertNotIn("        - git", metadata)
@@ -210,6 +210,52 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertIn("真实运行依赖只有", readme)
         self.assertIn("`python3`", readme)
         self.assertIn("不等于 Windows 已验证", readme)
+
+    def test_markdown_examples_match_canonical_fixture_summaries(self):
+        example_fixtures = {
+            "examples/three_layer_diagnosis.md": (
+                "npm-pack-json-shape.json",
+                "bundle-native-manifest-contract.json",
+                "clawpack-staging-gap.json",
+            ),
+            "examples/package_release_scan_stalled.md": (
+                "package-release-scan-stalled.json",
+            ),
+            "examples/source_and_verification_failures.md": (
+                "trusted-publish-tag-ref-regression.json",
+                "package-security-audit-fields-missing.json",
+            ),
+        }
+
+        for relative_path, fixture_names in example_fixtures.items():
+            document = (RESEARCH / "draft" / relative_path).read_text(
+                encoding="utf-8"
+            )
+            for fixture_name in fixture_names:
+                with self.subTest(
+                    document=relative_path,
+                    fixture=fixture_name,
+                ):
+                    result = diagnose(load_fixture(fixture_name))
+                    for field in (
+                        "diagnosis",
+                        "conclusion",
+                        "layer",
+                        "confidence",
+                        "versionStatus",
+                    ):
+                        self.assertIn(
+                            f"{field}: {result[field]}",
+                            document,
+                        )
+                    context = ", ".join(
+                        f"{key}: {value}"
+                        for key, value in result["observedContext"].items()
+                    )
+                    self.assertIn(
+                        f"observedContext: {{{context}}}",
+                        document,
+                    )
 
     def test_research_pack_has_distinct_extensible_package_cases(self):
         paths = sorted(FIXTURES.glob("*.json"))

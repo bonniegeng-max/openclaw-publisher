@@ -55,7 +55,7 @@ conclusion: blocked
 layer: family-detection
 confidence: high
 versionStatus: product-decision
-observedContext: {family: bundle-plugin}
+observedContext: {clawhubVersion: 0.23.3, family: bundle-plugin}
 ```
 
 理由：CLI 已识别兼容 bundle marker，但发布合约仍要求 native manifest。不能伪造 `openclaw.plugin.json`，因为这可能改变 family 和运行时语义。

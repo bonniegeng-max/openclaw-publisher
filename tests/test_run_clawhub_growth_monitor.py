@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import importlib.util
 import io
 import json
@@ -31,7 +32,23 @@ def metrics_snapshot(label):
         "collectedAt": label,
         "method": "clawhub inspect --json",
         "activeInstall": False,
-        "skills": [],
+        "skills": [
+            {
+                "slug": "alpha",
+                "displayName": "Alpha",
+                "summary": "Alpha summary",
+                "topics": ["publishing"],
+                "latestVersion": "1.0.0",
+                "moderation": "clean",
+                "stats": {
+                    "downloads": 1,
+                    "installs": 0,
+                    "stars": 0,
+                    "versions": 1,
+                },
+                "registryUpdatedAt": 123456,
+            }
+        ],
     }
 
 
@@ -41,7 +58,31 @@ def search_snapshot(label):
         "collectedAt": label,
         "method": "clawhub search",
         "activeInstall": False,
-        "queries": [],
+        "cliVersion": "0.23.3",
+        "queries": [
+            {
+                "slug": "alpha",
+                "query": "alpha",
+                "limit": 5,
+                "rank": 1,
+                "visible": True,
+                "resultCount": 1,
+                "results": [
+                    {
+                        "rank": 1,
+                        "reference": "alpha v1.0.0",
+                        "slug": "alpha",
+                        "owner": "@owner",
+                        "displayName": "Alpha",
+                        "metric": {
+                            "type": "score",
+                            "value": 0.9,
+                            "label": "score 0.900",
+                        },
+                    }
+                ],
+            }
+        ],
     }
 
 
@@ -57,6 +98,17 @@ def write_observation_policy(root, not_before=OBSERVATION_END):
             "schemaVersion": 1,
             "notBefore": not_before,
             "reason": "维护后的自然观察窗口",
+        },
+    )
+    write_json(
+        root / ".clawhub" / "skill-catalog.json",
+        {"skills/alpha": {"displayName": "Alpha"}},
+    )
+    write_json(
+        root / "metrics" / "search-queries.json",
+        {
+            "schemaVersion": 1,
+            "queries": [{"slug": "alpha", "query": "alpha", "limit": 5}],
         },
     )
 
@@ -84,12 +136,20 @@ def comparison_snapshot(
 
 
 class FakeRunner:
-    def __init__(self, fail_on=None, comparison_statuses=None):
+    def __init__(
+        self,
+        fail_on=None,
+        comparison_statuses=None,
+        metrics_payload=None,
+        search_payload=None,
+    ):
         self.fail_on = fail_on
         self.comparison_statuses = comparison_statuses or {
             "metrics": ("eligible", True),
             "search": ("eligible", True),
         }
+        self.metrics_payload = metrics_payload
+        self.search_payload = search_payload
         self.commands = []
         self.invocations = []
 
@@ -107,9 +167,19 @@ class FakeRunner:
 
         output = Path(command[command.index("--output") + 1])
         if script == "collect_clawhub_metrics.py":
-            write_json(output, metrics_snapshot(NEW_TIME))
+            write_json(
+                output,
+                self.metrics_payload
+                if self.metrics_payload is not None
+                else metrics_snapshot(NEW_TIME),
+            )
         elif script == "collect_clawhub_search_visibility.py":
-            write_json(output, search_snapshot(NEW_TIME))
+            write_json(
+                output,
+                self.search_payload
+                if self.search_payload is not None
+                else search_snapshot(NEW_TIME),
+            )
         elif script == "compare_clawhub_metrics.py":
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(f"report for {output.name}\n", encoding="utf-8")
@@ -279,6 +349,88 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             self.assertFalse(result["decisionReady"])
             self.assertEqual(len(runner.commands), 2)
 
+    def test_collected_snapshot_pair_rejects_untrusted_shapes(self):
+        metrics = metrics_snapshot(NEW_TIME)
+        search = search_snapshot(NEW_TIME)
+        expected_slugs = {"alpha"}
+        expected_queries = {"alpha": ("alpha", 5)}
+        cases = []
+
+        contaminated = copy.deepcopy(metrics)
+        contaminated["activeInstall"] = True
+        cases.append(("activeInstall", contaminated, search))
+
+        wrong_slug = copy.deepcopy(metrics)
+        wrong_slug["skills"][0]["slug"] = "beta"
+        cases.append(("slug 集合", wrong_slug, search))
+
+        missing_stat = copy.deepcopy(metrics)
+        del missing_stat["skills"][0]["stats"]["downloads"]
+        cases.append(("stats 缺少 downloads", missing_stat, search))
+
+        drifted_query = copy.deepcopy(search)
+        drifted_query["queries"][0]["query"] = "changed"
+        cases.append(("query 或 limit", metrics, drifted_query))
+
+        inconsistent_rank = copy.deepcopy(search)
+        inconsistent_rank["queries"][0]["rank"] = None
+        inconsistent_rank["queries"][0]["visible"] = False
+        cases.append(("目标 rank", metrics, inconsistent_rank))
+
+        cross_round = copy.deepcopy(search)
+        cross_round["collectedAt"] = "2026-09-05T00:15:01+00:00"
+        cases.append(("同一轮采集", metrics, cross_round))
+
+        for message, metrics_payload, search_payload in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    MODULE.validate_collected_snapshot_pair(
+                        metrics_payload,
+                        search_payload,
+                        expected_slugs,
+                        expected_queries,
+                    )
+
+    def test_invalid_new_snapshot_preserves_existing_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_open_observation_policy(root)
+            metrics_dir = root / "metrics"
+            old_metrics = metrics_snapshot(OLD_TIME)
+            old_search = search_snapshot(OLD_TIME)
+            write_json(metrics_dir / "clawhub-latest.json", old_metrics)
+            write_json(
+                metrics_dir / "clawhub-search-latest.json",
+                old_search,
+            )
+            invalid_metrics = metrics_snapshot(NEW_TIME)
+            invalid_metrics["activeInstall"] = True
+            runner = FakeRunner(metrics_payload=invalid_metrics)
+
+            with self.assertRaisesRegex(ValueError, "activeInstall"):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=runner,
+                )
+
+            self.assertEqual(
+                json.loads(
+                    (metrics_dir / "clawhub-latest.json").read_text()
+                ),
+                old_metrics,
+            )
+            self.assertEqual(
+                json.loads(
+                    (metrics_dir / "clawhub-search-latest.json").read_text()
+                ),
+                old_search,
+            )
+            self.assertEqual(len(runner.commands), 2)
+
     def test_real_subprocess_collectors_accept_only_issued_capability(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -317,7 +469,18 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                         "    print('0.23.3')",
                         "elif sys.argv[1:3] == ['inspect', 'alpha']:",
                         "    print(json.dumps({",
-                        "        'skill': {'slug': 'alpha', 'stats': {}},",
+                        "        'skill': {",
+                        "            'slug': 'alpha',",
+                        "            'displayName': 'Alpha',",
+                        "            'summary': 'Alpha summary',",
+                        "            'topics': ['publishing'],",
+                        "            'stats': {",
+                        "                'downloads': 1,",
+                        "                'installs': 0,",
+                        "                'stars': 0,",
+                        "                'versions': 1,",
+                        "            },",
+                        "        },",
                         "        'latestVersion': {'version': '1.0.0'},",
                         "        'moderation': {'verdict': 'clean'},",
                         "    }))",
@@ -955,6 +1118,20 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                 "run_clawhub_growth_monitor.py",
                 "--python-bin",
                 "/tmp/wrapper",
+            ],
+        ):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    MODULE.parse_args()
+
+    def test_cli_rejects_clawhub_executable_override(self):
+        with mock.patch.object(
+            MODULE.sys,
+            "argv",
+            [
+                "run_clawhub_growth_monitor.py",
+                "--clawhub-bin",
+                "/tmp/fake-clawhub",
             ],
         ):
             with contextlib.redirect_stderr(io.StringIO()):

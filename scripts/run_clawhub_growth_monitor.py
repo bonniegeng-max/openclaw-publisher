@@ -162,6 +162,193 @@ def parse_collected_at(snapshot: dict[str, Any], source: str) -> datetime:
     return parsed
 
 
+def load_expected_monitor_inputs(
+    catalog_path: Path,
+    query_path: Path,
+) -> tuple[set[str], dict[str, tuple[str, int]]]:
+    catalog = read_json_object(catalog_path)
+    if not catalog:
+        raise ValueError("Skill catalog 不能为空")
+    slugs: set[str] = set()
+    for raw_path in catalog:
+        parts = Path(raw_path).parts
+        if len(parts) != 2 or parts[0] != "skills" or not parts[1]:
+            raise ValueError(f"catalog 路径格式异常：{raw_path}")
+        slugs.add(parts[1])
+
+    query_payload = read_json_object(query_path)
+    if query_payload.get("schemaVersion") != 1:
+        raise ValueError("搜索查询配置 schemaVersion 必须为 1")
+    raw_queries = query_payload.get("queries")
+    if not isinstance(raw_queries, list) or not raw_queries:
+        raise ValueError("搜索查询配置必须包含非空 queries")
+    queries: dict[str, tuple[str, int]] = {}
+    terms: set[str] = set()
+    for item in raw_queries:
+        if not isinstance(item, dict):
+            raise ValueError("每条搜索查询配置必须是 JSON 对象")
+        slug = item.get("slug")
+        query = item.get("query")
+        limit = item.get("limit")
+        if not isinstance(slug, str) or not slug.strip():
+            raise ValueError("搜索查询 slug 必须是非空字符串")
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError(f"{slug}：搜索 query 必须是非空字符串")
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or limit < 1
+            or limit > 100
+        ):
+            raise ValueError(f"{slug}：搜索 limit 必须是 1 到 100 的整数")
+        normalized_slug = slug.strip()
+        normalized_query = " ".join(query.split())
+        if normalized_slug in queries:
+            raise ValueError(f"搜索查询 slug 重复：{normalized_slug}")
+        if normalized_query.casefold() in terms:
+            raise ValueError(f"搜索 query 重复：{normalized_query}")
+        queries[normalized_slug] = (normalized_query, limit)
+        terms.add(normalized_query.casefold())
+    if set(queries) != slugs:
+        raise ValueError("搜索查询 slug 集合必须与 Skill catalog 完全一致")
+    return slugs, queries
+
+
+def _validate_slug_rows(
+    rows: Any,
+    expected_slugs: set[str],
+    source: str,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(rows, list):
+        raise ValueError(f"{source} 必须是数组")
+    indexed: dict[str, dict[str, Any]] = {}
+    for item in rows:
+        if not isinstance(item, dict):
+            raise ValueError(f"{source} 每项必须是 JSON 对象")
+        slug = item.get("slug")
+        if not isinstance(slug, str) or not slug:
+            raise ValueError(f"{source} slug 必须是非空字符串")
+        if slug in indexed:
+            raise ValueError(f"{source} slug 重复：{slug}")
+        indexed[slug] = item
+    if set(indexed) != expected_slugs:
+        raise ValueError(f"{source} slug 集合与 catalog 不一致")
+    return indexed
+
+
+def validate_collected_snapshot_pair(
+    metrics_snapshot: dict[str, Any],
+    search_snapshot: dict[str, Any],
+    expected_slugs: set[str],
+    expected_queries: dict[str, tuple[str, int]],
+) -> None:
+    """在任何正式轮换前校验新采集事实的结构与同轮一致性。"""
+    for snapshot, source, method in (
+        (metrics_snapshot, "指标快照", "clawhub inspect --json"),
+        (search_snapshot, "搜索快照", "clawhub search"),
+    ):
+        if snapshot.get("schemaVersion") != 1:
+            raise ValueError(f"{source} schemaVersion 必须为 1")
+        if snapshot.get("method") != method:
+            raise ValueError(f"{source} method 必须为 {method}")
+        if snapshot.get("activeInstall") is not False:
+            raise ValueError(f"{source} activeInstall 必须明确为 false")
+
+    metrics_time = parse_collected_at(metrics_snapshot, "新指标快照")
+    search_time = parse_collected_at(search_snapshot, "新搜索快照")
+    skew_minutes = abs((metrics_time - search_time).total_seconds()) / 60
+    if skew_minutes > MAX_PAIR_SKEW_MINUTES:
+        raise ValueError(
+            "新指标与搜索快照必须来自同一轮采集；"
+            f"当前相差 {skew_minutes:.2f} 分钟"
+        )
+
+    metrics_rows = _validate_slug_rows(
+        metrics_snapshot.get("skills"),
+        expected_slugs,
+        "指标快照 skills",
+    )
+    for slug, item in metrics_rows.items():
+        display_name = item.get("displayName")
+        summary = item.get("summary")
+        topics = item.get("topics")
+        stats = item.get("stats")
+        if not isinstance(display_name, str) or not display_name:
+            raise ValueError(f"{slug}：displayName 必须是非空字符串")
+        if not isinstance(summary, str) or not summary:
+            raise ValueError(f"{slug}：summary 必须是非空字符串")
+        if not isinstance(topics, list) or not all(
+            isinstance(topic, str) for topic in topics
+        ):
+            raise ValueError(f"{slug}：topics 必须是字符串数组")
+        latest_version = item.get("latestVersion")
+        moderation = item.get("moderation")
+        if not isinstance(latest_version, str) or not latest_version:
+            raise ValueError(f"{slug}：latestVersion 必须是非空字符串")
+        if not isinstance(moderation, str) or not moderation:
+            raise ValueError(f"{slug}：moderation 必须是非空字符串")
+        if not isinstance(stats, dict):
+            raise ValueError(f"{slug}：stats 必须是 JSON 对象")
+        for name in ("downloads", "installs", "stars", "versions"):
+            if name not in stats:
+                raise ValueError(f"{slug}：stats 缺少 {name}")
+            value = stats.get(name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+            ):
+                raise ValueError(f"{slug}：stats.{name} 必须是非负整数或 null")
+
+    search_rows = _validate_slug_rows(
+        search_snapshot.get("queries"),
+        expected_slugs,
+        "搜索快照 queries",
+    )
+    cli_version = search_snapshot.get("cliVersion")
+    if not isinstance(cli_version, str) or not cli_version:
+        raise ValueError("搜索快照 cliVersion 必须是非空字符串")
+    for slug, item in search_rows.items():
+        expected_query, expected_limit = expected_queries[slug]
+        if item.get("query") != expected_query or item.get("limit") != expected_limit:
+            raise ValueError(f"{slug}：搜索 query 或 limit 与配置不一致")
+        rank = item.get("rank")
+        if rank is not None and (
+            isinstance(rank, bool) or not isinstance(rank, int) or rank <= 0
+        ):
+            raise ValueError(f"{slug}：rank 必须为正整数或 null")
+        if item.get("visible") is not (rank is not None):
+            raise ValueError(f"{slug}：visible 与 rank 不一致")
+        results = item.get("results")
+        result_count = item.get("resultCount")
+        if not isinstance(results, list):
+            raise ValueError(f"{slug}：results 必须是数组")
+        if (
+            isinstance(result_count, bool)
+            or not isinstance(result_count, int)
+            or result_count != len(results)
+        ):
+            raise ValueError(f"{slug}：resultCount 必须等于 results 数量")
+        target_ranks: list[int] = []
+        for expected_rank, result in enumerate(results, start=1):
+            if not isinstance(result, dict):
+                raise ValueError(f"{slug}：每条搜索结果必须是 JSON 对象")
+            result_rank = result.get("rank")
+            result_slug = result.get("slug")
+            metric = result.get("metric")
+            if result_rank != expected_rank:
+                raise ValueError(f"{slug}：搜索结果 rank 必须连续")
+            if not isinstance(result_slug, str) or not result_slug:
+                raise ValueError(f"{slug}：搜索结果 slug 必须是非空字符串")
+            if not isinstance(metric, dict):
+                raise ValueError(f"{slug}：搜索结果 metric 必须是 JSON 对象")
+            if result_slug.casefold() == slug.casefold():
+                target_ranks.append(result_rank)
+        expected_rank = target_ranks[0] if target_ranks else None
+        if rank != expected_rank:
+            raise ValueError(f"{slug}：目标 rank 与 results 不一致")
+
+
 def evaluate_run_guard(
     old_metrics: dict[str, Any] | None,
     old_search: dict[str, Any] | None,
@@ -488,6 +675,10 @@ def run_monitor(
             "decisionStatus": "skipped",
             "recommendedAction": "wait-for-next-window",
         }
+    expected_slugs, expected_queries = load_expected_monitor_inputs(
+        catalog,
+        queries,
+    )
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(
@@ -559,6 +750,12 @@ def run_monitor(
 
         new_metrics = read_json_object(staged_metrics)
         new_search = read_json_object(staged_search)
+        validate_collected_snapshot_pair(
+            new_metrics,
+            new_search,
+            expected_slugs,
+            expected_queries,
+        )
 
         if old_metrics is not None:
             run_child(
@@ -670,7 +867,6 @@ def parse_args() -> argparse.Namespace:
         default=Path.cwd(),
         help="openclaw-publisher 仓库根目录。",
     )
-    parser.add_argument("--clawhub-bin", default="clawhub", help="ClawHub CLI。")
     parser.add_argument(
         "--timeout",
         type=int,
@@ -694,7 +890,7 @@ def main() -> int:
         result = run_monitor(
             root=args.root,
             python_bin=sys.executable,
-            clawhub_bin=args.clawhub_bin,
+            clawhub_bin="clawhub",
             timeout=args.timeout,
             force=args.force,
         )

@@ -116,6 +116,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 - `--force` 允许提前采集事实，但在 `notBefore` 前必须把组合结果锁为 `decisionReady: false`，不得提前形成增长结论。
 - 两个 `collect_clawhub_*.py` 采集器是内部子命令，必须验证统一入口签发的短时能力；网络 helper 还要求校验后的进程内会话，不得直接执行或导入调用。
 - 能力绑定本轮父进程、采集器和暂存输出路径，并在调用 ClawHub CLI 前从环境中移除；它只防误调用，不是本机恶意调用防线。
+- 生产入口固定调用 `clawhub`；新快照只有通过 schema、方法、`activeInstall: false`、slug/query 全覆盖及 15 分钟同轮配对校验后才允许轮换基线。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。
 - 统一入口生成 `clawhub-growth-decision.json` 与 Markdown 报告；只有指标和搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，组合结果才允许进入加码、合并或停更判断。
 - 前次与当前两组指标/搜索快照必须分别来自同一观察轮次，采集时间差均不得超过 15 分钟；超出时按跨轮次误拼处理，只能修复数据质量。

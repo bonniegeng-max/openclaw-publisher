@@ -48,6 +48,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 - 默认 144 小时防重复门槛不得绕过。
 - 不执行 install、download、publish、dry-run 或隔离安装。
 - 不修改 Skill 文件、版本号或 catalog。
+- 生产入口固定使用 `clawhub`，新快照必须在轮换前通过 schema、slug/query 覆盖、`activeInstall` 和同轮时间配对校验。
 - 只读取生成的 latest、previous、差异报告和 `clawhub-growth-decision` 组合闸门。
 - 任一子步骤失败时保留上一轮完整基线，不用部分结果做判断。
 

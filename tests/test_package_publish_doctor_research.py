@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 RESEARCH = ROOT / "research" / "package-publish-doctor"
 FIXTURES = RESEARCH / "fixtures"
+PROMOTION = RESEARCH / "promotion-contract.json"
 OUTPUT_FIELDS = {
     "matched",
     "caseId",
@@ -210,6 +211,116 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertIn("真实运行依赖只有", readme)
         self.assertIn("`python3`", readme)
         self.assertIn("不等于 Windows 已验证", readme)
+
+    def test_promotion_contract_locks_identity_without_publishing(self):
+        contract = json.loads(PROMOTION.read_text(encoding="utf-8"))
+        policy = json.loads(
+            (ROOT / "metrics" / "observation-policy.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        catalog = json.loads(
+            (ROOT / ".clawhub" / "skill-catalog.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        skill = (
+            RESEARCH / "draft" / "SKILL.md"
+        ).read_text(encoding="utf-8").split("---", 2)[1]
+        candidate = contract["candidate"]
+
+        self.assertEqual(contract["status"], "observation-window-hold")
+        self.assertEqual(
+            contract["observationNotBefore"],
+            policy["notBefore"],
+        )
+        self.assertEqual(candidate["stableSlug"], "package-publish-doctor")
+        self.assertFalse(candidate["stableSlug"].startswith("clawhub-"))
+        self.assertFalse(candidate["stableSlug"].endswith("-clawhub"))
+        self.assertIn(
+            f"name: {candidate['displayName']}",
+            skill,
+        )
+        self.assertIn(
+            f"slug: {candidate['stableSlug']}",
+            skill,
+        )
+        self.assertIn(
+            f"version: {candidate['draftVersion']}",
+            skill,
+        )
+        self.assertEqual(candidate["proposedFirstReleaseVersion"], "1.0.0")
+        self.assertNotIn(candidate["targetDirectory"], catalog)
+        self.assertFalse((ROOT / candidate["targetDirectory"]).exists())
+        self.assertEqual(
+            contract["catalogEntry"]["displayName"],
+            candidate["displayName"],
+        )
+
+    def test_promotion_contract_keeps_external_gates_unproven(self):
+        contract = json.loads(PROMOTION.read_text(encoding="utf-8"))
+        evidence = contract["evidence"]
+        gates = contract["releaseGates"]
+        policy = contract["releasePolicy"]
+        claims = contract["claims"]
+
+        self.assertEqual(
+            evidence["baselineFixtureCount"],
+            len(list(FIXTURES.glob("*.json"))),
+        )
+        self.assertEqual(evidence["highConfidenceRuleCount"], 7)
+        self.assertEqual(evidence["markdownExampleRuleCoverage"], 7)
+        self.assertFalse(evidence["clawhubCompetitorSearchComplete"])
+        self.assertFalse(evidence["latestOfficialReleaseReconfirmed"])
+        self.assertFalse(evidence["dryRunComplete"])
+        self.assertFalse(evidence["e4Complete"])
+        self.assertEqual(
+            len({gate["id"] for gate in gates}),
+            len(gates),
+        )
+        self.assertTrue(all(gate["required"] for gate in gates))
+        self.assertIn(
+            "blocked-until-not-before",
+            {gate["state"] for gate in gates},
+        )
+        self.assertIn("pending", {gate["state"] for gate in gates})
+        self.assertFalse(policy["addToFormalCatalogDuringObservationWindow"])
+        self.assertFalse(policy["publishDuringObservationWindow"])
+        self.assertEqual(
+            policy["maxPlannedE4InstallsPerChangedVersion"],
+            1,
+        )
+        self.assertFalse(claims["clawhubMarketGapConfirmed"])
+        self.assertFalse(claims["downloadImpactConfirmed"])
+        self.assertFalse(claims["publishedConfirmed"])
+        self.assertFalse(claims["downloadableConfirmed"])
+
+    def test_promotion_catalog_candidate_and_dry_run_are_stable(self):
+        contract = json.loads(PROMOTION.read_text(encoding="utf-8"))
+        catalog_entry = contract["catalogEntry"]
+        command = contract["dryRunCommand"]
+
+        self.assertEqual(len(catalog_entry["categories"]), 3)
+        self.assertEqual(
+            len(set(catalog_entry["categories"])),
+            len(catalog_entry["categories"]),
+        )
+        self.assertEqual(len(catalog_entry["topics"]), 5)
+        self.assertEqual(
+            len(set(catalog_entry["topics"])),
+            len(catalog_entry["topics"]),
+        )
+        self.assertEqual(command[:3], ["clawhub", "skill", "publish"])
+        self.assertEqual(
+            command[command.index("--slug") + 1],
+            contract["candidate"]["stableSlug"],
+        )
+        self.assertEqual(
+            command[command.index("--name") + 1],
+            contract["candidate"]["displayName"],
+        )
+        self.assertIn("--dry-run", command)
+        self.assertIn("--owner", command)
 
     def test_markdown_examples_match_canonical_fixture_summaries(self):
         example_fixtures = {

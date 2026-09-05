@@ -117,6 +117,22 @@ confidence、versionStatus 和 `observedContext`，防止规则与示例静默�
 
 草案不在 `skills/` 目录，也没有 catalog 条目，因此不会被发布 workflow 发现。GitHub 侧同类产品预筛见 `competitor-screen.md`；该预筛不能替代正式发布前的 ClawHub 站内检索。
 
+## 提升合同
+
+`promotion-contract.json` 固定正式提升时使用的身份与闸门，但不写入正式
+catalog：
+
+- source：`research/package-publish-doctor/draft`
+- target：`skills/package-publish-doctor`
+- stable slug：`package-publish-doctor`
+- display name：`ClawHub Package Publish Doctor`
+- proposed first release：`1.0.0`
+
+候选 catalog categories/topics、显式 slug/name dry-run 命令、观察期、
+竞品复核、registry/moderation 和单版本 E4 均在该文件中机器化。任何
+`pending` 或 `blocked-until-not-before` 闸门存在时，都不能据此创建正式
+目录、加入 catalog 或声明可下载。
+
 ## 启动门槛
 
 只有同时满足以下条件，才把研究包升级为正式 Skill：

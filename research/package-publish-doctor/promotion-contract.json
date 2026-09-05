@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "status": "observation-window-hold",
+  "observationNotBefore": "2026-09-12T10:45:38+00:00",
+  "candidate": {
+    "sourceDirectory": "research/package-publish-doctor/draft",
+    "targetDirectory": "skills/package-publish-doctor",
+    "stableSlug": "package-publish-doctor",
+    "displayName": "ClawHub Package Publish Doctor",
+    "draftVersion": "0.1.16",
+    "proposedFirstReleaseVersion": "1.0.0"
+  },
+  "catalogEntry": {
+    "displayName": "ClawHub Package Publish Doctor",
+    "categories": [
+      "development",
+      "automation",
+      "operations"
+    ],
+    "topics": [
+      "package-publishing",
+      "plugin-publishing",
+      "publish-failure",
+      "artifact-verification",
+      "clawpack"
+    ]
+  },
+  "taskBoundary": {
+    "trigger": "A ClawHub package or plugin validate, pack, publish, publication wait, or verification path failed or returned conflicting evidence.",
+    "inputs": [
+      "normalized package-surface observations",
+      "CLI, npm, and workflow versions",
+      "family and manifest evidence",
+      "artifact validation and publication evidence"
+    ],
+    "outputs": [
+      "first proven failure layer",
+      "deterministic diagnosis and conclusion",
+      "safest minimal repair",
+      "verification steps and unsupported claims"
+    ],
+    "excluded": [
+      "ordinary Skill content review",
+      "generic plugin implementation",
+      "catalog metadata governance",
+      "growth analytics"
+    ]
+  },
+  "evidence": {
+    "completeDraftPackage": true,
+    "offlineExecutable": true,
+    "baselineFixtureCount": 7,
+    "highConfidenceRuleCount": 7,
+    "markdownExampleRuleCoverage": 7,
+    "githubCompetitorPrescreenComplete": true,
+    "clawhubCompetitorSearchComplete": false,
+    "latestOfficialReleaseReconfirmed": false,
+    "dryRunComplete": false,
+    "e4Complete": false
+  },
+  "releaseGates": [
+    {
+      "id": "observation-window",
+      "state": "blocked-until-not-before",
+      "required": true
+    },
+    {
+      "id": "fresh-official-version-review",
+      "state": "pending",
+      "required": true
+    },
+    {
+      "id": "same-method-clawhub-competitor-search",
+      "state": "pending",
+      "required": true
+    },
+    {
+      "id": "local-tests",
+      "state": "complete",
+      "required": true
+    },
+    {
+      "id": "explicit-slug-name-dry-run",
+      "state": "pending",
+      "required": true
+    },
+    {
+      "id": "authorized-publish",
+      "state": "pending",
+      "required": true
+    },
+    {
+      "id": "registry-moderation-check",
+      "state": "pending",
+      "required": true
+    },
+    {
+      "id": "single-version-e4",
+      "state": "pending",
+      "required": true
+    }
+  ],
+  "dryRunCommand": [
+    "clawhub",
+    "skill",
+    "publish",
+    "./skills/package-publish-doctor",
+    "--slug",
+    "package-publish-doctor",
+    "--name",
+    "ClawHub Package Publish Doctor",
+    "--dry-run",
+    "--owner",
+    "<owner>"
+  ],
+  "releasePolicy": {
+    "addToFormalCatalogDuringObservationWindow": false,
+    "publishDuringObservationWindow": false,
+    "requireAllReleaseGatesComplete": true,
+    "maxPlannedE4InstallsPerChangedVersion": 1,
+    "resetObservationStartAfterE4": true
+  },
+  "claims": {
+    "independentTaskConfirmed": true,
+    "realFailureEvidenceConfirmed": true,
+    "nonOverlapWithPublishedSevenConfirmed": true,
+    "clawhubMarketGapConfirmed": false,
+    "downloadImpactConfirmed": false,
+    "publishedConfirmed": false,
+    "downloadableConfirmed": false
+  }
+}

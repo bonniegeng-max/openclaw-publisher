@@ -164,6 +164,17 @@ def evaluate_run_guard(
         raise ValueError("min-interval-hours 必须大于 0")
     if now.tzinfo is None:
         raise ValueError("当前时间必须包含时区")
+    existing_times: list[datetime] = []
+    for snapshot, source in (
+        (old_metrics, "指标 latest"),
+        (old_search, "搜索 latest"),
+    ):
+        if snapshot is None:
+            continue
+        collected_at = parse_collected_at(snapshot, source)
+        if collected_at > now:
+            raise ValueError(f"{source} 快照时间晚于当前时间")
+        existing_times.append(collected_at)
     if force:
         return {
             "skip": False,
@@ -200,13 +211,8 @@ def evaluate_run_guard(
             ),
         }
 
-    latest_time = max(
-        parse_collected_at(old_metrics, "指标 latest"),
-        parse_collected_at(old_search, "搜索 latest"),
-    )
+    latest_time = max(existing_times)
     age_hours = (now - latest_time).total_seconds() / 3600
-    if age_hours < 0:
-        raise ValueError("现有 latest 快照时间晚于当前时间")
     if age_hours < min_interval_hours:
         return {
             "skip": True,

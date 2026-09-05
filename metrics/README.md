@@ -150,4 +150,4 @@ python3 scripts/run_clawhub_growth_monitor.py
 python3 scripts/run_clawhub_growth_monitor.py --force
 ```
 
-`--force` 会绕过观察窗口和采样间隔，只允许用于版本、moderation、公开文件异常或用户明确要求的提前复核。它不会改变快照中的 `activeInstall`，也不会绕过离线对比器的 7 天证据门槛。
+`--force` 会绕过观察窗口和采样间隔，只允许用于版本、moderation、公开文件异常或用户明确要求的提前复核。它不会绕过已有快照的时间格式与未来时间校验，不会改变快照中的 `activeInstall`，也不会绕过离线对比器的 7 天证据门槛。

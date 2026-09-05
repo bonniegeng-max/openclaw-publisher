@@ -505,6 +505,74 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             self.assertFalse(result["skipped"])
             self.assertEqual(len(runner.commands), 4)
 
+    def test_force_does_not_bypass_future_snapshot_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            future = "2026-09-06T00:00:00+00:00"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(future))
+            write_json(
+                metrics / "clawhub-search-latest.json",
+                search_snapshot(future),
+            )
+            runner = FakeRunner()
+
+            with self.assertRaisesRegex(ValueError, "晚于当前时间"):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    force=True,
+                    now=NOW,
+                    runner=runner,
+                )
+
+            self.assertEqual(runner.commands, [])
+
+    def test_force_does_not_bypass_malformed_snapshot_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            write_json(
+                metrics / "clawhub-latest.json",
+                metrics_snapshot("not-a-timestamp"),
+            )
+            runner = FakeRunner()
+
+            with self.assertRaisesRegex(ValueError, "不是有效的 ISO 8601"):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    force=True,
+                    now=NOW,
+                    runner=runner,
+                )
+
+            self.assertEqual(runner.commands, [])
+
+    def test_partial_future_snapshot_is_rejected_before_first_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics = root / "metrics"
+            future = "2026-09-06T00:00:00+00:00"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(future))
+            runner = FakeRunner()
+
+            with self.assertRaisesRegex(ValueError, "晚于当前时间"):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=runner,
+                )
+
+            self.assertEqual(runner.commands, [])
+
     def test_future_snapshot_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

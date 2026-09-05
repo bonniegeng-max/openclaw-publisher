@@ -2,7 +2,7 @@
 name: Skill Publish Readiness
 slug: skill-publish-readiness
 description: Publish-ready review for ClawHub skills and plugins. 在正式发布前揪出文件缺失、版本不一致、环境声明、安全风险和同质化问题。
-version: 1.0.8
+version: 1.0.9
 metadata:
   openclaw:
     os: [macos]
@@ -105,6 +105,9 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 - 有没有明显越权、危险命令或高风险默认行为
 - 有没有遗漏必要的权限、环境、外部依赖说明
 - 有没有容易触发审核或扫描问题的表达方式
+- 发布包里有没有 Python 字节码/缓存（`*.pyc`、`__pycache__`）——A.I.G 扫描器拒检字节码（CVE-2026-84809）会直接拒收整版，需删除并加 `.clawhubignore`
+- 脚本读到的代理/URL/密钥等敏感值，打印或落盘前有没有脱敏（剥 userinfo）
+- 外部输入（URL、ID、文件名）拼进文件路径前有没有白名单校验（防路径穿越）
 
 ### 差异化
 

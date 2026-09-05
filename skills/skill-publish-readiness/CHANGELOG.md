@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9
+
+- 安全审查补充真实发布事故教训：Python 字节码/缓存（`*.pyc`、`__pycache__`）进包会被 A.I.G 扫描器拒收（CVE-2026-84809），发布前需删除并加 `.clawhubignore`
+- 安全审查补充敏感配置脱敏（代理/URL 剥 userinfo 再打印或落盘）与外部输入路径白名单校验（防路径穿越）
+- `security_review_guide.md` 风险分级与「审查时要回答的问题」同步扩展
+
 ## 1.0.8
 
 - 所有 Skill 发布命令显式传递稳定 `--slug` 与人类可读 `--name`

@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "status": "offline-contract-ready-not-wired",
+  "targetRepository": "bonniegeng-max/openclaw-publisher",
+  "formalWorkflows": {
+    "caller": ".github/workflows/clawhub-skill-publish.yml",
+    "authorizedReusable": ".github/workflows/clawhub-skill-publish-authorized.yml",
+    "wired": false,
+    "callerSha256": "sha256:cb48da64fc47ffda31e3838de846e91112dac5688e508c34c23d6aa87af92f68",
+    "reusableSha256": null,
+    "semanticReviewEvidence": null
+  },
+  "trustedControl": {
+    "repository": "bonniegeng-max/openclaw-publisher",
+    "commit": null,
+    "files": [
+      {
+        "path": "scripts/check_skill_release_authorization.py",
+        "sha256": null
+      },
+      {
+        "path": "scripts/validate_skill_catalog.py",
+        "sha256": null
+      }
+    ]
+  },
+  "trustedControlExecution": {
+    "verified": false,
+    "evidence": null
+  },
+  "trustedReusableWorkflow": {
+    "repository": "bonniegeng-max/openclaw-publisher",
+    "path": ".github/workflows/clawhub-skill-publish-authorized.yml",
+    "commit": null,
+    "verified": false
+  },
+  "trustedClawHubCli": {
+    "repository": "openclaw/clawhub",
+    "commit": null,
+    "verified": false
+  },
+  "environments": {
+    "validation": {
+      "name": "clawhub-validation",
+      "configurationVerified": false,
+      "evidence": null,
+      "requirements": {
+        "requiredReviewer": true,
+        "preventSelfReview": true,
+        "adminBypassDisabled": true,
+        "protectedMainOnly": true,
+        "environmentSecret": "CLAWHUB_TOKEN"
+      }
+    },
+    "production": {
+      "name": "clawhub-production",
+      "configurationVerified": false,
+      "evidence": null,
+      "requirements": {
+        "requiredReviewer": true,
+        "preventSelfReview": true,
+        "adminBypassDisabled": true,
+        "protectedMainOnly": true,
+        "environmentSecret": "CLAWHUB_TOKEN"
+      }
+    }
+  },
+  "controlledRun": {
+    "verified": false,
+    "evidence": null
+  },
+  "evidencePolicy": {
+    "currentLevel": "E0",
+    "workflowSuccessCeiling": "E2",
+    "registryModerationRequiredFor": "E3",
+    "isolatedInstallRequiredFor": "E4",
+    "downloadableClaimRequires": "E4"
+  }
+}

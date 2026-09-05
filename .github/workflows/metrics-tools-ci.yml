@@ -42,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7.0.0
         with:
@@ -51,7 +53,7 @@ jobs:
         run: python scripts/validate_skill_catalog.py
 
       - name: Compile Python sources
-        run: python -m py_compile scripts/*.py tests/*.py research/package-publish-doctor/*.py research/package-publish-doctor/draft/scripts/*.py research/published-skills-runtime-metadata-vnext/*.py
+        run: python -m py_compile scripts/*.py tests/*.py research/package-publish-doctor/*.py research/package-publish-doctor/draft/scripts/*.py research/published-skills-runtime-metadata-vnext/*.py research/skill-release-authorization-vnext/*.py
 
       - name: Run offline tests
         run: python -m unittest discover -s tests

@@ -13,6 +13,19 @@ scripts/check_skill_release_authorization.py
 GitHub environment、受信任 workflow SHA 和 secret 迁移方案见
 `workflow-integration-plan.md`。
 
+机器可读的当前接线状态位于
+`workflow-integration-contract.json`，离线检查入口为：
+
+```bash
+python3 research/skill-release-authorization-vnext/check_workflow_integration_contract.py
+```
+
+当前预期退出码为 `1`：合同本身有效，但 `deploymentReady` 必须保持
+`false`。该检查器只核验仓内事实、真实 Git 对象及摘要，不解析 YAML，也不把
+environment 名称、仓内布尔值或示例文本解释为 GitHub 审批证据。正式 reusable
+workflow SHA、ClawHub CLI commit、两个 environment 配置和受控演练证据缺少
+任一项时，都不能切换为可发布状态。
+
 ## 已确认断点
 
 当前 `ClawHub Skill Publish` 与 `Metrics Tools CI` 是彼此独立的 workflow。
@@ -111,6 +124,11 @@ review evidence 只提供与候选提交绑定的支持材料，不能证明 rev
 6. 让 Bun、ClawHub 源码 checkout、dry-run 与 publish 全部依赖授权成功。
 7. 增加 workflow 合同测试，证明授权失败时所有联网和发布步骤不可达。
 8. 发布后按 E0-E4 验证；每个变化版本最多执行一次隔离安装。
+
+当前 checker 仍会从候选工作区加载
+`scripts/validate_skill_catalog.py`。正式接线前必须把 checker 与 validator
+重构为同一受信任 control commit 内的封闭执行单元，并同时校验 Git 对象类型、
+文件模式和摘要；在该能力落地前，`trusted-control-execution` 必须保持阻塞。
 
 在完成上述原子接入前，不能声称正式发布链路已经具备 fail-closed 授权能力。
 即使接入后，仓内合同也不能提供真正的一次性消费记录；同一 head 的重复运行

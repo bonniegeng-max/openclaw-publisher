@@ -38,9 +38,12 @@ environment，届时使用该 environment 自己的 secret：
 源码，也不访问 registry。它只执行：
 
 1. checkout 最终发布 HEAD，`fetch-depth: 0`。
-2. 从受信任 commit 取得 release checker，而不是执行候选提交可修改的 checker。
-3. 运行 catalog 预检。
-4. 运行 `check_skill_release_authorization.py`。
+2. 从受信任 commit 同时取得 release checker 与 catalog validator，而不是执行
+   候选提交可修改的控制面。
+3. 将 checker 与 validator 封装为同一受信任执行单元，并验证 control commit
+   的 Git 对象类型、文件模式和摘要；只单独运行一遍 validator 不能阻止 checker
+   随后重新加载候选副本。
+4. 受信任控制面显式接收候选仓库根目录，不能依赖导出路径推断 repo root。
 5. 验证 base、candidate commit、唯一授权提交、单 Skill 版本递增、完整摘要和
    `authorized: true`。
 6. 输出允许发布的 slug、version、candidate commit 和最终 head。
@@ -131,3 +134,8 @@ reviewer 审核：
 
 只有 environment 配置、固定 SHA、workflow 合同测试和一次受控演练全部通过，
 才能把本目录状态从 `offline-ready-not-wired` 改为 `wired-and-protected`。
+
+仓内 `workflow-integration-contract.json` 只记录可复核事实和未完成 gate。其
+离线 checker 不解析 YAML，也不能证明 environment 的真实配置或 reviewer 身份；
+这些结论必须来自 GitHub API/受保护环境产生的外部证据，并在接线提交之外完成
+复核。缺少外部证据时，`deploymentReady` 必须保持 `false`。

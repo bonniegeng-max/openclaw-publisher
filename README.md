@@ -208,7 +208,7 @@ push 到 `main` 后，自动发布只处理发生变化的目录。
 python3 scripts/run_clawhub_growth_monitor.py
 ```
 
-它会从 catalog 自动发现所有 Skill，通过 `clawhub inspect --json` 生成采用指标快照，并按受版本控制的查询清单采集搜索可见性。两个 `collect_clawhub_*.py` 文件是统一入口的内部子命令，会校验短时、单轮且绑定暂存输出的能力上下文；直接运行会在任何 ClawHub 请求和文件写入前拒绝。该能力只用于防止误调用，不构成同一主机恶意调用者的安全边界。
+它会从 catalog 自动发现所有 Skill，通过 `clawhub inspect --json` 生成采用指标快照，并按受版本控制的查询清单采集搜索可见性。两个 `collect_clawhub_*.py` 文件是统一入口的内部子命令，会校验短时、单轮且绑定暂存输出的能力上下文；实际网络 helper 还要求校验后生成的进程内会话，因此直接执行或导入调用都会在 ClawHub 请求前拒绝。统一入口固定使用当前 Python 解释器，不接受包装解释器覆盖。该能力只用于防止误调用，不构成同一主机恶意调用者的安全边界。
 
 默认输出到 `metrics/clawhub-latest.json` 与 `metrics/clawhub-search-latest.json`，并在下一次成功采集时保留 previous。快照会记录采集方法、`activeInstall: false` 和数据边界；任何一个 Skill 或搜索查询失败时都不会轮换或写入不完整快照。
 

@@ -947,6 +947,20 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     MODULE.parse_args()
 
+    def test_cli_rejects_python_interpreter_override(self):
+        with mock.patch.object(
+            MODULE.sys,
+            "argv",
+            [
+                "run_clawhub_growth_monitor.py",
+                "--python-bin",
+                "/tmp/wrapper",
+            ],
+        ):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    MODULE.parse_args()
+
 
 if __name__ == "__main__":
     unittest.main()

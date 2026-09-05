@@ -18,6 +18,28 @@ CAPABILITY_FILE_ENV = "OPENCLAW_MONITOR_CAPABILITY_FILE"
 CAPABILITY_TOKEN_ENV = "OPENCLAW_MONITOR_CAPABILITY_TOKEN"
 CAPABILITY_ENV_NAMES = (CAPABILITY_FILE_ENV, CAPABILITY_TOKEN_ENV)
 DEFAULT_TTL_SECONDS = 600
+_SESSION_SEAL = object()
+
+
+class ValidatedCollectorSession:
+    """仅能由成功的能力校验创建的进程内会话。"""
+
+    __slots__ = ("_seal",)
+
+    def __init__(self, seal: object) -> None:
+        if seal is not _SESSION_SEAL:
+            raise TypeError("采集会话只能由能力校验创建")
+        self._seal = seal
+
+
+def require_collector_session(
+    session: ValidatedCollectorSession | None,
+) -> None:
+    if (
+        not isinstance(session, ValidatedCollectorSession)
+        or session._seal is not _SESSION_SEAL
+    ):
+        raise PermissionError("ClawHub 请求缺少已验证的采集会话")
 
 
 def sanitized_environment(
@@ -137,7 +159,7 @@ def validate_collector_capability(
     environment: Mapping[str, str] | None = None,
     parent_pid: int | None = None,
     now_epoch: float | None = None,
-) -> None:
+) -> ValidatedCollectorSession:
     """在采集器产生网络或文件副作用前验证入口能力。"""
     current_environment = os.environ if environment is None else environment
     raw_path = current_environment.get(CAPABILITY_FILE_ENV, "").strip()
@@ -210,3 +232,4 @@ def validate_collector_capability(
         or previous_output_path.resolve().parent != staging_directory
     ):
         raise PermissionError("采集器输出必须位于本轮暂存目录")
+    return ValidatedCollectorSession(_SESSION_SEAL)

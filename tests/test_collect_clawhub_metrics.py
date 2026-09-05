@@ -78,7 +78,7 @@ class CollectClawHubMetricsTests(unittest.TestCase):
                 "OPENCLAW_MONITOR_CAPABILITY_FILE": "/private/context.json",
                 "OPENCLAW_MONITOR_CAPABILITY_TOKEN": "secret-token",
             },
-        ):
+        ), mock.patch.object(MODULE, "require_collector_session"):
             result = MODULE.inspect_skill(
                 "clawhub",
                 "example-skill",
@@ -108,13 +108,32 @@ class CollectClawHubMetricsTests(unittest.TestCase):
                 stderr="registry unavailable",
             )
 
-        with self.assertRaisesRegex(RuntimeError, "registry unavailable"):
+        with mock.patch.object(MODULE, "require_collector_session"):
+            with self.assertRaisesRegex(RuntimeError, "registry unavailable"):
+                MODULE.inspect_skill(
+                    "clawhub",
+                    "example-skill",
+                    10,
+                    runner=fake_runner,
+                )
+
+    def test_imported_inspect_requires_validated_session_before_runner(self):
+        called = False
+
+        def fake_runner(*args, **kwargs):
+            nonlocal called
+            called = True
+            raise AssertionError("runner must not be called")
+
+        with self.assertRaisesRegex(PermissionError, "已验证的采集会话"):
             MODULE.inspect_skill(
                 "clawhub",
                 "example-skill",
                 10,
                 runner=fake_runner,
             )
+
+        self.assertFalse(called)
 
     def test_write_json_atomic_replaces_destination(self):
         with tempfile.TemporaryDirectory() as directory:

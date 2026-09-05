@@ -42,7 +42,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 执行要求：
 
 - 不在同一轮再次单独运行指标或搜索采集器。
-- 两个 `collect_clawhub_*.py` 仅是内部子命令，必须由统一入口签发并绑定本轮暂存路径的短时能力；不得直接调用。
+- 两个 `collect_clawhub_*.py` 仅是内部子命令，必须由统一入口签发并绑定本轮暂存路径的短时能力；网络 helper 还必须持有校验后的进程内会话，不得直接执行或导入调用。
 - 遵守 `metrics/observation-policy.json` 的 `notBefore`；无历史快照时也不得提前首次采样。
 - 策略文件缺失或指标/搜索 latest 只存在一侧时必须 fail-closed，不得在线补采样。
 - 默认 144 小时防重复门槛不得绕过。

@@ -15,11 +15,15 @@ from typing import Any, Callable
 
 try:
     from clawhub_monitor_capability import (
+        ValidatedCollectorSession,
+        require_collector_session,
         sanitized_environment,
         validate_collector_capability,
     )
 except ModuleNotFoundError:
     from scripts.clawhub_monitor_capability import (
+        ValidatedCollectorSession,
+        require_collector_session,
         sanitized_environment,
         validate_collector_capability,
     )
@@ -50,7 +54,10 @@ def inspect_skill(
     slug: str,
     timeout: int,
     runner: RunCommand = subprocess.run,
+    *,
+    session: ValidatedCollectorSession | None = None,
 ) -> dict[str, Any]:
+    require_collector_session(session)
     completed = runner(
         [clawhub_bin, "inspect", slug, "--json"],
         capture_output=True,
@@ -91,9 +98,18 @@ def build_snapshot(
     clawhub_bin: str,
     timeout: int,
     runner: RunCommand = subprocess.run,
+    *,
+    session: ValidatedCollectorSession | None = None,
 ) -> dict[str, Any]:
+    require_collector_session(session)
     skills = [
-        inspect_skill(clawhub_bin, slug, timeout, runner)
+        inspect_skill(
+            clawhub_bin,
+            slug,
+            timeout,
+            runner,
+            session=session,
+        )
         for slug in load_slugs(catalog_path)
     ]
     return {
@@ -184,7 +200,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        validate_collector_capability(
+        session = validate_collector_capability(
             Path(__file__),
             args.output,
             args.previous_output,
@@ -194,6 +210,7 @@ def main() -> int:
             catalog_path=args.catalog,
             clawhub_bin=args.clawhub_bin,
             timeout=args.timeout,
+            session=session,
         )
         write_snapshot_with_previous(args.output, args.previous_output, snapshot)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:

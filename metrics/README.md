@@ -6,7 +6,7 @@
 python3 scripts/run_clawhub_growth_monitor.py
 ```
 
-统一入口内部使用 `scripts/collect_clawhub_metrics.py` 调用 `clawhub inspect --json`，并使用 `scripts/collect_clawhub_search_visibility.py` 执行只读搜索；两者都不会下载或安装 Skill。内部采集器需要由统一入口签发短时能力，且能力绑定当前父进程、脚本名和本轮暂存输出路径；直接执行会在任何 ClawHub 请求和文件写入前失败。这个边界用于防止误操作，不用于抵御同一主机上的恶意调用者。
+统一入口内部使用 `scripts/collect_clawhub_metrics.py` 调用 `clawhub inspect --json`，并使用 `scripts/collect_clawhub_search_visibility.py` 执行只读搜索；两者都不会下载或安装 Skill。内部采集器需要由统一入口签发短时能力，且能力绑定当前父进程、脚本名和本轮暂存输出路径；网络 helper 还必须接收校验后生成的进程内会话，因此直接执行或导入调用都会在任何 ClawHub 请求和文件写入前失败。统一入口固定使用当前 Python 解释器，不接受包装解释器覆盖。这个边界用于防止误操作，不用于抵御同一主机上的恶意调用者。
 
 默认输出：
 

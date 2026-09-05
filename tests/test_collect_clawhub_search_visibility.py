@@ -149,7 +149,7 @@ class CollectClawHubSearchVisibilityTests(unittest.TestCase):
                 "OPENCLAW_MONITOR_CAPABILITY_FILE": "/private/context.json",
                 "OPENCLAW_MONITOR_CAPABILITY_TOKEN": "secret-token",
             },
-        ):
+        ), mock.patch.object(MODULE, "require_collector_session"):
             result = MODULE.collect_query(
                 "clawhub",
                 {"slug": "alpha", "query": "alpha query", "limit": 20},
@@ -180,13 +180,31 @@ class CollectClawHubSearchVisibilityTests(unittest.TestCase):
                 stderr="registry unavailable",
             )
 
-        with self.assertRaisesRegex(RuntimeError, "registry unavailable"):
-            MODULE.collect_query(
-                "clawhub",
-                {"slug": "alpha", "query": "alpha", "limit": 20},
+        with mock.patch.object(MODULE, "require_collector_session"):
+            with self.assertRaisesRegex(RuntimeError, "registry unavailable"):
+                MODULE.collect_query(
+                    "clawhub",
+                    {"slug": "alpha", "query": "alpha", "limit": 20},
+                    timeout=10,
+                    runner=fake_runner,
+                )
+
+    def test_imported_run_cli_requires_validated_session_before_runner(self):
+        called = False
+
+        def fake_runner(*args, **kwargs):
+            nonlocal called
+            called = True
+            raise AssertionError("runner must not be called")
+
+        with self.assertRaisesRegex(PermissionError, "已验证的采集会话"):
+            MODULE.run_cli(
+                ["clawhub", "search", "alpha"],
                 timeout=10,
                 runner=fake_runner,
             )
+
+        self.assertFalse(called)
 
     def test_build_snapshot_records_cli_version_and_no_install(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -223,13 +241,14 @@ class CollectClawHubSearchVisibilityTests(unittest.TestCase):
                     stderr="",
                 )
 
-            result = MODULE.build_snapshot(
-                query_path,
-                catalog_path,
-                "clawhub",
-                timeout=10,
-                runner=fake_runner,
-            )
+            with mock.patch.object(MODULE, "require_collector_session"):
+                result = MODULE.build_snapshot(
+                    query_path,
+                    catalog_path,
+                    "clawhub",
+                    timeout=10,
+                    runner=fake_runner,
+                )
 
             self.assertEqual(result["cliVersion"], "0.23.3")
             self.assertFalse(result["activeInstall"])

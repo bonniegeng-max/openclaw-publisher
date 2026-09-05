@@ -114,7 +114,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 - 策略文件缺失或指标/搜索 latest 只存在一侧时必须 fail-closed，不得用重新采样掩盖基线损坏。
 - 144 小时防重复门槛固定且不提供生产 CLI 覆盖；`--force` 仅用于明确的版本或审核异常复核。
 - `--force` 允许提前采集事实，但在 `notBefore` 前必须把组合结果锁为 `decisionReady: false`，不得提前形成增长结论。
-- 两个 `collect_clawhub_*.py` 采集器是内部子命令，必须验证统一入口签发的短时能力；不得直接运行。
+- 两个 `collect_clawhub_*.py` 采集器是内部子命令，必须验证统一入口签发的短时能力；网络 helper 还要求校验后的进程内会话，不得直接执行或导入调用。
 - 能力绑定本轮父进程、采集器和暂存输出路径，并在调用 ClawHub CLI 前从环境中移除；它只防误调用，不是本机恶意调用防线。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。
 - 统一入口生成 `clawhub-growth-decision.json` 与 Markdown 报告；只有指标和搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，组合结果才允许进入加码、合并或停更判断。

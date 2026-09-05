@@ -46,7 +46,7 @@ class ClawHubMonitorCapabilityTests(unittest.TestCase):
                 self.create_fixture(root)
             )
 
-            MODULE.validate_collector_capability(
+            session = MODULE.validate_collector_capability(
                 script,
                 output,
                 previous,
@@ -54,12 +54,19 @@ class ClawHubMonitorCapabilityTests(unittest.TestCase):
                 parent_pid=1234,
                 now_epoch=1001.0,
             )
+            MODULE.require_collector_session(session)
 
             self.assertEqual(oct(capability.stat().st_mode & 0o777), "0o600")
             self.assertNotEqual(
                 environment[MODULE.CAPABILITY_TOKEN_ENV],
                 "stale-token",
             )
+
+    def test_session_cannot_be_constructed_without_validation_seal(self):
+        with self.assertRaisesRegex(TypeError, "只能由能力校验创建"):
+            MODULE.ValidatedCollectorSession(object())
+        with self.assertRaisesRegex(PermissionError, "已验证的采集会话"):
+            MODULE.require_collector_session(None)
 
     def test_missing_blank_and_wrong_tokens_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

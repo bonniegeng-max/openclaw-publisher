@@ -16,11 +16,15 @@ from typing import Any, Callable
 
 try:
     from clawhub_monitor_capability import (
+        ValidatedCollectorSession,
+        require_collector_session,
         sanitized_environment,
         validate_collector_capability,
     )
 except ModuleNotFoundError:
     from scripts.clawhub_monitor_capability import (
+        ValidatedCollectorSession,
+        require_collector_session,
         sanitized_environment,
         validate_collector_capability,
     )
@@ -161,7 +165,10 @@ def run_cli(
     args: list[str],
     timeout: int,
     runner: RunCommand,
+    *,
+    session: ValidatedCollectorSession | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    require_collector_session(session)
     env = {
         **sanitized_environment(),
         "NO_COLOR": "1",
@@ -186,7 +193,10 @@ def collect_query(
     query: dict[str, Any],
     timeout: int,
     runner: RunCommand = subprocess.run,
+    *,
+    session: ValidatedCollectorSession | None = None,
 ) -> dict[str, Any]:
+    require_collector_session(session)
     completed = run_cli(
         [
             clawhub_bin,
@@ -197,6 +207,7 @@ def collect_query(
         ],
         timeout,
         runner,
+        session=session,
     )
     results = parse_search_output(completed.stdout)
     rank = next(
@@ -222,12 +233,26 @@ def build_snapshot(
     clawhub_bin: str,
     timeout: int,
     runner: RunCommand = subprocess.run,
+    *,
+    session: ValidatedCollectorSession | None = None,
 ) -> dict[str, Any]:
+    require_collector_session(session)
     queries_config = load_queries(query_path)
     validate_query_coverage(queries_config, load_catalog_slugs(catalog_path))
-    version = run_cli([clawhub_bin, "--cli-version"], timeout, runner).stdout.strip()
+    version = run_cli(
+        [clawhub_bin, "--cli-version"],
+        timeout,
+        runner,
+        session=session,
+    ).stdout.strip()
     queries = [
-        collect_query(clawhub_bin, query, timeout, runner)
+        collect_query(
+            clawhub_bin,
+            query,
+            timeout,
+            runner,
+            session=session,
+        )
         for query in queries_config
     ]
     return {
@@ -320,7 +345,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        validate_collector_capability(
+        session = validate_collector_capability(
             Path(__file__),
             args.output,
             args.previous_output,
@@ -331,6 +356,7 @@ def main() -> int:
             catalog_path=args.catalog,
             clawhub_bin=args.clawhub_bin,
             timeout=args.timeout,
+            session=session,
         )
         write_snapshot_with_previous(args.output, args.previous_output, snapshot)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:

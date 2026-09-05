@@ -670,11 +670,6 @@ def parse_args() -> argparse.Namespace:
         default=Path.cwd(),
         help="openclaw-publisher 仓库根目录。",
     )
-    parser.add_argument(
-        "--python-bin",
-        default=sys.executable,
-        help="运行子脚本的 Python 解释器。",
-    )
     parser.add_argument("--clawhub-bin", default="clawhub", help="ClawHub CLI。")
     parser.add_argument(
         "--timeout",
@@ -698,7 +693,7 @@ def main() -> int:
     try:
         result = run_monitor(
             root=args.root,
-            python_bin=args.python_bin,
+            python_bin=sys.executable,
             clawhub_bin=args.clawhub_bin,
             timeout=args.timeout,
             force=args.force,

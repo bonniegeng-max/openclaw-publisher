@@ -1,0 +1,26 @@
+{
+  "scenario": "observation-window-not-ready",
+  "evidenceState": {
+    "pairedDecisionReportPresent": false,
+    "observationNotBefore": "2026-09-12T02:26:39+00:00",
+    "queryContractPresent": true
+  },
+  "gates": {
+    "evidenceQualityDecisionReady": "unknown",
+    "collectionMethodConsistent": "unknown",
+    "bothSnapshotsActiveInstallFalse": "unknown",
+    "observationWindowAtLeastSevenDays": "unknown",
+    "searchQueryLimitAndSetConsistent": "unknown"
+  },
+  "decisionReady": false,
+  "allowedOutcome": "继续观察",
+  "forbiddenPortfolioActions": [
+    "加码",
+    "修复定位",
+    "合并",
+    "停更",
+    "新建 Skill",
+    "启动 Plugin"
+  ],
+  "nextStep": "到达 observationNotBefore 后仅运行一次统一增长监控入口，再按生成的成对报告重新评估五项闸门。"
+}

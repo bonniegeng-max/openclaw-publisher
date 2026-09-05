@@ -64,6 +64,12 @@ conclusion mapping is:
 evidence is incomplete and no definitive blocked state has been proven. Its
 first `verificationSteps` item repeats the single `missingEvidence` item so
 the next action is the smallest evidence addition, not a speculative repair.
+When the input has every declared field for exactly one known rule except one,
+`missingEvidence` names that exact `input` path. This is only a collection
+hint: the result remains `UNKNOWN`, and the missing value must still satisfy
+the rule predicate. If multiple rules are each one field short, or all fields
+are present but a value is invalid or contradictory, the command keeps the
+generic evidence request rather than guessing a candidate diagnosis.
 
 ### `observedContext` allowlist
 

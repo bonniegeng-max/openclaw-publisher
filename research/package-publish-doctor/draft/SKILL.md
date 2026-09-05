@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.9
+version: 0.1.10
 metadata:
   openclaw:
     os: [macos]

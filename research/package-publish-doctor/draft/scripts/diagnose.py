@@ -81,6 +81,85 @@ OBSERVED_CONTEXT_BY_DIAGNOSIS = {
     "PACKAGE_RELEASE_SCAN_STALLED": {"clawhubVersion", "family"},
     "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING": {"family"},
 }
+RULE_REQUIRED_INPUT_PATHS = {
+    "TRUSTED_PUBLISH_TAG_REF_REGRESSION": (
+        ("publishMode",),
+        ("candidateShaPresent",),
+        ("rejected",),
+        ("rejectionStage",),
+        ("sourceValidationOutcome",),
+        ("sourceValidatorCommit",),
+        ("sourceValidationComparison", "left"),
+        ("sourceValidationComparison", "operator"),
+        ("sourceValidationComparison", "right"),
+        ("tokenSha",),
+        ("tokenRef",),
+        ("sourceCommit",),
+        ("sourceRef",),
+    ),
+    "REUSABLE_WORKFLOW_ACTIONS_PERMISSION": (
+        ("workflowRef",),
+        ("jobsCreated",),
+        ("effectiveCallerPermissions", "actions"),
+        ("reportedError",),
+    ),
+    "NPM_PACK_JSON_SHAPE": (
+        ("command",),
+        ("clawhubVersion",),
+        ("npmVersion",),
+        ("npm11", 0, "id"),
+        ("npm11", 0, "filename"),
+        ("npm12", "*", "id"),
+        ("npm12", "*", "filename"),
+        ("artifactExists",),
+        ("artifactFilename",),
+        ("reportedError",),
+    ),
+    "BUNDLE_NATIVE_MANIFEST_CONTRACT": (
+        ("clawhubVersion",),
+        ("family",),
+        ("filesObservationComplete",),
+        ("files",),
+        ("openclawPluginManifestPresent",),
+        ("reportedError",),
+    ),
+    "CLAWPACK_STAGING_GAP": (
+        ("workflowRef",),
+        ("uploadTarget",),
+        ("registry",),
+        ("artifactBytes",),
+        ("artifactHash",),
+        ("inspector", "status"),
+        ("inspector", "artifactHash"),
+        ("reportedStatus",),
+        ("reportedError",),
+    ),
+    "PACKAGE_RELEASE_SCAN_STALLED": (
+        ("clawhubVersion",),
+        ("family",),
+        ("publishAccepted",),
+        ("releaseId",),
+        ("scanStatus",),
+        ("pendingHours",),
+        ("latestRelease",),
+        ("inspectVisible",),
+        ("duplicateOnRepublish",),
+    ),
+    "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING": (
+        ("family",),
+        ("stage",),
+        ("releaseVersion",),
+        ("securityReleaseVersion",),
+        ("publicationStatus",),
+        ("exactReleaseSecurityEndpoint",),
+        ("trust", "blockedFromDownload"),
+        ("trust", "pending"),
+        ("trust", "stale"),
+        ("trust", "scanStatus"),
+        ("trust", "reasons"),
+        ("reportedError",),
+    ),
+}
 DIAGNOSIS_GUIDANCE = {
     "TRUSTED_PUBLISH_TAG_REF_REGRESSION": {
         "conclusion": "blocked",
@@ -376,6 +455,50 @@ def _same_artifact_validation(inputs):
         ):
             return f"同一 artifact（{artifact_hash}）的 {label} 已成功"
     return None
+
+
+def _path_exists(value, path):
+    cursor = value
+    for key in path:
+        if isinstance(key, int):
+            if not isinstance(cursor, list) or not 0 <= key < len(cursor):
+                return False
+            cursor = cursor[key]
+        elif key == "*":
+            if not isinstance(cursor, dict) or len(cursor) != 1:
+                return False
+            cursor = next(iter(cursor.values()))
+        else:
+            if not isinstance(cursor, dict) or key not in cursor:
+                return False
+            cursor = cursor[key]
+    return True
+
+
+def _format_input_path(path):
+    formatted = "input"
+    for key in path:
+        if isinstance(key, int):
+            formatted += f"[{key}]"
+        elif key == "*":
+            formatted += ".*"
+        else:
+            formatted += f".{key}"
+    return formatted
+
+
+def _single_missing_required_evidence(inputs):
+    candidates = []
+    for paths in RULE_REQUIRED_INPUT_PATHS.values():
+        missing = [path for path in paths if not _path_exists(inputs, path)]
+        if len(missing) == 1:
+            candidates.append(missing[0])
+    if len(candidates) != 1:
+        return None
+    return (
+        f"补充并核验 {_format_input_path(candidates[0])}；"
+        "当前证据仍不足以确定根因"
+    )
 
 
 def _resolve_matches(case, matches):
@@ -687,6 +810,10 @@ def diagnose(case):
             )
         )
 
+    if not matches:
+        missing_evidence = _single_missing_required_evidence(inputs)
+        if missing_evidence is not None:
+            return _unknown(case, [missing_evidence])
     return _resolve_matches(case, matches)
 
 

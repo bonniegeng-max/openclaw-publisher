@@ -232,6 +232,29 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
             | DIAGNOSE_MODULE.CLASSIFICATION_ONLY_LAYERS,
         )
 
+    def test_runtime_required_field_catalog_matches_mutation_contract(self):
+        fixture_by_diagnosis = {
+            load_fixture(name)["expected"]["diagnosis"]: name
+            for name in RULE_REQUIRED_PATHS
+        }
+        self.assertEqual(
+            set(DIAGNOSE_MODULE.RULE_REQUIRED_INPUT_PATHS),
+            set(fixture_by_diagnosis),
+        )
+        for diagnosis, fixture_name in fixture_by_diagnosis.items():
+            expected_paths = set()
+            for path in RULE_REQUIRED_PATHS[fixture_name]:
+                if path == ("input", "surface"):
+                    continue
+                normalized = list(path[1:])
+                if normalized[:1] == ["npm12"] and len(normalized) > 2:
+                    normalized[1] = "*"
+                expected_paths.add(tuple(normalized))
+            self.assertEqual(
+                set(DIAGNOSE_MODULE.RULE_REQUIRED_INPUT_PATHS[diagnosis]),
+                expected_paths,
+            )
+
     def test_all_fixtures_match_their_expected_diagnosis(self):
         for path in sorted(FIXTURES.glob("*.json")):
             with self.subTest(fixture=path.name):
@@ -826,6 +849,69 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                     result = diagnose(candidate)
                     self.assertFalse(result["matched"])
                     self.assertEqual(result["diagnosis"], "UNKNOWN")
+
+    def test_single_missing_required_field_returns_exact_next_evidence(self):
+        for fixture_name, required_paths in RULE_REQUIRED_PATHS.items():
+            fixture = load_fixture(fixture_name)
+            for required_path in required_paths:
+                if required_path == ("input", "surface"):
+                    continue
+                with self.subTest(
+                    fixture=fixture_name,
+                    required_path=required_path,
+                ):
+                    candidate = copy.deepcopy(fixture)
+                    delete_path(candidate, required_path)
+                    result = diagnose(candidate)
+                    input_path = list(required_path[1:])
+                    if input_path[:1] == ["npm12"] and len(input_path) > 2:
+                        input_path[1] = "*"
+                    expected_path = "input"
+                    for key in input_path:
+                        expected_path += (
+                            f"[{key}]" if isinstance(key, int) else f".{key}"
+                        )
+
+                    self.assertEqual(result["diagnosis"], "UNKNOWN")
+                    self.assertEqual(
+                        result["missingEvidence"],
+                        [
+                            f"补充并核验 {expected_path}；"
+                            "当前证据仍不足以确定根因"
+                        ],
+                    )
+                    self.assertEqual(
+                        result["verificationSteps"][0],
+                        result["missingEvidence"][0],
+                    )
+
+    def test_ambiguous_near_matches_do_not_guess_one_missing_field(self):
+        candidate = load_fixture("reusable-workflow-actions-read.json")
+        del candidate["input"]["reportedError"]
+        bundle = load_fixture("bundle-native-manifest-contract.json")
+        for field, value in bundle["input"].items():
+            if field not in {"surface", "reportedError"}:
+                candidate["input"][field] = copy.deepcopy(value)
+
+        result = diagnose(candidate)
+
+        self.assertEqual(result["diagnosis"], "UNKNOWN")
+        self.assertEqual(
+            result["missingEvidence"],
+            ["可同时证明首个失败层和对应 CLI/workflow 版本的最小状态组合"],
+        )
+
+    def test_invalid_present_value_is_not_reported_as_missing(self):
+        candidate = load_fixture("reusable-workflow-actions-read.json")
+        candidate["input"]["effectiveCallerPermissions"]["actions"] = "write"
+
+        result = diagnose(candidate)
+
+        self.assertEqual(result["diagnosis"], "UNKNOWN")
+        self.assertEqual(
+            result["missingEvidence"],
+            ["可同时证明首个失败层和对应 CLI/workflow 版本的最小状态组合"],
+        )
 
     def test_semantically_contradictory_evidence_returns_unknown(self):
         bundle = load_fixture("bundle-native-manifest-contract.json")

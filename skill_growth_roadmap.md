@@ -21,6 +21,12 @@
 
 ## 当前 skill 还可以继续优化的点
 
+`2026-09-05` 的本地静态审计记录在
+[`research/published-skill-static-audit-2026-09-05.md`](research/published-skill-static-audit-2026-09-05.md)。
+审计没有访问 ClawHub 或刷新指标。观察窗结束后的第一正确性修复候选是
+重写 Portfolio Growth Audit 的示例，使其不再用单次快照绕过正文定义的
+五项决策就绪闸门；其他依赖、首屏边界和示例完整性问题保留在候选池。
+
 ### 下载转化
 
 - 增加更短的一句话英文副标题

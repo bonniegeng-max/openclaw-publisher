@@ -40,6 +40,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
             "scripts/diagnose.py",
             "templates/package_diagnosis_report.md",
             "examples/anonymous-input.json",
+            "examples/reusable_workflow_actions_permission.md",
             "examples/three_layer_diagnosis.md",
             "examples/package_release_scan_stalled.md",
             "examples/source_and_verification_failures.md",
@@ -56,7 +57,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.14")
+        self.assertEqual(values["version"], "0.1.15")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))

@@ -106,9 +106,14 @@ ClawHub CLI 安装步骤。
 - `scripts/diagnose.py`
 - `templates/package_diagnosis_report.md`
 - `examples/anonymous-input.json`
+- `examples/reusable_workflow_actions_permission.md`
 - `examples/three_layer_diagnosis.md`
 - `examples/package_release_scan_stalled.md`
 - `examples/source_and_verification_failures.md`
+
+四份 Markdown 示例覆盖当前七条高置信诊断规则；测试会从真实 fixtures 调用
+canonical 诊断器，并核对文档中的 diagnosis、conclusion、layer、
+confidence、versionStatus 和 `observedContext`，防止规则与示例静默漂移。
 
 草案不在 `skills/` 目录，也没有 catalog 条目，因此不会被发布 workflow 发现。GitHub 侧同类产品预筛见 `competitor-screen.md`；该预筛不能替代正式发布前的 ClawHub 站内检索。
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.15 - 2026-09-05
+
+- 增加真实 GitHub Actions startup failure 的完整权限诊断示例。
+- 明确 `actions: none` 阻塞发生在 job 创建前，不能误报为 package 发布失败。
+- 将 Markdown 示例同步门禁扩展到全部七条高置信诊断规则。
+
 ## 0.1.14 - 2026-09-05
 
 - 修正 bundle manifest 示例遗漏 `clawhubVersion` 的输出漂移。

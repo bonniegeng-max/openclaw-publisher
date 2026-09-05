@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.14
+version: 0.1.15
 metadata:
   openclaw:
     emoji: "🧰"
@@ -232,6 +232,7 @@ first verification step. Do not guess.
 - `scripts/diagnose.py`: canonical offline diagnostic implementation and CLI.
 - `templates/package_diagnosis_report.md`: stable report structure.
 - `examples/anonymous-input.json`: runnable redacted JSON input.
+- `examples/reusable_workflow_actions_permission.md`: real startup failure caused by missing `actions: read`.
 - `examples/three_layer_diagnosis.md`: examples that distinguish pack, contract, and upload failures.
 - `examples/package_release_scan_stalled.md`: version-bounded package scan stall with explicit Skill-surface counterexamples.
 - `examples/source_and_verification_failures.md`: trusted source-ref regression and fail-closed audit-response verification.

@@ -188,7 +188,7 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         frontmatter = skill.split("---", 2)[1]
         metadata = frontmatter.split("metadata:", 1)[1]
 
-        self.assertIn("version: 0.1.14", frontmatter)
+        self.assertIn("version: 0.1.15", frontmatter)
         self.assertIn("        - python3", metadata)
         self.assertNotIn("    os:", metadata)
         self.assertNotIn("        - git", metadata)
@@ -213,6 +213,9 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
     def test_markdown_examples_match_canonical_fixture_summaries(self):
         example_fixtures = {
+            "examples/reusable_workflow_actions_permission.md": (
+                "reusable-workflow-actions-read.json",
+            ),
             "examples/three_layer_diagnosis.md": (
                 "npm-pack-json-shape.json",
                 "bundle-native-manifest-contract.json",

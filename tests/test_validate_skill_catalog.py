@@ -137,6 +137,99 @@ class ValidateSkillCatalogTests(unittest.TestCase):
         self.assertIn("REQUIRED_FILE_MISSING", codes)
         self.assertIn("CATALOG_ENTRY_MISSING", codes)
 
+    def test_sensitive_filenames_are_rejected_without_reading_contents(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+        sensitive_paths = (
+            ".env",
+            ".env.production",
+            ".npmrc",
+            "credentials.json",
+            "nested/deploy.pem",
+            "nested/signing.key",
+        )
+
+        for relative in sensitive_paths:
+            with self.subTest(relative=relative):
+                with tempfile.TemporaryDirectory() as directory:
+                    root, catalog_path = stage_repo(directory)
+                    sensitive = root / first_key / relative
+                    sensitive.parent.mkdir(parents=True, exist_ok=True)
+                    sensitive.write_text(
+                        "must-not-appear-in-output",
+                        encoding="utf-8",
+                    )
+                    result = MODULE.validate(root, catalog_path)
+
+                self.assertFalse(result["valid"])
+                matching = [
+                    error
+                    for error in result["errors"]
+                    if error["code"] == "SENSITIVE_FILE_PRESENT"
+                ]
+                self.assertEqual(len(matching), 1)
+                self.assertNotIn(
+                    "must-not-appear-in-output",
+                    json.dumps(result),
+                )
+
+    def test_env_examples_are_allowed(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            for filename in (
+                ".env.example",
+                ".env.sample",
+                ".env.template",
+            ):
+                (root / first_key / filename).write_text(
+                    "PLACEHOLDER=value",
+                    encoding="utf-8",
+                )
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertTrue(result["valid"])
+
+    def test_dependency_caches_and_os_artifacts_are_rejected(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            cache_file = root / first_key / "node_modules" / "cache.js"
+            cache_file.parent.mkdir()
+            cache_file.write_text("cached", encoding="utf-8")
+            (root / first_key / ".DS_Store").write_bytes(b"artifact")
+            result = MODULE.validate(root, catalog_path)
+
+        codes = {error["code"] for error in result["errors"]}
+        self.assertFalse(result["valid"])
+        self.assertIn("PACKAGE_DIRECTORY_FORBIDDEN", codes)
+        self.assertIn("PACKAGE_FILE_FORBIDDEN", codes)
+
+    def test_symlinks_are_rejected_without_following_target(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            target = root / "outside-secret.txt"
+            target.write_text("must-not-appear-in-output", encoding="utf-8")
+            link = root / first_key / "linked-secret.txt"
+            link.symlink_to(target)
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(
+                error["code"] == "SYMLINK_FORBIDDEN"
+                for error in result["errors"]
+            )
+        )
+        self.assertNotIn("must-not-appear-in-output", json.dumps(result))
+
     def test_frontmatter_version_requires_three_part_semver(self):
         original = json.loads(CATALOG.read_text(encoding="utf-8"))
         first_key = sorted(original)[0]

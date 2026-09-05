@@ -22,6 +22,38 @@ TOKEN_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SEMVER_PATTERN = re.compile(
     r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
 )
+SENSITIVE_FILENAMES = {
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    "credentials.json",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "id_rsa",
+    "service-account.json",
+}
+SENSITIVE_SUFFIXES = {
+    ".key",
+    ".p12",
+    ".pem",
+    ".pfx",
+}
+SAFE_ENV_SUFFIXES = {
+    ".example",
+    ".sample",
+    ".template",
+}
+FORBIDDEN_PACKAGE_DIRECTORIES = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    "__pycache__",
+    "node_modules",
+}
+FORBIDDEN_PACKAGE_FILES = {
+    ".DS_Store",
+}
 
 
 def reject_nonstandard_number(value):
@@ -90,6 +122,63 @@ def resolve_skill_directory(repo_root, catalog_key):
     except ValueError:
         return None, None
     return candidate, slug
+
+
+def inspect_package_hygiene(skill_dir, catalog_key):
+    errors = []
+    for path in sorted(skill_dir.rglob("*")):
+        relative = path.relative_to(skill_dir).as_posix()
+        result_path = f"{catalog_key}/{relative}"
+        if path.is_symlink():
+            errors.append(
+                issue(
+                    "SYMLINK_FORBIDDEN",
+                    result_path,
+                    "published skill source must not contain symlinks",
+                )
+            )
+            continue
+        if path.is_dir() and path.name in FORBIDDEN_PACKAGE_DIRECTORIES:
+            errors.append(
+                issue(
+                    "PACKAGE_DIRECTORY_FORBIDDEN",
+                    result_path,
+                    "published skill source contains a dependency or cache directory",
+                )
+            )
+            continue
+        if not path.is_file():
+            continue
+        if path.name in FORBIDDEN_PACKAGE_FILES:
+            errors.append(
+                issue(
+                    "PACKAGE_FILE_FORBIDDEN",
+                    result_path,
+                    "published skill source contains an operating-system artifact",
+                )
+            )
+        lower_name = path.name.lower()
+        env_suffix = lower_name.removeprefix(".env")
+        env_sensitive = (
+            lower_name == ".env"
+            or (
+                lower_name.startswith(".env.")
+                and env_suffix not in SAFE_ENV_SUFFIXES
+            )
+        )
+        if (
+            lower_name in SENSITIVE_FILENAMES
+            or path.suffix.lower() in SENSITIVE_SUFFIXES
+            or env_sensitive
+        ):
+            errors.append(
+                issue(
+                    "SENSITIVE_FILE_PRESENT",
+                    result_path,
+                    "published skill source contains a sensitive filename",
+                )
+            )
+    return errors
 
 
 def validate(repo_root, catalog_path):
@@ -161,6 +250,7 @@ def validate(repo_root, catalog_path):
                         "published skill is missing a required file",
                     )
                 )
+        errors.extend(inspect_package_hygiene(skill_dir, catalog_key))
 
         if not isinstance(entry, dict):
             errors.append(

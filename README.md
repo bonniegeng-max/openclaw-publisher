@@ -159,8 +159,9 @@ python3 scripts/validate_skill_catalog.py
 
 预检会核对 metadata 类型、目录覆盖、必需文件、stable slug 规则、
 展示名唯一性，以及 `SKILL.md` 的 name/slug/description/semver 与
-CHANGELOG 当前版本；失败时输出结构化 JSON 并以退出码 `2` 结束，不访问
-ClawHub。通过后再执行：
+CHANGELOG 当前版本；同时拒绝敏感文件名、私钥扩展名、依赖/缓存目录和
+symlink。安全检查只报告相对路径，不读取或回显秘密内容。失败时输出结构化
+JSON 并以退出码 `2` 结束，不访问 ClawHub。通过后再执行：
 
 ```bash
 clawhub skill publish ./skills/<stable-slug> \

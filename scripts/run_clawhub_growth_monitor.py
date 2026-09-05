@@ -128,9 +128,9 @@ def load_existing_snapshot(path: Path) -> dict[str, Any] | None:
     return read_json_object(path)
 
 
-def load_observation_policy(path: Path) -> dict[str, Any] | None:
+def load_observation_policy(path: Path) -> dict[str, Any]:
     if not path.exists():
-        return None
+        raise FileNotFoundError(f"{path}：观察策略文件缺失，拒绝在线采集")
     payload = read_json_object(path)
     if payload.get("schemaVersion") != 1:
         raise ValueError(f"{path}：schemaVersion 必须为 1")
@@ -168,7 +168,7 @@ def evaluate_run_guard(
     now: datetime,
     min_interval_hours: float,
     force: bool,
-    observation_policy: dict[str, Any] | None = None,
+    observation_policy: dict[str, Any],
 ) -> dict[str, Any]:
     if min_interval_hours <= 0:
         raise ValueError("min-interval-hours 必须大于 0")
@@ -185,40 +185,33 @@ def evaluate_run_guard(
         if collected_at > now:
             raise ValueError(f"{source} 快照时间晚于当前时间")
         existing_times.append(collected_at)
+    if (old_metrics is None) != (old_search is None):
+        raise ValueError("指标与搜索 latest 必须同时存在或同时缺失")
     if force:
         return {
             "skip": False,
             "reason": "显式强制运行",
             "ageHours": None,
-            "notBefore": (
-                observation_policy["notBeforeText"]
-                if observation_policy is not None
-                else None
-            ),
+            "notBefore": observation_policy["notBeforeText"],
         }
-    if observation_policy is not None:
-        not_before = observation_policy["notBefore"]
-        if now < not_before:
-            return {
-                "skip": True,
-                "reason": (
-                    f"自然观察窗口尚未结束；最早采样时间为 "
-                    f"{observation_policy['notBeforeText']}；"
-                    f"原因：{observation_policy['reason']}"
-                ),
-                "ageHours": None,
-                "notBefore": observation_policy["notBeforeText"],
-            }
-    if old_metrics is None or old_search is None:
+    not_before = observation_policy["notBefore"]
+    if now < not_before:
+        return {
+            "skip": True,
+            "reason": (
+                f"自然观察窗口尚未结束；最早采样时间为 "
+                f"{observation_policy['notBeforeText']}；"
+                f"原因：{observation_policy['reason']}"
+            ),
+            "ageHours": None,
+            "notBefore": observation_policy["notBeforeText"],
+        }
+    if old_metrics is None:
         return {
             "skip": False,
-            "reason": "至少缺少一类历史快照",
+            "reason": "尚无历史快照",
             "ageHours": None,
-            "notBefore": (
-                observation_policy["notBeforeText"]
-                if observation_policy is not None
-                else None
-            ),
+            "notBefore": observation_policy["notBeforeText"],
         }
 
     latest_time = max(existing_times)
@@ -231,21 +224,13 @@ def evaluate_run_guard(
                 f"小于默认门槛 {min_interval_hours:g} 小时"
             ),
             "ageHours": age_hours,
-            "notBefore": (
-                observation_policy["notBeforeText"]
-                if observation_policy is not None
-                else None
-            ),
+            "notBefore": observation_policy["notBeforeText"],
         }
     return {
         "skip": False,
         "reason": f"距最近成功采集 {age_hours:.2f} 小时",
         "ageHours": age_hours,
-        "notBefore": (
-            observation_policy["notBeforeText"]
-            if observation_policy is not None
-            else None
-        ),
+        "notBefore": observation_policy["notBeforeText"],
     }
 
 
@@ -370,6 +355,39 @@ def combine_decisions(
     }
 
 
+def apply_observation_gate(
+    decision: dict[str, Any],
+    observation_policy: dict[str, Any],
+    now: datetime,
+    force: bool,
+) -> dict[str, Any]:
+    """让提前强制采集保留事实，但不能提前形成增长决策。"""
+    if now.tzinfo is None:
+        raise ValueError("当前时间必须包含时区")
+    satisfied = now >= observation_policy["notBefore"]
+    gated = {
+        **decision,
+        "reasons": list(decision["reasons"]),
+        "observationGate": {
+            "notBefore": observation_policy["notBeforeText"],
+            "satisfied": satisfied,
+            "forcedCollection": force,
+        },
+    }
+    if satisfied:
+        return gated
+
+    gated["decisionReady"] = False
+    gated["reasons"].append(
+        "观察期：当前采集早于 "
+        f"{observation_policy['notBeforeText']}，不得进入增长决策"
+    )
+    if gated["status"] != "data-quality-blocked":
+        gated["status"] = "observing"
+        gated["recommendedAction"] = "continue-observation"
+    return gated
+
+
 def render_combined_decision(decision: dict[str, Any]) -> str:
     metrics = decision["components"]["metrics"]
     search = decision["components"]["search"]
@@ -387,6 +405,10 @@ def render_combined_decision(decision: dict[str, Any]) -> str:
         (
             "- 观察轮次配对："
             f"`{'aligned' if decision['pairing']['aligned'] else 'misaligned'}`"
+        ),
+        (
+            "- 自然观察门槛："
+            f"`{'satisfied' if decision['observationGate']['satisfied'] else 'locked'}`"
         ),
         "",
         "> downloads、installs、stars 与搜索排名必须分开解释；"
@@ -429,10 +451,27 @@ def run_monitor(
 
     old_metrics = load_existing_snapshot(metrics_latest)
     old_search = load_existing_snapshot(search_latest)
+    if old_metrics is None and old_search is None:
+        stale_outputs = [
+            path
+            for path in (
+                metrics_previous,
+                metrics_report,
+                search_previous,
+                search_report,
+                decision_json,
+                decision_report,
+            )
+            if path.exists()
+        ]
+        if stale_outputs:
+            names = ", ".join(path.name for path in stale_outputs)
+            raise ValueError(f"latest 均缺失但仍存在派生产物：{names}")
+    current_time = now or datetime.now(timezone.utc)
     guard = evaluate_run_guard(
         old_metrics,
         old_search,
-        now or datetime.now(timezone.utc),
+        current_time,
         min_interval_hours,
         force,
         observation_policy,
@@ -572,9 +611,14 @@ def run_monitor(
             if staged_search_comparison.exists()
             else None
         )
-        combined_decision = combine_decisions(
-            metrics_comparison,
-            search_comparison,
+        combined_decision = apply_observation_gate(
+            combine_decisions(
+                metrics_comparison,
+                search_comparison,
+            ),
+            observation_policy,
+            current_time,
+            force,
         )
         combined_report_text = render_combined_decision(combined_decision)
 
@@ -639,15 +683,12 @@ def parse_args() -> argparse.Namespace:
         help="单个 ClawHub 请求的超时秒数。",
     )
     parser.add_argument(
-        "--min-interval-hours",
-        type=float,
-        default=DEFAULT_MIN_INTERVAL_HOURS,
-        help="非强制运行之间的最短间隔小时数。",
-    )
-    parser.add_argument(
         "--force",
         action="store_true",
-        help="忽略观察窗口与最短间隔并立即执行一次异常复核采集。",
+        help=(
+            "提前执行一次异常复核采集；"
+            "不会绕过快照完整性或自然观察决策门槛。"
+        ),
     )
     return parser.parse_args()
 
@@ -660,7 +701,6 @@ def main() -> int:
             python_bin=args.python_bin,
             clawhub_bin=args.clawhub_bin,
             timeout=args.timeout,
-            min_interval_hours=args.min_interval_hours,
             force=args.force,
         )
     except (

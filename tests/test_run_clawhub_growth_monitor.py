@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -20,6 +22,7 @@ OLD_TIME = "2026-08-20T00:00:00+00:00"
 NEW_TIME = "2026-09-05T00:00:00+00:00"
 NOW = datetime.fromisoformat("2026-09-05T01:00:00+00:00")
 OBSERVATION_END = "2026-09-12T10:45:38+00:00"
+OPEN_OBSERVATION_END = "2026-01-01T00:00:00+00:00"
 
 
 def metrics_snapshot(label):
@@ -56,6 +59,10 @@ def write_observation_policy(root, not_before=OBSERVATION_END):
             "reason": "维护后的自然观察窗口",
         },
     )
+
+
+def write_open_observation_policy(root):
+    write_observation_policy(root, OPEN_OBSERVATION_END)
 
 
 def comparison_snapshot(
@@ -132,6 +139,26 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
         self.assertIsNotNone(policy)
         self.assertEqual(policy["notBeforeText"], OBSERVATION_END)
         self.assertIsNotNone(policy["notBefore"].tzinfo)
+
+    def test_missing_observation_policy_fails_before_any_child_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner = FakeRunner()
+
+            with self.assertRaisesRegex(
+                FileNotFoundError,
+                "观察策略文件缺失",
+            ):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=runner,
+                )
+
+            self.assertEqual(runner.commands, [])
 
     def test_output_bundle_rolls_back_mid_commit_failure(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -212,6 +239,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_first_run_writes_latest_without_previous_or_reports(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             runner = FakeRunner()
 
             result = MODULE.run_monitor(
@@ -254,6 +282,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_real_subprocess_collectors_accept_only_issued_capability(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             scripts = root / "scripts"
             scripts.mkdir()
             source_scripts = SCRIPT.parent
@@ -324,6 +353,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_collectors_share_capability_but_compare_does_not_receive_it(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             write_json(metrics / "clawhub-latest.json", metrics_snapshot(OLD_TIME))
             write_json(
@@ -438,9 +468,52 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             self.assertEqual(result["notBefore"], OBSERVATION_END)
             self.assertEqual(len(runner.commands), 2)
 
+    def test_force_before_observation_end_cannot_become_decision_ready(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_observation_policy(root)
+            metrics = root / "metrics"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(OLD_TIME))
+            write_json(
+                metrics / "clawhub-search-latest.json",
+                search_snapshot(OLD_TIME),
+            )
+            runner = FakeRunner()
+
+            result = MODULE.run_monitor(
+                root,
+                python_bin="python3",
+                clawhub_bin="clawhub",
+                timeout=10,
+                force=True,
+                now=NOW,
+                runner=runner,
+            )
+
+            self.assertFalse(result["skipped"])
+            self.assertFalse(result["decisionReady"])
+            self.assertEqual(result["decisionStatus"], "observing")
+            self.assertEqual(
+                result["recommendedAction"],
+                "continue-observation",
+            )
+            decision = json.loads(
+                (metrics / "clawhub-growth-decision.json").read_text()
+            )
+            self.assertEqual(
+                decision["observationGate"],
+                {
+                    "notBefore": OBSERVATION_END,
+                    "satisfied": False,
+                    "forcedCollection": True,
+                },
+            )
+            self.assertIn("不得进入增长决策", " ".join(decision["reasons"]))
+
     def test_existing_snapshots_are_rotated_after_all_stages_succeed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             old_metrics = metrics_snapshot(OLD_TIME)
             old_search = search_snapshot(OLD_TIME)
@@ -492,6 +565,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_collection_failure_preserves_all_existing_outputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             old_metrics = metrics_snapshot(OLD_TIME)
             old_search = search_snapshot(OLD_TIME)
@@ -556,6 +630,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_comparison_failure_preserves_existing_baseline(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             old_metrics = metrics_snapshot(OLD_TIME)
             old_search = search_snapshot(OLD_TIME)
@@ -589,6 +664,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_recent_complete_run_is_skipped_without_child_commands(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             write_json(metrics / "clawhub-latest.json", metrics_snapshot(NEW_TIME))
             write_json(
@@ -619,6 +695,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_force_bypasses_recent_run_guard(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             write_json(metrics / "clawhub-latest.json", metrics_snapshot(NEW_TIME))
             write_json(
@@ -643,6 +720,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_force_does_not_bypass_future_snapshot_validation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             future = "2026-09-06T00:00:00+00:00"
             write_json(metrics / "clawhub-latest.json", metrics_snapshot(future))
@@ -668,6 +746,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_force_does_not_bypass_malformed_snapshot_validation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             write_json(
                 metrics / "clawhub-latest.json",
@@ -691,6 +770,7 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
     def test_partial_future_snapshot_is_rejected_before_first_run(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             future = "2026-09-06T00:00:00+00:00"
             write_json(metrics / "clawhub-latest.json", metrics_snapshot(future))
@@ -708,9 +788,60 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
 
             self.assertEqual(runner.commands, [])
 
+    def test_single_sided_latest_fails_closed_without_collection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_open_observation_policy(root)
+            metrics = root / "metrics"
+            write_json(metrics / "clawhub-latest.json", metrics_snapshot(OLD_TIME))
+            runner = FakeRunner()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "必须同时存在或同时缺失",
+            ):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=runner,
+                )
+
+            self.assertEqual(runner.commands, [])
+
+    def test_missing_latest_with_stale_derived_output_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_open_observation_policy(root)
+            stale_report = root / "metrics" / "clawhub-change-report.md"
+            stale_report.write_text("stale\n", encoding="utf-8")
+            runner = FakeRunner()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "latest 均缺失但仍存在派生产物",
+            ):
+                MODULE.run_monitor(
+                    root,
+                    python_bin="python3",
+                    clawhub_bin="clawhub",
+                    timeout=10,
+                    now=NOW,
+                    runner=runner,
+                )
+
+            self.assertEqual(runner.commands, [])
+            self.assertEqual(
+                stale_report.read_text(encoding="utf-8"),
+                "stale\n",
+            )
+
     def test_future_snapshot_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            write_open_observation_policy(root)
             metrics = root / "metrics"
             future = "2026-09-06T00:00:00+00:00"
             write_json(metrics / "clawhub-latest.json", metrics_snapshot(future))
@@ -801,6 +932,20 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
         self.assertFalse(decision["decisionReady"])
         self.assertEqual(decision["status"], "data-quality-blocked")
         self.assertFalse(decision["components"]["search"]["available"])
+
+    def test_cli_rejects_minimum_interval_override(self):
+        with mock.patch.object(
+            MODULE.sys,
+            "argv",
+            [
+                "run_clawhub_growth_monitor.py",
+                "--min-interval-hours",
+                "0.001",
+            ],
+        ):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    MODULE.parse_args()
 
 
 if __name__ == "__main__":

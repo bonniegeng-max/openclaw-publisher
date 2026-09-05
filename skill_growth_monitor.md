@@ -111,7 +111,9 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 - 完整周检只运行 `python3 scripts/run_clawhub_growth_monitor.py`，避免绕过观察闸门或只更新一半快照。
 - `metrics/observation-policy.json` 将首次允许采样时间锁定为 `2026-09-12T10:45:38+00:00`；在此之前，常规入口即使没有历史快照也必须零请求退出。
-- 默认 144 小时防重复门槛不得在常规周检中绕过；`--force` 仅用于明确的版本或审核异常复核。
+- 策略文件缺失或指标/搜索 latest 只存在一侧时必须 fail-closed，不得用重新采样掩盖基线损坏。
+- 144 小时防重复门槛固定且不提供生产 CLI 覆盖；`--force` 仅用于明确的版本或审核异常复核。
+- `--force` 允许提前采集事实，但在 `notBefore` 前必须把组合结果锁为 `decisionReady: false`，不得提前形成增长结论。
 - 两个 `collect_clawhub_*.py` 采集器是内部子命令，必须验证统一入口签发的短时能力；不得直接运行。
 - 能力绑定本轮父进程、采集器和暂存输出路径，并在调用 ClawHub CLI 前从环境中移除；它只防误调用，不是本机恶意调用防线。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。

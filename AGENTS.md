@@ -44,6 +44,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 - 不在同一轮再次单独运行指标或搜索采集器。
 - 两个 `collect_clawhub_*.py` 仅是内部子命令，必须由统一入口签发并绑定本轮暂存路径的短时能力；不得直接调用。
 - 遵守 `metrics/observation-policy.json` 的 `notBefore`；无历史快照时也不得提前首次采样。
+- 策略文件缺失或指标/搜索 latest 只存在一侧时必须 fail-closed，不得在线补采样。
 - 默认 144 小时防重复门槛不得绕过。
 - 不执行 install、download、publish、dry-run 或隔离安装。
 - 不修改 Skill 文件、版本号或 catalog。
@@ -56,7 +57,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 python3 scripts/run_clawhub_growth_monitor.py --force
 ```
 
-`--force` 只允许提前重新采样，不代表允许安装或跳过证据门槛。
+`--force` 只允许提前重新采样，不代表允许安装或跳过证据门槛；`notBefore` 前的强制采集必须保持 `decisionReady: false`。
 
 ## 增长判断
 

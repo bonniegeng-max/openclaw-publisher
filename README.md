@@ -231,7 +231,7 @@ python3 scripts/compare_clawhub_metrics.py \
 
 统一入口还会生成 `metrics/clawhub-growth-decision.json` 和 `metrics/clawhub-growth-decision.md`。只有指标与搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，且前后两组指标/搜索快照的采集时间分别相差不超过 15 分钟，组合闸门才会返回 `decisionReady: true`；单侧合格只能继续观察，跨轮次误拼、污染、口径不一致或证据格式错误会优先要求修复数据质量。
 
-`metrics/observation-policy.json` 记录维护后首次允许采样的 `notBefore`。常规运行在该时间前会零请求退出，即使还没有 latest 快照；到期后自动放行。已有完整采集时，距离两类 latest 中较新的采集时间不足 144 小时也会直接跳过。只有版本、moderation 或公开文件异常需要提前复核时才使用 `--force`；它会绕过观察窗口与采样间隔，但不会绕过已有快照的时间完整性校验或离线对比器的 7 天决策门槛。
+`metrics/observation-policy.json` 记录维护后首次允许采样的 `notBefore`。策略文件缺失或两类 latest 只存在一侧时统一入口会 fail-closed，不发起请求；常规运行在 `notBefore` 前也会零请求退出。已有完整采集时，距离两类 latest 中较新的采集时间不足固定的 144 小时门槛会直接跳过，该门槛不提供生产 CLI 覆盖参数。只有版本、moderation 或公开文件异常需要提前复核时才使用 `--force`；它允许提前采集，但组合结果在 `notBefore` 前始终为 `decisionReady: false`，也不会绕过快照时间完整性或离线对比器的 7 天门槛。
 
 运行离线测试：
 

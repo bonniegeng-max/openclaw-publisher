@@ -1,0 +1,30 @@
+{
+  "id": "npm-pack-json-shape",
+  "source": "https://github.com/openclaw/clawhub/issues/3275",
+  "affected": {
+    "clawhub": "0.23.1",
+    "npm": "12.x"
+  },
+  "input": {
+    "npm11": [
+      {
+        "id": "my-plugin@0.4.0",
+        "filename": "my-plugin-0.4.0.tgz"
+      }
+    ],
+    "npm12": {
+      "my-plugin": {
+        "id": "my-plugin@0.4.0",
+        "filename": "my-plugin-0.4.0.tgz"
+      }
+    },
+    "artifactExists": true,
+    "reportedError": "npm pack did not return a tarball filename"
+  },
+  "expected": {
+    "diagnosis": "NPM_PACK_JSON_SHAPE",
+    "layer": "pack",
+    "confidence": "high",
+    "doNotClaim": "npm pack failed to create the tarball"
+  }
+}

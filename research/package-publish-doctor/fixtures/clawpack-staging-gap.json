@@ -1,0 +1,25 @@
+{
+  "id": "clawpack-staging-gap",
+  "source": "https://github.com/openclaw/clawhub/issues/3577",
+  "affected": {
+    "workflow": "package-publish.yml@v0.23.3",
+    "releaseContainsFix": false,
+    "mainContainsFix": true
+  },
+  "input": {
+    "artifactBytes": 8032797,
+    "publicEdgeBudgetBytes": 4194304,
+    "legacyStagingThresholdBytes": 18874368,
+    "registry": "https://clawhub.ai",
+    "reportedStatus": 413,
+    "reportedError": "Request Entity Too Large"
+  },
+  "expected": {
+    "diagnosis": "CLAWPACK_STAGING_GAP",
+    "layer": "upload",
+    "confidence": "high",
+    "artifactExceedsPublicEdgeBudget": true,
+    "artifactBelowLegacyStagingThreshold": true,
+    "doNotRecommend": "depend on an unreleased main branch for production publishing"
+  }
+}

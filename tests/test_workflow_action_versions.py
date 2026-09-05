@@ -42,6 +42,15 @@ class WorkflowActionVersionTests(unittest.TestCase):
         )[0]
         self.assertIn("actions: read", permissions_block)
 
+    def test_metrics_ci_compiles_all_python_sources_and_tests(self):
+        workflow = (WORKFLOWS / "metrics-tools-ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "python -m py_compile scripts/*.py tests/*.py",
+            workflow,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

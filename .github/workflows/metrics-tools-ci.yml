@@ -38,17 +38,7 @@ jobs:
           python-version: "3.11"
 
       - name: Compile Python sources
-        run: |
-          python -m py_compile \
-            scripts/collect_clawhub_metrics.py \
-            scripts/collect_clawhub_search_visibility.py \
-            scripts/compare_clawhub_metrics.py \
-            scripts/run_clawhub_growth_monitor.py \
-            tests/test_collect_clawhub_metrics.py \
-            tests/test_collect_clawhub_search_visibility.py \
-            tests/test_compare_clawhub_metrics.py \
-            tests/test_run_clawhub_growth_monitor.py \
-            tests/test_workflow_action_versions.py
+        run: python -m py_compile scripts/*.py tests/*.py
 
       - name: Run offline tests
         run: python -m unittest discover -s tests

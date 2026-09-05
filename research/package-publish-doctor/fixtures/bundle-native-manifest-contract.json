@@ -1,0 +1,25 @@
+{
+  "id": "bundle-native-manifest-contract",
+  "source": "https://github.com/openclaw/clawhub/issues/3513",
+  "affected": {
+    "clawhub": "0.23.3",
+    "family": "bundle-plugin"
+  },
+  "input": {
+    "files": [
+      ".codex-plugin/plugin.json",
+      ".claude-plugin/plugin.json",
+      ".mcp.json",
+      "skills/example/SKILL.md"
+    ],
+    "openclawPluginManifestPresent": false,
+    "reportedError": "openclaw.plugin.json required"
+  },
+  "expected": {
+    "diagnosis": "BUNDLE_NATIVE_MANIFEST_CONTRACT",
+    "layer": "family-detection",
+    "confidence": "high",
+    "requiresMaintainerDecision": true,
+    "doNotRecommend": "create a fake native manifest"
+  }
+}

@@ -138,6 +138,10 @@ macOS 专用可执行资源；两个纯文案 Skill 也没有需要 Git 或 Claw
 后续修复应把强示例标题改为人类可读产品名，并明确区分 display name 与
 稳定 slug。
 
+`research/skill-positioning-audit-example-vnext/` 已按 catalog 权威身份准备
+完整候选：展示标题使用 `Skill Positioning Audit`，稳定路由继续使用
+`skill-positioning-audit`，并补齐五维 rubric、最小改法和直接替换文案。
+
 ### `skills/README.md` 落后于发布契约
 
 当前说明只要求 `SKILL.md`，示例缺少稳定 `slug`、`CHANGELOG.md`、

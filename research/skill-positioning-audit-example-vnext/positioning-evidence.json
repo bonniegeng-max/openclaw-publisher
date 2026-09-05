@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "status": "observation-window-hold",
+  "observationNotBefore": "2026-09-12T10:45:38+00:00",
+  "source": {
+    "commit": "6ce6d6d3d93c818dc8bba29f13493147e565f62b",
+    "path": "skills/skill-positioning-audit/examples/weak_vs_strong_positioning.md",
+    "strongExampleTitle": "skill-positioning-audit"
+  },
+  "authoritativeIdentity": {
+    "catalogPath": ".clawhub/skill-catalog.json",
+    "catalogKey": "skills/skill-positioning-audit",
+    "displayName": "Skill Positioning Audit",
+    "stableSlug": "skill-positioning-audit",
+    "currentVersion": "1.0.4"
+  },
+  "diagnosis": {
+    "conclusion": "一般",
+    "primaryIssue": "The strong example uses the stable slug as the visible product title.",
+    "contractConflict": "The skill criticizes directory-like titles while its own strong example presents one.",
+    "minimumFix": "Use the catalog displayName as the visible title and show the slug separately as routing metadata."
+  },
+  "rubric": {
+    "maximumScore": 25,
+    "before": {
+      "titleClarity": 2,
+      "summaryConversion": 4,
+      "audienceFocus": 4,
+      "differentiation": 3,
+      "trust": 2,
+      "total": 15
+    },
+    "candidate": {
+      "titleClarity": 5,
+      "summaryConversion": 4,
+      "audienceFocus": 5,
+      "differentiation": 4,
+      "trust": 3,
+      "total": 21
+    },
+    "interpretation": "editorial rubric, not platform performance"
+  },
+  "recommendedCopy": {
+    "displayTitle": "Skill Positioning Audit",
+    "stableSlug": "skill-positioning-audit",
+    "summary": "Audit how your ClawHub skill reads before publishing. 找出标题、摘要、目标用户和差异化中最伤转化的一处。",
+    "firstParagraph": "能发布不等于有人想安装。Skill Positioning Audit 会在上架前检查标题、摘要、目标用户和差异化，指出当前最像模板、最该先改的一处。"
+  },
+  "differentiation": {
+    "job": "Diagnose storefront positioning rather than publish syntax.",
+    "targetUser": "Authors with a publishable ClawHub skill whose storefront still feels generic.",
+    "memorableRule": "Can publish is not the same as worth installing.",
+    "proofAssets": [
+      "five-dimension storefront rubric",
+      "weak-versus-strong positioning example",
+      "direct replacement copy"
+    ]
+  },
+  "claims": {
+    "displayNameSlugConflictConfirmed": true,
+    "catalogDisplayNameConfirmed": true,
+    "platformABTestCompleted": false,
+    "downloadImpactConfirmed": false,
+    "searchImpactConfirmed": false
+  }
+}

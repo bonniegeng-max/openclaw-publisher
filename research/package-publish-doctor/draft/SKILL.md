@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.5
+version: 0.1.6
 metadata:
   openclaw:
     os: [macos]
@@ -52,6 +52,33 @@ Collect existing evidence before rerunning anything:
 9. For a source-validation regression, the exact source-validator commit and the compared source fields; rejection alone is not source evidence.
 
 Never request tokens, cookies, authorization headers, or raw secret values.
+
+## Offline executable
+
+Normalize the observations according to `references/input-contract.md`, then
+run the bundled command:
+
+```bash
+python3 scripts/diagnose.py examples/anonymous-input.json
+```
+
+When running from the repository root, use:
+
+```bash
+python3 research/package-publish-doctor/draft/scripts/diagnose.py \
+  research/package-publish-doctor/draft/examples/anonymous-input.json
+```
+
+Input is one UTF-8 JSON object with an `input` object and
+`input.surface: "package"`. Output is one JSON object containing the diagnosis,
+failed layer, confidence, version status, evidence, recommendation, and missing
+evidence. A successful process exit means evaluation completed; check
+`matched`, because `UNKNOWN` also exits successfully.
+
+This executable is offline and read-only. It does not access GitHub, ClawHub,
+the registry, environment credentials, or the network; it does not publish,
+install, download, verify live state, or apply repairs. Historical and
+version-specific facts come only from the reviewed bundled implementation.
 
 ## Diagnostic flow
 
@@ -164,7 +191,10 @@ If no rule has enough evidence, return `UNKNOWN` and specify the smallest missin
 ## Bundled resources
 
 - `references/failure-map.md`: evidence signatures, version status, and safe responses.
+- `references/input-contract.md`: normalized JSON input, output, redaction, and offline execution contract.
+- `scripts/diagnose.py`: canonical offline diagnostic implementation and CLI.
 - `templates/package_diagnosis_report.md`: stable report structure.
+- `examples/anonymous-input.json`: runnable redacted JSON input.
 - `examples/three_layer_diagnosis.md`: examples that distinguish pack, contract, and upload failures.
 - `examples/package_release_scan_stalled.md`: version-bounded package scan stall with explicit Skill-surface counterexamples.
 - `examples/source_and_verification_failures.md`: trusted source-ref regression and fail-closed audit-response verification.

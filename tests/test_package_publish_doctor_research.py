@@ -11,7 +11,7 @@ FIXTURES = RESEARCH / "fixtures"
 
 SPEC = importlib.util.spec_from_file_location(
     "package_publish_doctor_diagnose",
-    RESEARCH / "diagnose.py",
+    RESEARCH / "draft" / "scripts" / "diagnose.py",
 )
 DIAGNOSE_MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DIAGNOSE_MODULE)

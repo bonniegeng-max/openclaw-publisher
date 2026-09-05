@@ -1,0 +1,14 @@
+{
+  "id": "anonymous-workflow-startup-failure",
+  "source": "redacted local observation",
+  "input": {
+    "surface": "package",
+    "workflowRef": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3",
+    "jobsCreated": 0,
+    "callerPermissions": {
+      "contents": "read",
+      "id-token": "write"
+    },
+    "reportedError": "Nested job is requesting 'actions: read', but is only allowed 'actions: none'."
+  }
+}

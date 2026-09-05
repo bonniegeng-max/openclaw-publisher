@@ -70,14 +70,16 @@ source
 - `trusted-publish-tag-ref-regression.json`：普通 trusted publisher 的 tag ref 被 commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720` 中的源码错误地与 commit SHA 比较
 - `package-security-audit-fields-missing.json`：clean package release 因审计字段缺失而无法通过安装信任检查
 
-这些 fixture 的目标不是模拟 ClawHub 服务端，而是固定诊断器必须识别的观测证据边界。规则适用版本、修复版本和固定源码事实内置在 `diagnose.py`，`case.affected` 不参与命中。fixture 集合可以扩展，测试只要求基线案例继续存在、ID 唯一，不限制总数。`diagnose.py` 会先收集全部匹配信号，再输出结构化诊断；若不同失败层同时匹配且 `input.failureSequence` 未给出覆盖所有匹配层的时间顺序，则返回 `UNKNOWN`。`tests/test_package_publish_doctor_research.py` 会验证 fixture 完整性、预期分类以及避免误判的负例。
+这些 fixture 的目标不是模拟 ClawHub 服务端，而是固定诊断器必须识别的观测证据边界。规则适用版本、修复版本和固定源码事实内置在 `draft/scripts/diagnose.py`，`case.affected` 不参与命中。fixture 集合可以扩展，测试只要求基线案例继续存在、ID 唯一，不限制总数。诊断器会先收集全部匹配信号，再输出结构化诊断；若不同失败层同时匹配且 `input.failureSequence` 未给出覆盖所有匹配层的时间顺序，则返回 `UNKNOWN`。`tests/test_package_publish_doctor_research.py` 会验证 fixture 完整性、预期分类以及避免误判的负例。
 
 本地运行：
 
 ```bash
-python3 research/package-publish-doctor/diagnose.py \
+python3 research/package-publish-doctor/draft/scripts/diagnose.py \
   research/package-publish-doctor/fixtures/clawpack-staging-gap.json
 ```
+
+`draft/scripts/diagnose.py` 是唯一诊断实现；根目录 `diagnose.py` 仅为旧命令和导入路径提供兼容转发。输入/输出与脱敏要求见 `draft/references/input-contract.md`，可运行匿名输入见 `draft/examples/anonymous-input.json`。
 
 输出只包含诊断层、证据、建议和来源，不执行网络请求或修复动作。无法满足完整判定条件时必须返回 `UNKNOWN`，不能根据单个错误关键词猜测根因。`CLAWPACK_STAGING_GAP` 还要求 Inspector 或本地验证成功，且验证记录中的 artifact hash 必须与上传失败的 artifact hash 相同；验证失败、缺失或 hash 不同都不能高置信命中。`TRUSTED_PUBLISH_TAG_REF_REGRESSION` 必须同时拿到指定 source-validator commit 与 `source.ref !== (candidateSha ?? token.sha)` 的源码比较证据；只有 `rejected: true` 必须保持 `UNKNOWN`。`PACKAGE_SECURITY_AUDIT_FIELDS_MISSING` 把 `overview` 与 `securityAuditUrl` 都视为必需的非空字符串，并要求错误正文明确指向实际无效字段。
 
@@ -89,7 +91,10 @@ python3 research/package-publish-doctor/diagnose.py \
 - `CHANGELOG.md`
 - `.clawhubignore`
 - `references/failure-map.md`
+- `references/input-contract.md`
+- `scripts/diagnose.py`
 - `templates/package_diagnosis_report.md`
+- `examples/anonymous-input.json`
 - `examples/three_layer_diagnosis.md`
 - `examples/package_release_scan_stalled.md`
 - `examples/source_and_verification_failures.md`

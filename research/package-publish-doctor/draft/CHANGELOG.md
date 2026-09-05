@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6 - 2026-09-05
+
+- 将唯一诊断实现迁入 `scripts/diagnose.py`，根研究脚本仅保留兼容转发。
+- 新增离线输入/输出契约和可直接运行的匿名 JSON 示例。
+- 明确 CLI 命令、`UNKNOWN` 退出语义、脱敏要求和无网络、无发布、无修复副作用边界。
+- 增加 canonical CLI 独立运行、资源存在及兼容 wrapper 一致性测试。
+
 ## 0.1.5 - 2026-09-05
 
 - 将 `overview` 与 `securityAuditUrl` 统一校验为必需的非空字符串。

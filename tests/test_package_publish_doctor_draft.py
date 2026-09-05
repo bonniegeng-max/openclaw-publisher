@@ -1,5 +1,9 @@
 import json
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -7,6 +11,9 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 DRAFT = ROOT / "research" / "package-publish-doctor" / "draft"
 SKILL = DRAFT / "SKILL.md"
+CANONICAL = DRAFT / "scripts" / "diagnose.py"
+WRAPPER = DRAFT.parent / "diagnose.py"
+ANONYMOUS_INPUT = DRAFT / "examples" / "anonymous-input.json"
 
 
 def frontmatter(text):
@@ -29,7 +36,10 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
             "CHANGELOG.md",
             ".clawhubignore",
             "references/failure-map.md",
+            "references/input-contract.md",
+            "scripts/diagnose.py",
             "templates/package_diagnosis_report.md",
+            "examples/anonymous-input.json",
             "examples/three_layer_diagnosis.md",
             "examples/package_release_scan_stalled.md",
             "examples/source_and_verification_failures.md",
@@ -46,7 +56,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.5")
+        self.assertEqual(values["version"], "0.1.6")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))
@@ -71,6 +81,10 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
             workflow.count('"research/package-publish-doctor/**"'),
             2,
         )
+        self.assertIn(
+            "research/package-publish-doctor/draft/scripts/*.py",
+            workflow,
+        )
 
     def test_skill_declares_core_safety_boundaries(self):
         text = SKILL.read_text(encoding="utf-8")
@@ -89,7 +103,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
     def test_bundled_resource_links_resolve(self):
         text = SKILL.read_text(encoding="utf-8")
         references = re.findall(
-            r"`((?:references|templates|examples)/[^`]+)`",
+            r"`((?:references|templates|examples|scripts)/[^`]+)`",
             text,
         )
 
@@ -97,6 +111,50 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
         for relative in references:
             with self.subTest(relative=relative):
                 self.assertTrue((DRAFT / relative).is_file())
+
+    def test_canonical_cli_runs_standalone_with_anonymous_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            isolated = Path(directory) / "package-publish-doctor"
+            shutil.copytree(DRAFT, isolated)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(isolated / "scripts" / "diagnose.py"),
+                    str(isolated / "examples" / "anonymous-input.json"),
+                ],
+                cwd=isolated,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            result = json.loads(completed.stdout)
+
+        self.assertTrue(result["matched"])
+        self.assertEqual(
+            result["diagnosis"],
+            "REUSABLE_WORKFLOW_ACTIONS_PERMISSION",
+        )
+        self.assertEqual(result["caseId"], "anonymous-workflow-startup-failure")
+
+    def test_wrapper_and_canonical_cli_outputs_are_identical(self):
+        outputs = []
+        for script in (CANONICAL, WRAPPER):
+            completed = subprocess.run(
+                [sys.executable, str(script), str(ANONYMOUS_INPUT)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            outputs.append(json.loads(completed.stdout))
+
+        self.assertEqual(outputs[0], outputs[1])
+
+    def test_root_script_is_compatibility_forwarder_without_rules(self):
+        text = WRAPPER.read_text(encoding="utf-8")
+
+        self.assertIn('"draft" / "scripts" / "diagnose.py"', text)
+        self.assertNotIn("def diagnose(", text)
+        self.assertNotIn("REUSABLE_WORKFLOW_ACTIONS_PERMISSION", text)
 
 
 if __name__ == "__main__":

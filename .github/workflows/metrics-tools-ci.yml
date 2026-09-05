@@ -40,7 +40,7 @@ jobs:
           python-version: "3.11"
 
       - name: Compile Python sources
-        run: python -m py_compile scripts/*.py tests/*.py research/package-publish-doctor/*.py
+        run: python -m py_compile scripts/*.py tests/*.py research/package-publish-doctor/*.py research/package-publish-doctor/draft/scripts/*.py
 
       - name: Run offline tests
         run: python -m unittest discover -s tests

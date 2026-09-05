@@ -50,13 +50,17 @@ permissions:
 - 输入的 npm 为 12.x
 - CLI 报 `npm pack did not return a tarball filename`
 - npm JSON 输出为包名到结果对象的映射，而不是旧数组
+- npm 11 数组与 npm 12 对象各自恰有一条结果
+- 两条结果都包含非空 `filename`，且值完全相同
 
 最小修复：
 
 - 优先升级到已确认兼容 npm 12 的正式 ClawHub CLI。
 - 如果正式版本尚未确认，只在发布 job 内临时固定 npm 11。
 
-不要声称 npm 没有生成 tarball，也不要全局降级开发机的 npm。
+空输出、缺失/空白 `filename`、错误 entry 类型、多条结果或两侧
+`filename` 不一致都必须保持 `UNKNOWN`。不要声称 npm 没有生成
+tarball，也不要全局降级开发机的 npm。
 
 ### `BUNDLE_NATIVE_MANIFEST_CONTRACT`
 

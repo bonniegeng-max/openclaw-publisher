@@ -3,7 +3,9 @@
 
 import argparse
 import json
+import math
 import re
+import sys
 from pathlib import Path
 
 
@@ -183,8 +185,18 @@ DIAGNOSIS_GUIDANCE = {
 }
 
 
+class InputContractError(ValueError):
+    """Raised when the CLI input cannot satisfy the offline input contract."""
+
+
 def _optional_string(value):
-    return value if _is_non_empty_string(value) else None
+    if not _is_non_empty_string(value):
+        return None
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    return value
 
 
 def _normalized_context_value(field, value):
@@ -273,19 +285,51 @@ def _unknown(case, missing_evidence, evidence=None):
 
 
 def _version_tuple(value):
-    parts = str(value or "").lstrip("v").split(".")
+    if not _is_non_empty_string(value):
+        return None
+    parts = value.lstrip("v").split(".")
     if len(parts) != 3 or not all(part.isdigit() for part in parts):
         return None
     return tuple(int(part) for part in parts)
 
 
 def _version_major(value):
-    first = str(value or "").lstrip("v").split(".", 1)[0]
+    if not _is_non_empty_string(value):
+        return None
+    first = value.lstrip("v").split(".", 1)[0]
     return int(first) if first.isdigit() else None
 
 
 def _is_non_empty_string(value):
     return isinstance(value, str) and bool(value.strip())
+
+
+def _is_commit(value):
+    return _is_non_empty_string(value) and bool(
+        COMMIT_CONTEXT_PATTERN.fullmatch(value)
+    )
+
+
+def _is_integer(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value):
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _single_pack_filename(value, expected_type):
+    if not isinstance(value, expected_type) or not value:
+        return None
+    entries = list(value.values()) if isinstance(value, dict) else value
+    if len(entries) != 1 or not isinstance(entries[0], dict):
+        return None
+    filename = entries[0].get("filename")
+    return filename if _is_non_empty_string(filename) else None
 
 
 def _same_artifact_validation(inputs):
@@ -352,14 +396,17 @@ def _resolve_matches(case, matches):
 def diagnose(case):
     """Return one conservative diagnosis for one normalized input object."""
     if not isinstance(case, dict):
-        raise TypeError("Package Doctor input must be a JSON object")
-    inputs = case.get("input") or {}
+        raise InputContractError("top-level JSON value must be an object")
+    if "input" not in case:
+        raise InputContractError("required field 'input' is missing")
+    inputs = case["input"]
     if not isinstance(inputs, dict):
-        return _unknown(case, ["input 必须是 JSON object"])
+        raise InputContractError("field 'input' must be an object")
     if inputs.get("surface") != "package":
         return _unknown(case, ["input.surface=package"])
 
-    error_lower = str(inputs.get("reportedError") or "").lower()
+    reported_error = inputs.get("reportedError")
+    error_lower = reported_error.lower() if _is_non_empty_string(reported_error) else ""
     matches = []
 
     if (
@@ -368,8 +415,8 @@ def diagnose(case):
         and inputs.get("rejected") is True
         and inputs.get("sourceValidatorCommit") == TRUSTED_SOURCE_VALIDATOR_COMMIT
         and inputs.get("sourceValidationComparison") == TRUSTED_SOURCE_COMPARISON
-        and inputs.get("tokenSha")
-        and inputs.get("tokenRef")
+        and _is_commit(inputs.get("tokenSha"))
+        and _is_non_empty_string(inputs.get("tokenRef"))
         and inputs.get("sourceCommit") == inputs.get("tokenSha")
         and inputs.get("sourceRef") == inputs.get("tokenRef")
         and inputs.get("sourceRef") != inputs.get("tokenSha")
@@ -391,11 +438,19 @@ def diagnose(case):
             )
         )
 
-    permissions = inputs.get("callerPermissions") or {}
+    permissions_value = inputs.get("callerPermissions")
+    permissions = permissions_value if isinstance(permissions_value, dict) else {}
+    actions_value = permissions.get("actions")
+    actions_missing = "actions" not in permissions or (
+        _is_non_empty_string(actions_value)
+        and actions_value.strip().lower() == "none"
+    )
     if (
-        inputs.get("jobsCreated") == 0
+        _is_integer(inputs.get("jobsCreated"))
+        and inputs.get("jobsCreated") == 0
         and "requesting 'actions: read'" in error_lower
-        and str(permissions.get("actions") or "none").lower() == "none"
+        and isinstance(permissions_value, dict)
+        and actions_missing
         and inputs.get("workflowRef") == PACKAGE_PUBLISH_WORKFLOW_REF
     ):
         matches.append(
@@ -414,9 +469,13 @@ def diagnose(case):
             )
         )
 
+    npm11_filename = _single_pack_filename(inputs.get("npm11"), list)
+    npm12_filename = _single_pack_filename(inputs.get("npm12"), dict)
     if (
         inputs.get("artifactExists") is True
-        and isinstance(inputs.get("npm12"), dict)
+        and npm11_filename is not None
+        and npm12_filename is not None
+        and npm11_filename == npm12_filename
         and "npm pack did not return a tarball filename" in error_lower
         and _version_tuple(inputs.get("clawhubVersion"))
         == NPM_PACK_JSON_SHAPE_CLI_VERSION
@@ -430,6 +489,7 @@ def diagnose(case):
                 [
                     "npm pack 已生成 tarball",
                     "npm 12 的 JSON 输出是对象而不是数组",
+                    "npm 11 与 npm 12 记录同一非空 tarball filename",
                     "旧解析器仍按数组读取第一个 filename",
                 ],
                 "升级到包含兼容解析的正式 CLI；临时方案只在发布 job 内固定 npm 11。",
@@ -437,7 +497,13 @@ def diagnose(case):
             )
         )
 
-    files = set(inputs.get("files") or [])
+    files_value = inputs.get("files")
+    files = (
+        set(files_value)
+        if isinstance(files_value, list)
+        and all(isinstance(item, str) for item in files_value)
+        else set()
+    )
     if (
         inputs.get("family") == "bundle-plugin"
         and _version_tuple(inputs.get("clawhubVersion"))
@@ -468,7 +534,10 @@ def diagnose(case):
     if (
         inputs.get("reportedStatus") == 413
         and "request entity too large" in error_lower
-        and all(isinstance(value, int) for value in (artifact_bytes, edge_budget, legacy_threshold))
+        and all(
+            _is_integer(value) and value > 0
+            for value in (artifact_bytes, edge_budget, legacy_threshold)
+        )
         and edge_budget < artifact_bytes < legacy_threshold
         and inputs.get("workflowRef") == PACKAGE_PUBLISH_WORKFLOW_REF
         and validation_evidence
@@ -495,9 +564,9 @@ def diagnose(case):
     if (
         inputs.get("family") == "bundle-plugin"
         and inputs.get("publishAccepted") is True
-        and inputs.get("releaseId")
+        and _is_non_empty_string(inputs.get("releaseId"))
         and inputs.get("scanStatus") == "pending"
-        and isinstance(pending_hours, (int, float))
+        and _is_number(pending_hours)
         and pending_hours >= 24
         and inputs.get("latestRelease") is None
         and inputs.get("inspectVisible") is False
@@ -524,7 +593,8 @@ def diagnose(case):
             )
         )
 
-    trust = inputs.get("trust") or {}
+    trust_value = inputs.get("trust")
+    trust = trust_value if isinstance(trust_value, dict) else {}
     invalid_fields = [
         name
         for name in ("overview", "securityAuditUrl")
@@ -567,14 +637,50 @@ def diagnose(case):
     return _resolve_matches(case, matches)
 
 
+def _load_case(path):
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise InputContractError("input file must be valid UTF-8") from exc
+    except OSError as exc:
+        reason = exc.strerror or exc.__class__.__name__
+        raise InputContractError(f"unable to read input file: {reason}") from exc
+    try:
+        case = json.loads(raw, parse_constant=_reject_json_constant)
+    except json.JSONDecodeError as exc:
+        raise InputContractError(
+            f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}"
+        ) from exc
+    if not isinstance(case, dict):
+        raise InputContractError("top-level JSON value must be an object")
+    return case
+
+
+def _reject_json_constant(value):
+    raise InputContractError(f"invalid JSON constant: {value}")
+
+
+def _serialize_json(value, indent=None):
+    serialized = json.dumps(value, ensure_ascii=False, indent=indent)
+    return serialized.encode("utf-8", errors="backslashreplace").decode("utf-8")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Offline diagnosis of one normalized ClawHub package JSON file."
     )
     parser.add_argument("input_json", type=Path, help="Path to one UTF-8 JSON object")
     args = parser.parse_args(argv)
-    case = json.loads(args.input_json.read_text(encoding="utf-8"))
-    print(json.dumps(diagnose(case), ensure_ascii=False, indent=2))
+    try:
+        result = diagnose(_load_case(args.input_json))
+    except InputContractError as exc:
+        error = {
+            "error": "INPUT_CONTRACT_ERROR",
+            "message": str(exc),
+        }
+        print(_serialize_json(error), file=sys.stderr)
+        return 2
+    print(_serialize_json(result, indent=2))
     return 0
 
 

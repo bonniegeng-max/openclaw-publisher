@@ -56,7 +56,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.7")
+        self.assertEqual(values["version"], "0.1.8")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))
@@ -159,10 +159,150 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(outputs[0], outputs[1])
 
+    def test_cli_reports_input_contract_errors_without_tracebacks(self):
+        cases = [
+            (b"{", "invalid JSON at line 1, column 2"),
+            (b"[]", "top-level JSON value must be an object"),
+            (b"{}", "required field 'input' is missing"),
+            (b'{"input":[]}', "field 'input' must be an object"),
+            (b"\xff", "input file must be valid UTF-8"),
+            (
+                b'{"input":{"surface":"package","pendingHours":NaN}}',
+                "invalid JSON constant: NaN",
+            ),
+            (
+                b'{"input":{"surface":"package","pendingHours":Infinity}}',
+                "invalid JSON constant: Infinity",
+            ),
+            (
+                b'{"input":{"surface":"package","pendingHours":-Infinity}}',
+                "invalid JSON constant: -Infinity",
+            ),
+        ]
+        for payload, expected_message in cases:
+            with self.subTest(payload=payload):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "case.json"
+                    path.write_bytes(payload)
+                    completed = subprocess.run(
+                        [sys.executable, str(CANONICAL), str(path)],
+                        capture_output=True,
+                        text=True,
+                    )
+
+                self.assertEqual(completed.returncode, 2)
+                self.assertEqual(completed.stdout, "")
+                error = json.loads(completed.stderr)
+                self.assertEqual(set(error), {"error", "message"})
+                self.assertEqual(error["error"], "INPUT_CONTRACT_ERROR")
+                self.assertIn(expected_message, error["message"])
+                self.assertNotIn("Traceback", completed.stderr)
+
+    def test_cli_reports_unreadable_path_without_echoing_the_path(self):
+        missing = ROOT / "private-account-secret-input.json"
+        completed = subprocess.run(
+            [sys.executable, str(CANONICAL), str(missing)],
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        error = json.loads(completed.stderr)
+        self.assertEqual(error["error"], "INPUT_CONTRACT_ERROR")
+        self.assertIn("unable to read input file", error["message"])
+        self.assertNotIn(str(missing), completed.stderr)
+        self.assertNotIn("private-account-secret", completed.stderr)
+
+    def test_valid_unknown_is_not_an_input_contract_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unknown.json"
+            path.write_text(
+                json.dumps({"input": {"surface": "package"}}),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [sys.executable, str(CANONICAL), str(path)],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(json.loads(completed.stdout)["diagnosis"], "UNKNOWN")
+
+    def test_malformed_rule_evidence_is_unknown_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "malformed-evidence.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "input": {
+                            "surface": "package",
+                            "files": [{}],
+                            "callerPermissions": [],
+                            "trust": [],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [sys.executable, str(CANONICAL), str(path)],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertNotIn("Traceback", completed.stdout)
+        self.assertEqual(json.loads(completed.stdout)["diagnosis"], "UNKNOWN")
+
+    def test_isolated_surrogate_is_safely_omitted_from_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "surrogate.json"
+            path.write_text(
+                '{"id":"\\ud800","source":"\\udfff",'
+                '"input":{"surface":"package"}}',
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [sys.executable, str(CANONICAL), str(path)],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertNotIn("Traceback", completed.stdout)
+        result = json.loads(completed.stdout)
+        self.assertIsNone(result["caseId"])
+        self.assertIsNone(result["source"])
+        self.assertEqual(result["diagnosis"], "UNKNOWN")
+
+    def test_wrapper_and_canonical_cli_errors_are_identical(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.json"
+            path.write_text("[]", encoding="utf-8")
+            results = [
+                subprocess.run(
+                    [sys.executable, str(script), str(path)],
+                    capture_output=True,
+                    text=True,
+                )
+                for script in (CANONICAL, WRAPPER)
+            ]
+
+        self.assertEqual(
+            [(result.returncode, result.stdout, result.stderr) for result in results],
+            [(2, "", results[0].stderr), (2, "", results[0].stderr)],
+        )
+
     def test_root_script_is_compatibility_forwarder_without_rules(self):
         text = WRAPPER.read_text(encoding="utf-8")
 
         self.assertIn('"draft" / "scripts" / "diagnose.py"', text)
+        self.assertIn("InputContractError = _IMPL.InputContractError", text)
         self.assertNotIn("def diagnose(", text)
         self.assertNotIn("REUSABLE_WORKFLOW_ACTIONS_PERMISSION", text)
 

@@ -11,6 +11,8 @@ JSON schema，包括 guidance、禁止声明与补证字段。
 ```text
 clawhub 0.23.1
 npm 12.x
+npm 11 JSON: [{"filename": "my-plugin-0.4.0.tgz"}]
+npm 12 JSON: {"my-plugin": {"filename": "my-plugin-0.4.0.tgz"}}
 错误：npm pack did not return a tarball filename
 输出目录中存在 my-plugin-0.4.0.tgz
 ```

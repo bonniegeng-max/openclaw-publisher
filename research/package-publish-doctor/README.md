@@ -79,9 +79,9 @@ python3 research/package-publish-doctor/draft/scripts/diagnose.py \
   research/package-publish-doctor/fixtures/clawpack-staging-gap.json
 ```
 
-`draft/scripts/diagnose.py` 是唯一诊断实现；根目录 `diagnose.py` 仅为旧命令和导入路径提供兼容转发。输入/输出与脱敏要求见 `draft/references/input-contract.md`，可运行匿名输入见 `draft/examples/anonymous-input.json`。
+`draft/scripts/diagnose.py` 是唯一诊断实现；根目录 `diagnose.py` 仅为旧命令和导入路径提供兼容转发。输入/输出与脱敏要求见 `draft/references/input-contract.md`，可运行匿名输入见 `draft/examples/anonymous-input.json`。不可读文件、无效 UTF-8/JSON、非对象顶层以及缺失或非对象 `input` 会以退出码 `2` 返回单个 `INPUT_CONTRACT_ERROR` stderr JSON，不输出 traceback；证据不足仍以退出码 `0` 返回完整 `UNKNOWN`。
 
-输出包含诊断层、确定性 `conclusion`、证据、建议、`rejectedShortcuts`、`verificationSteps`、`doNotClaim`、来源和严格脱敏的 `observedContext`，不执行网络请求或修复动作。已知诊断只输出该规则实际使用且通过格式校验的 CLI/npm 版本、规范化 workflow ref、family 和 source commit；workflow owner/repository 会被移除，`UNKNOWN` 的 `observedContext` 恒为空，不透传错误、token、URL、release ID 或 artifact hash。无法满足完整判定条件时必须返回同结构的 `UNKNOWN`，其 `conclusion` 为 `partial`，并只指出一个最小补证，不能根据单个错误关键词猜测根因。`CLAWPACK_STAGING_GAP` 还要求 Inspector 或本地验证成功，且验证记录中的 artifact hash 必须与上传失败的 artifact hash 相同；验证失败、缺失或 hash 不同都不能高置信命中。`TRUSTED_PUBLISH_TAG_REF_REGRESSION` 必须同时拿到指定 source-validator commit 与 `source.ref !== (candidateSha ?? token.sha)` 的源码比较证据；只有 `rejected: true` 必须保持 `UNKNOWN`。`PACKAGE_SECURITY_AUDIT_FIELDS_MISSING` 把 `overview` 与 `securityAuditUrl` 都视为必需的非空字符串，并要求错误正文明确指向实际无效字段。
+输出包含诊断层、确定性 `conclusion`、证据、建议、`rejectedShortcuts`、`verificationSteps`、`doNotClaim`、来源和严格脱敏的 `observedContext`，不执行网络请求或修复动作。已知诊断只输出该规则实际使用且通过格式校验的 CLI/npm 版本、规范化 workflow ref、family 和 source commit；workflow owner/repository 会被移除，`UNKNOWN` 的 `observedContext` 恒为空，不透传错误、token、URL、release ID 或 artifact hash。无法满足完整判定条件时必须返回同结构的 `UNKNOWN`，其 `conclusion` 为 `partial`，并只指出一个最小补证，不能根据单个错误关键词猜测根因。`NPM_PACK_JSON_SHAPE` 要求 npm 11 数组与 npm 12 对象各自恰有一个非空且相同的 tarball `filename`，空对象、缺失字段、多结果或名称不一致都保持 `UNKNOWN`。`CLAWPACK_STAGING_GAP` 还要求 Inspector 或本地验证成功，且验证记录中的 artifact hash 必须与上传失败的 artifact hash 相同；验证失败、缺失或 hash 不同都不能高置信命中。`TRUSTED_PUBLISH_TAG_REF_REGRESSION` 必须同时拿到指定 source-validator commit 与 `source.ref !== (candidateSha ?? token.sha)` 的源码比较证据；只有 `rejected: true` 必须保持 `UNKNOWN`。`PACKAGE_SECURITY_AUDIT_FIELDS_MISSING` 把 `overview` 与 `securityAuditUrl` 都视为必需的非空字符串，并要求错误正文明确指向实际无效字段。
 
 ## 草案包
 

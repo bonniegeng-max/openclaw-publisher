@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.8 - 2026-09-05
+
+- 为不可读文件、无效 UTF-8/JSON、非对象顶层、缺失或非对象 `input` 增加稳定的 `INPUT_CONTRACT_ERROR` stderr JSON 与退出码 `2`。
+- 保持证据不足为退出码 `0` 的完整 `UNKNOWN` 结果，区分调用错误和诊断不确定性。
+- 畸形规则字段、嵌套对象、布尔型数值和数字型版本不再触发 traceback 或误命中，而是安全降级为 `UNKNOWN`。
+- 严格拒绝非标准 JSON `NaN`/infinity，并过滤无法 UTF-8 编码的 `id`/`source`，避免序列化 traceback。
+- `callerPermissions.actions` 只有缺失或规范字符串 `none` 才能作为权限不足证据，falsy 畸形值不得命中。
+- 收紧 `NPM_PACK_JSON_SHAPE`：npm 11/12 两侧必须各有一条非空且相同的 tarball `filename`。
+- 兼容导入入口同步导出 `InputContractError`。
+- 增加空对象、缺失/空白 filename、错误 entry 类型、多条结果、名称不一致、畸形嵌套字段、无效编码和 wrapper 错误等价性测试。
+
 ## 0.1.7 - 2026-09-05
 
 - 为每个诊断代码增加确定性的 `conclusion`、`rejectedShortcuts`、`verificationSteps` 和 `doNotClaim`。

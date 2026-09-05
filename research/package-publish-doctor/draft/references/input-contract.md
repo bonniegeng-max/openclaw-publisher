@@ -19,6 +19,16 @@ are documented in `failure-map.md`. Preserve exact errors and version strings,
 but redact account names, repository names, tokens, cookies, authorization
 headers, private URLs, and secret values before writing the file.
 
+The top-level value and `input` must be objects. A missing or non-object
+`input` is an input contract error. A present object that lacks enough
+diagnostic evidence, including a missing or non-package `input.surface`, is
+evaluated normally and returns `UNKNOWN`.
+
+Rule-specific fields are evidence, not structural input requirements. Wrong
+types, malformed nested objects, boolean values in numeric fields, numeric
+values in version fields, or unsafe collections must not raise exceptions;
+they fail the affected rule predicate and conservatively return `UNKNOWN`.
+
 ## Output
 
 The command writes one JSON object to stdout with this complete schema:
@@ -74,9 +84,28 @@ by the winning diagnosis, or arbitrary caller fields. Callers must still redact
 the input file before execution. Do not add a field or accepted value shape
 without a redaction and sensitivity review.
 
+## Process exit contract
+
 Exit status `0` means the JSON was parsed and evaluated; it does not mean a
-known rule matched. Invalid JSON, an unreadable path, or a non-object top-level
-value fails without attempting repair.
+known rule matched. Both a known diagnosis and `UNKNOWN` use exit status `0`
+and write exactly one diagnosis JSON object to stdout with an empty stderr.
+
+Exit status `2` means the input contract was not satisfied. Unreadable files,
+invalid UTF-8, invalid JSON (including non-standard `NaN` and infinities),
+non-object top-level values, a missing `input`, and a non-object `input` write
+no stdout and exactly one compact JSON object to stderr:
+
+```json
+{"error": "INPUT_CONTRACT_ERROR", "message": "human-readable reason"}
+```
+
+The error does not echo the input path and does not include a Python traceback.
+Argument parsing failures that occur before an input path is accepted remain
+standard `argparse` errors.
+
+Caller-provided `id` and `source` strings that cannot be encoded as UTF-8,
+including isolated Unicode surrogates, are omitted as `null`; they cannot break
+JSON serialization or expose a traceback.
 
 ## Offline and safety boundary
 

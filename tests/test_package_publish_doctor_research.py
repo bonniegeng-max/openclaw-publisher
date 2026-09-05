@@ -506,6 +506,151 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
         self.assertEqual(diagnose(no_artifact)["diagnosis"], "UNKNOWN")
 
+    def test_npm_pack_shape_requires_one_matching_nonempty_filename(self):
+        fixture = load_fixture("npm-pack-json-shape.json")
+        mutations = {
+            "empty npm11 array": ("npm11", []),
+            "empty npm12 object": ("npm12", {}),
+            "npm11 entry missing filename": (
+                "npm11",
+                [{"id": "my-plugin@0.4.0"}],
+            ),
+            "npm12 entry missing filename": (
+                "npm12",
+                {"my-plugin": {"id": "my-plugin@0.4.0"}},
+            ),
+            "npm12 filename blank": (
+                "npm12",
+                {"my-plugin": {"filename": "   "}},
+            ),
+            "npm12 entry wrong type": ("npm12", {"my-plugin": []}),
+            "npm11 entry wrong type": ("npm11", [[]]),
+            "npm11 filename blank": ("npm11", [{"filename": "   "}]),
+            "multiple npm11 entries": (
+                "npm11",
+                [
+                    {"filename": "first.tgz"},
+                    {"filename": "second.tgz"},
+                ],
+            ),
+            "multiple npm12 entries": (
+                "npm12",
+                {
+                    "first": {"filename": "first.tgz"},
+                    "second": {"filename": "second.tgz"},
+                },
+            ),
+            "mismatched filename": (
+                "npm12",
+                {"my-plugin": {"filename": "different.tgz"}},
+            ),
+        }
+        for label, (field, value) in mutations.items():
+            with self.subTest(label=label):
+                candidate = copy.deepcopy(fixture)
+                candidate["input"][field] = value
+                self.assertEqual(diagnose(candidate)["diagnosis"], "UNKNOWN")
+
+    def test_diagnose_rejects_input_contract_errors(self):
+        invalid_cases = [
+            ([], "top-level JSON value must be an object"),
+            ({}, "required field 'input' is missing"),
+            ({"input": None}, "field 'input' must be an object"),
+            ({"input": []}, "field 'input' must be an object"),
+        ]
+        for case, message in invalid_cases:
+            with self.subTest(case=case):
+                with self.assertRaisesRegex(
+                    DIAGNOSE_MODULE.InputContractError,
+                    message,
+                ):
+                    diagnose(case)
+
+    def test_malformed_rule_fields_degrade_to_unknown_without_exceptions(self):
+        candidates = []
+
+        bundle = load_fixture("bundle-native-manifest-contract.json")
+        bundle["input"]["files"] = [{}]
+        candidates.append(bundle)
+
+        permissions = load_fixture("reusable-workflow-actions-read.json")
+        permissions["input"]["callerPermissions"] = ["actions: none"]
+        candidates.append(permissions)
+
+        for actions_value in (None, False, 0, [], {}):
+            nested_permissions = load_fixture(
+                "reusable-workflow-actions-read.json"
+            )
+            nested_permissions["input"]["callerPermissions"]["actions"] = (
+                actions_value
+            )
+            candidates.append(nested_permissions)
+
+        security = load_fixture("package-security-audit-fields-missing.json")
+        security["input"]["trust"] = ["clean"]
+        candidates.append(security)
+
+        trusted = load_fixture("trusted-publish-tag-ref-regression.json")
+        trusted["input"]["tokenSha"] = 123
+        candidates.append(trusted)
+
+        staging = load_fixture("clawpack-staging-gap.json")
+        staging["input"]["artifactBytes"] = True
+        candidates.append(staging)
+
+        stalled = load_fixture("package-release-scan-stalled.json")
+        stalled["input"]["pendingHours"] = True
+        candidates.append(stalled)
+
+        stalled_infinite = load_fixture("package-release-scan-stalled.json")
+        stalled_infinite["input"]["pendingHours"] = float("inf")
+        candidates.append(stalled_infinite)
+
+        stalled_release_id = load_fixture("package-release-scan-stalled.json")
+        stalled_release_id["input"]["releaseId"] = ["not", "a", "string"]
+        candidates.append(stalled_release_id)
+
+        numeric_version = load_fixture("npm-pack-json-shape.json")
+        numeric_version["input"]["npmVersion"] = 12
+        candidates.append(numeric_version)
+
+        object_error = load_fixture("npm-pack-json-shape.json")
+        object_error["input"]["reportedError"] = {
+            "message": "npm pack did not return a tarball filename"
+        }
+        candidates.append(object_error)
+
+        for candidate in candidates:
+            with self.subTest(case_id=candidate["id"]):
+                self.assertEqual(diagnose(candidate)["diagnosis"], "UNKNOWN")
+
+    def test_rule_fields_are_total_over_json_value_types(self):
+        replacements = [
+            None,
+            False,
+            True,
+            0,
+            1,
+            1.5,
+            "",
+            "unexpected",
+            [],
+            [{}],
+            {},
+        ]
+        for path in sorted(FIXTURES.glob("*.json")):
+            fixture = json.loads(path.read_text(encoding="utf-8"))
+            for field in sorted(fixture["input"]):
+                for replacement in replacements:
+                    with self.subTest(
+                        fixture=path.name,
+                        field=field,
+                        replacement=repr(replacement),
+                    ):
+                        candidate = copy.deepcopy(fixture)
+                        candidate["input"][field] = replacement
+                        self.assert_output_schema(diagnose(candidate))
+
     def test_conflicting_layers_without_failure_sequence_are_unknown(self):
         fixture = load_fixture("bundle-native-manifest-contract.json")
         fixture["input"].update(

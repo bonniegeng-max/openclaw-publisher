@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.7
+version: 0.1.8
 metadata:
   openclaw:
     os: [macos]
@@ -76,6 +76,12 @@ evidence. A successful process exit means evaluation completed; check
 `matched`, because `UNKNOWN` also exits successfully. Every result also carries
 a deterministic `conclusion`, `rejectedShortcuts`, `verificationSteps`,
 `doNotClaim`, and a strict non-sensitive `observedContext`.
+
+Unreadable files, invalid UTF-8/JSON, non-object top-level values, a missing
+`input`, or a non-object `input` are contract errors: stdout stays empty, stderr
+contains one `INPUT_CONTRACT_ERROR` JSON object, and the process exits `2`
+without a traceback. Missing diagnostic evidence is not a contract error and
+must remain a successful `UNKNOWN` result.
 
 This executable is offline and read-only. It does not access GitHub, ClawHub,
 the registry, environment credentials, or the network; it does not publish,

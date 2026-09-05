@@ -57,10 +57,33 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.15")
+        self.assertEqual(values["version"], "0.1.16")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))
+
+    def test_draft_is_self_contained_for_installed_execution(self):
+        text_paths = [
+            path
+            for path in DRAFT.rglob("*")
+            if path.is_file() and path.suffix in {".md", ".json", ".py"}
+        ]
+
+        for path in text_paths:
+            with self.subTest(path=path.relative_to(DRAFT).as_posix()):
+                self.assertNotIn(
+                    "research/package-publish-doctor",
+                    path.read_text(encoding="utf-8"),
+                )
+
+        command = "python3 scripts/diagnose.py examples/anonymous-input.json"
+        self.assertIn(command, SKILL.read_text(encoding="utf-8"))
+        self.assertIn(
+            command,
+            (DRAFT / "references" / "input-contract.md").read_text(
+                encoding="utf-8"
+            ),
+        )
 
     def test_draft_is_not_publishable_from_current_catalog(self):
         catalog = json.loads(

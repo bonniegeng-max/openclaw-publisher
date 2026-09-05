@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.15
+version: 0.1.16
 metadata:
   openclaw:
     emoji: "🧰"
@@ -55,12 +55,8 @@ run the bundled command:
 python3 scripts/diagnose.py examples/anonymous-input.json
 ```
 
-When running from the repository root, use:
-
-```bash
-python3 research/package-publish-doctor/draft/scripts/diagnose.py \
-  research/package-publish-doctor/draft/examples/anonymous-input.json
-```
+Run the command from this Skill's installed directory. Do not assume the
+publisher's source-repository layout exists in the user's installation.
 
 Input is one UTF-8 JSON object with an `input` object and
 `input.surface: "package"`. Output is one JSON object containing the diagnosis,

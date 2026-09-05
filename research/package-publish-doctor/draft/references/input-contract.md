@@ -143,9 +143,8 @@ publishes, installs, downloads, mutates registry state, runs Git commands,
 invokes ClawHub, or validates whether a historical fact is still current.
 Refresh bundled rules through reviewed source changes, not caller input.
 
-Run the anonymous example from the repository root:
+Run the anonymous example from the installed Skill directory:
 
 ```bash
-python3 research/package-publish-doctor/draft/scripts/diagnose.py \
-  research/package-publish-doctor/draft/examples/anonymous-input.json
+python3 scripts/diagnose.py examples/anonymous-input.json
 ```

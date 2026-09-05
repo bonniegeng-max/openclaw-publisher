@@ -188,7 +188,7 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         frontmatter = skill.split("---", 2)[1]
         metadata = frontmatter.split("metadata:", 1)[1]
 
-        self.assertIn("version: 0.1.15", frontmatter)
+        self.assertIn("version: 0.1.16", frontmatter)
         self.assertIn("        - python3", metadata)
         self.assertNotIn("    os:", metadata)
         self.assertNotIn("        - git", metadata)

@@ -156,6 +156,11 @@ python3 research/package-publish-doctor/check_promotion_contract.py \
 `SKILL.md` 的 name、slug、首发版本与候选 catalog metadata 完全匹配提升
 合同，避免出现 GitHub 文件已落地但 catalog 身份漂移的半发布状态。
 
+检查器还固定完整的必需 gate 集合，删除竞品搜索、registry、E4 等任一
+gate 都会判定合同无效。`observation-window` 在 `notBefore` 之前不得标为
+完成，其他 gate 也不能冒用时间阻塞状态；单版本最多一次 E4、观察期内不
+写正式 catalog、E4 后重置观察起点等策略同样属于不可放宽的合同。
+
 ## 启动门槛
 
 只有同时满足以下条件，才把研究包升级为正式 Skill：

@@ -103,6 +103,7 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertTrue(
             result["localEvidence"]["absentFromFormalSurfacesDuringHold"]
         )
+        self.assertTrue(result["localEvidence"]["releasePolicyValid"])
         self.assertEqual(result["errors"], [])
 
     def test_elapsed_time_does_not_auto_complete_external_gates(self):
@@ -182,6 +183,93 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertTrue(result["valid"])
         self.assertFalse(result["complete"])
         self.assertEqual(result["blockingGates"], ["contract-status"])
+
+    def test_missing_or_unexpected_gate_is_invalid(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        mutations = []
+
+        missing = copy.deepcopy(original)
+        missing["releaseGates"] = [
+            gate
+            for gate in missing["releaseGates"]
+            if gate["id"] != "same-method-clawhub-competitor-search"
+        ]
+        mutations.append((missing, "required release gates missing"))
+
+        unexpected = copy.deepcopy(original)
+        unexpected["releaseGates"].append(
+            {
+                "id": "skip-verification",
+                "state": "complete",
+                "required": True,
+            }
+        )
+        mutations.append((unexpected, "unexpected release gates present"))
+
+        for contract, expected_error in mutations:
+            with self.subTest(expected_error=expected_error):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "contract.json"
+                    path.write_text(json.dumps(contract), encoding="utf-8")
+                    result = CHECK_MODULE.evaluate(
+                        ROOT,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertTrue(
+                    any(
+                        error.startswith(expected_error)
+                        for error in result["errors"]
+                    )
+                )
+
+    def test_observation_gate_cannot_complete_before_not_before(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        next(
+            gate
+            for gate in contract["releaseGates"]
+            if gate["id"] == "observation-window"
+        )["state"] = "complete"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            result = CHECK_MODULE.evaluate(
+                ROOT,
+                path,
+                datetime(2026, 9, 5, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(
+            result["localEvidence"]["observationWindowElapsed"]
+        )
+        self.assertIn(
+            "observation-window cannot be complete before notBefore",
+            result["errors"],
+        )
+
+    def test_release_policy_safeguards_are_mandatory(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["releasePolicy"]["maxPlannedE4InstallsPerChangedVersion"] = 2
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            result = CHECK_MODULE.evaluate(
+                ROOT,
+                path,
+                datetime(2026, 9, 5, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["localEvidence"]["releasePolicyValid"])
+        self.assertIn(
+            "release policy does not preserve required safeguards",
+            result["errors"],
+        )
 
     def test_complete_status_requires_formal_surfaces(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))

@@ -30,6 +30,18 @@ ALLOWED_CONTRACT_STATUSES = {
     "verification-pending",
     "complete",
 }
+REQUIRED_GATE_IDS = frozenset(
+    {
+        "observation-window",
+        "fresh-official-version-review",
+        "same-method-clawhub-competitor-search",
+        "local-tests",
+        "explicit-slug-name-dry-run",
+        "authorized-publish",
+        "registry-moderation-check",
+        "single-version-e4",
+    }
+)
 
 
 def parse_time(value):
@@ -243,6 +255,27 @@ def evaluate(repo_root, contract_path, now):
             errors.append(f"release gate {gate_id} has invalid state")
     if len(gate_ids) != len(set(gate_ids)):
         errors.append("release gate ids must be unique")
+    observed_gate_ids = set(gate_ids)
+    missing_gate_ids = sorted(REQUIRED_GATE_IDS - observed_gate_ids)
+    unexpected_gate_ids = sorted(observed_gate_ids - REQUIRED_GATE_IDS)
+    if missing_gate_ids:
+        errors.append(
+            "required release gates missing: " + ", ".join(missing_gate_ids)
+        )
+    if unexpected_gate_ids:
+        errors.append(
+            "unexpected release gates present: "
+            + ", ".join(unexpected_gate_ids)
+        )
+    for gate in gates:
+        if (
+            isinstance(gate, dict)
+            and gate.get("state") == "blocked-until-not-before"
+            and gate.get("id") != "observation-window"
+        ):
+            errors.append(
+                "only observation-window may use blocked-until-not-before"
+            )
 
     blocking_gates = [
         gate["id"]
@@ -255,10 +288,42 @@ def evaluate(repo_root, contract_path, now):
 
     try:
         not_before = parse_time(contract.get("observationNotBefore"))
-        local_evidence["observationWindowElapsed"] = now >= not_before
+        observation_elapsed = now >= not_before
+        local_evidence["observationWindowElapsed"] = observation_elapsed
+        observation_gate = next(
+            (
+                gate
+                for gate in gates
+                if isinstance(gate, dict)
+                and gate.get("id") == "observation-window"
+            ),
+            None,
+        )
+        if (
+            not observation_elapsed
+            and observation_gate is not None
+            and observation_gate.get("state") == "complete"
+        ):
+            errors.append(
+                "observation-window cannot be complete before notBefore"
+            )
     except ValueError as error:
         errors.append(str(error))
         local_evidence["observationWindowElapsed"] = False
+
+    release_policy = contract.get("releasePolicy")
+    release_policy_valid = (
+        isinstance(release_policy, dict)
+        and release_policy.get("addToFormalCatalogDuringObservationWindow")
+        is False
+        and release_policy.get("publishDuringObservationWindow") is False
+        and release_policy.get("requireAllReleaseGatesComplete") is True
+        and release_policy.get("maxPlannedE4InstallsPerChangedVersion") == 1
+        and release_policy.get("resetObservationStartAfterE4") is True
+    )
+    local_evidence["releasePolicyValid"] = release_policy_valid
+    if not release_policy_valid:
+        errors.append("release policy does not preserve required safeguards")
 
     if not blocking_gates and declared_status != "complete":
         blocking_gates.append("contract-status")

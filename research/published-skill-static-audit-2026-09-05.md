@@ -53,9 +53,14 @@
 
 ## 候选池
 
-### 纯文案 Skill 的依赖契约
+### 已发布 Skill 的运行资格契约
 
-涉及：
+7 个已发布 Skill 都声明 `os: [macos]`。官方 Skills 文档确认加载阶段会按
+OS 与二进制是否存在过滤 Skill，而本仓库没有在这些 Skill 中发现 macOS
+专用命令或可执行资源。仓库发布 workflow 已在 `ubuntu-latest` 上安装并
+运行 Git、Bun 与 ClawHub CLI，证明命令型发布工具链至少支持 Linux。
+
+其中两个纯文案 Skill 还有额外的二进制依赖错误：
 
 - `skills/skill-summary-rewriter/SKILL.md`
 - `skills/skill-positioning-audit/SKILL.md`
@@ -65,19 +70,21 @@
 依赖参与哪一步。
 
 官方 Skill format 确认基础 frontmatter 不要求这些运行字段，并要求
-`requires.bins`、`os` 和 `install` 只描述真实运行条件；官方 Skills 文档
-同时确认加载阶段会按 OS 与二进制是否存在过滤 Skill：
+`requires.bins`、`os` 和 `install` 只描述真实运行条件：
 
 - https://docs.openclaw.ai/clawhub/skill-format
 - https://docs.openclaw.ai/tools/skills
 
-本地文件审计确认两个目录只有 Markdown 与 `.clawhubignore`，没有需要
-Git 或 ClawHub CLI 的可执行资源。因此“当前依赖声明会造成不真实的
-兼容性限制”已得到高置信证据；它是否已经影响下载或搜索仍未验证。
+本地文件审计确认 7 个目录都只有 Markdown 与 `.clawhubignore`，不存在
+macOS 专用可执行资源；两个纯文案 Skill 也没有需要 Git 或 ClawHub CLI
+的步骤。因此“当前声明会造成不真实的运行资格限制”已得到高置信证据；
+它是否已经影响下载或搜索仍未验证。
 
 候选修改和机器可验计划位于
-`research/copy-skills-runtime-metadata-vnext/`。观察窗结束后，可在一次
-实质版本中删除无用硬依赖，再按 E0–E4 进行一次限定验收。
+`research/published-skills-runtime-metadata-vnext/`。纯文案 Skill 候选删除
+无用的 OS、Git 与 ClawHub 依赖；另外 5 个命令型 Skill 保留真实二进制
+依赖，只把 OS 范围从 macOS 扩展到已有证据的 macOS 与 Linux。观察窗结束
+后仍应按真实采用信号选择目标，不默认一次发布全部 7 个版本。
 
 ### 相邻产品首屏边界重叠
 

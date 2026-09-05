@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "validate_skill_catalog.py"
 CATALOG = ROOT / ".clawhub" / "skill-catalog.json"
+METRICS_WORKFLOW = ROOT / ".github" / "workflows" / "metrics-tools-ci.yml"
 
 SPEC = importlib.util.spec_from_file_location(
     "validate_skill_catalog",
@@ -340,6 +341,19 @@ class ValidateSkillCatalogTests(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, source)
+
+    def test_metrics_ci_runs_preflight_for_skill_and_catalog_changes(self):
+        workflow = METRICS_WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertEqual(workflow.count('"skills/**"'), 2)
+        self.assertEqual(
+            workflow.count('".clawhub/skill-catalog.json"'),
+            2,
+        )
+        self.assertIn(
+            "run: python scripts/validate_skill_catalog.py",
+            workflow,
+        )
 
 
 if __name__ == "__main__":

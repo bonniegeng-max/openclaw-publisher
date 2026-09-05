@@ -6,6 +6,8 @@ on:
       - "scripts/**"
       - "tests/**"
       - "metrics/**"
+      - "skills/**"
+      - ".clawhub/skill-catalog.json"
       - "research/package-publish-doctor/**"
       - "AGENTS.md"
       - "README.md"
@@ -17,6 +19,8 @@ on:
       - "scripts/**"
       - "tests/**"
       - "metrics/**"
+      - "skills/**"
+      - ".clawhub/skill-catalog.json"
       - "research/package-publish-doctor/**"
       - "AGENTS.md"
       - "README.md"
@@ -38,6 +42,9 @@ jobs:
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
+
+      - name: Validate Skill catalog
+        run: python scripts/validate_skill_catalog.py
 
       - name: Compile Python sources
         run: python -m py_compile scripts/*.py tests/*.py research/package-publish-doctor/*.py research/package-publish-doctor/draft/scripts/*.py

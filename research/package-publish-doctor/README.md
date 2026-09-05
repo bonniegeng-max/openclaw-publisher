@@ -151,6 +151,11 @@ python3 research/package-publish-doctor/check_promotion_contract.py \
 检查器只读取本地文件，不联网、不修改 catalog、不执行 dry-run、publish
 或安装。
 
+进入 publication/verification 阶段后，检查器要求正式 Skill 目录与 catalog
+条目原子出现；缺少任一侧都会判定合同无效。两侧存在时，还会验证正式
+`SKILL.md` 的 name、slug、首发版本与候选 catalog metadata 完全匹配提升
+合同，避免出现 GitHub 文件已落地但 catalog 身份漂移的半发布状态。
+
 ## 启动门槛
 
 只有同时满足以下条件，才把研究包升级为正式 Skill：

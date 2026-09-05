@@ -139,25 +139,88 @@ def evaluate(repo_root, contract_path, now):
     if not policy_matches:
         errors.append("promotion contract observation time differs from policy")
 
-    hold_state = declared_status == "observation-window-hold"
-    absent_from_formal_surfaces = (
-        not target.exists() and candidate.get("targetDirectory") not in catalog
+    catalog_key = candidate.get("targetDirectory")
+    catalog_entry = contract.get("catalogEntry")
+    catalog_candidate_valid = (
+        isinstance(catalog_entry, dict)
+        and catalog_entry.get("displayName") == candidate.get("displayName")
+        and isinstance(catalog_entry.get("categories"), list)
+        and bool(catalog_entry["categories"])
+        and len(catalog_entry["categories"]) == len(set(catalog_entry["categories"]))
+        and all(
+            isinstance(item, str) and item
+            for item in catalog_entry["categories"]
+        )
+        and isinstance(catalog_entry.get("topics"), list)
+        and bool(catalog_entry["topics"])
+        and len(catalog_entry["topics"]) == len(set(catalog_entry["topics"]))
+        and all(
+            isinstance(item, str) and item
+            for item in catalog_entry["topics"]
+        )
     )
+    local_evidence["catalogCandidateValid"] = catalog_candidate_valid
+    if not catalog_candidate_valid:
+        errors.append("candidate catalog entry is invalid or inconsistent")
+
+    target_exists = target.is_dir()
+    catalog_has_target = (
+        isinstance(catalog_key, str) and catalog_key in catalog
+    )
+    local_evidence["formalTargetDirectoryPresent"] = target_exists
+    local_evidence["formalCatalogEntryPresent"] = catalog_has_target
+    if target_exists != catalog_has_target:
+        errors.append(
+            "formal skill directory and catalog entry must appear together"
+        )
+
+    pre_staging_state = declared_status in {
+        "observation-window-hold",
+        "promotion-ready",
+    }
+    absent_from_formal_surfaces = not target_exists and not catalog_has_target
     local_evidence["absentFromFormalSurfacesDuringHold"] = (
         absent_from_formal_surfaces
     )
-    if hold_state and not absent_from_formal_surfaces:
+    if pre_staging_state and not absent_from_formal_surfaces:
         errors.append(
-            "hold-state candidate already exists in skills or formal catalog"
+            "pre-staging candidate already exists in skills or formal catalog"
         )
     if declared_status in {
         "publication-pending",
         "verification-pending",
         "complete",
-    } and absent_from_formal_surfaces:
+    } and not (target_exists and catalog_has_target):
         errors.append(
             "post-staging candidate is missing from skills or formal catalog"
         )
+
+    local_evidence["formalTargetIdentityMatches"] = None
+    local_evidence["formalCatalogEntryMatches"] = None
+    if target_exists and catalog_has_target:
+        try:
+            target_frontmatter = parse_frontmatter(target / "SKILL.md")
+            target_identity_matches = (
+                target_frontmatter.get("name") == candidate.get("displayName")
+                and target_frontmatter.get("slug") == candidate.get("stableSlug")
+                and target_frontmatter.get("version")
+                == candidate.get("proposedFirstReleaseVersion")
+            )
+        except (OSError, UnicodeError, ValueError):
+            target_identity_matches = False
+        formal_catalog_matches = catalog.get(catalog_key) == catalog_entry
+        local_evidence["formalTargetIdentityMatches"] = (
+            target_identity_matches
+        )
+        local_evidence["formalCatalogEntryMatches"] = formal_catalog_matches
+        if not target_identity_matches:
+            errors.append(
+                "formal SKILL.md identity does not match promotion contract"
+            )
+        if not formal_catalog_matches:
+            errors.append(
+                "formal catalog entry does not match promotion contract"
+            )
 
     gates = contract.get("releaseGates")
     if not isinstance(gates, list):

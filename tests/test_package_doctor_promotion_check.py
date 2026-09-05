@@ -1,6 +1,7 @@
 import copy
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,50 @@ SPEC = importlib.util.spec_from_file_location(
 )
 CHECK_MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECK_MODULE)
+
+
+def make_staged_repo(directory, contract, target=True, catalog=True):
+    root = Path(directory)
+    (root / "metrics").mkdir(parents=True)
+    (root / ".clawhub").mkdir(parents=True)
+    shutil.copy2(
+        ROOT / "metrics" / "observation-policy.json",
+        root / "metrics" / "observation-policy.json",
+    )
+
+    source = root / contract["candidate"]["sourceDirectory"]
+    source.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(RESEARCH / "draft", source)
+
+    catalog_value = {}
+    if target:
+        target_path = root / contract["candidate"]["targetDirectory"]
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(RESEARCH / "draft", target_path)
+        skill_path = target_path / "SKILL.md"
+        skill_text = skill_path.read_text(encoding="utf-8")
+        skill_path.write_text(
+            skill_text.replace(
+                f"version: {contract['candidate']['draftVersion']}",
+                (
+                    "version: "
+                    f"{contract['candidate']['proposedFirstReleaseVersion']}"
+                ),
+                1,
+            ),
+            encoding="utf-8",
+        )
+    if catalog:
+        catalog_value[contract["candidate"]["targetDirectory"]] = copy.deepcopy(
+            contract["catalogEntry"]
+        )
+    (root / ".clawhub" / "skill-catalog.json").write_text(
+        json.dumps(catalog_value),
+        encoding="utf-8",
+    )
+    contract_path = root / "promotion-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    return root, contract_path
 
 
 class PackageDoctorPromotionCheckTests(unittest.TestCase):
@@ -48,6 +93,13 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             result["localEvidence"]["draftIdentityMatchesContract"]
         )
         self.assertTrue(result["localEvidence"]["stableSlugAllowed"])
+        self.assertTrue(result["localEvidence"]["catalogCandidateValid"])
+        self.assertFalse(
+            result["localEvidence"]["formalTargetDirectoryPresent"]
+        )
+        self.assertFalse(
+            result["localEvidence"]["formalCatalogEntryPresent"]
+        )
         self.assertTrue(
             result["localEvidence"]["absentFromFormalSurfacesDuringHold"]
         )
@@ -152,6 +204,98 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             "post-staging candidate is missing from skills or formal catalog",
             result["errors"],
         )
+
+    def test_formal_directory_and_catalog_must_appear_together(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["status"] = "publication-pending"
+
+        for target, catalog in ((True, False), (False, True)):
+            with self.subTest(target=target, catalog=catalog):
+                with tempfile.TemporaryDirectory() as directory:
+                    root, path = make_staged_repo(
+                        directory,
+                        contract,
+                        target=target,
+                        catalog=catalog,
+                    )
+                    result = CHECK_MODULE.evaluate(
+                        root,
+                        path,
+                        datetime(2026, 9, 13, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertIn(
+                    (
+                        "formal skill directory and catalog entry "
+                        "must appear together"
+                    ),
+                    result["errors"],
+                )
+
+    def test_staged_surfaces_must_match_contract_identity(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["status"] = "publication-pending"
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, path = make_staged_repo(directory, contract)
+            result = CHECK_MODULE.evaluate(
+                root,
+                path,
+                datetime(2026, 9, 13, tzinfo=timezone.utc),
+            )
+
+            self.assertTrue(result["valid"])
+            self.assertTrue(
+                result["localEvidence"]["formalTargetIdentityMatches"]
+            )
+            self.assertTrue(
+                result["localEvidence"]["formalCatalogEntryMatches"]
+            )
+
+            catalog_path = root / ".clawhub" / "skill-catalog.json"
+            catalog_value = json.loads(catalog_path.read_text(encoding="utf-8"))
+            catalog_value[contract["candidate"]["targetDirectory"]][
+                "displayName"
+            ] = "Wrong Display Name"
+            catalog_path.write_text(
+                json.dumps(catalog_value),
+                encoding="utf-8",
+            )
+            mismatched = CHECK_MODULE.evaluate(
+                root,
+                path,
+                datetime(2026, 9, 13, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(mismatched["valid"])
+        self.assertFalse(
+            mismatched["localEvidence"]["formalCatalogEntryMatches"]
+        )
+        self.assertIn(
+            "formal catalog entry does not match promotion contract",
+            mismatched["errors"],
+        )
+
+    def test_complete_status_requires_matching_surfaces_and_all_gates(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["status"] = "complete"
+        for gate in contract["releaseGates"]:
+            gate["state"] = "complete"
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, path = make_staged_repo(directory, contract)
+            result = CHECK_MODULE.evaluate(
+                root,
+                path,
+                datetime(2026, 9, 13, tzinfo=timezone.utc),
+            )
+
+        self.assertTrue(result["valid"])
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["contractStatus"], "complete")
+        self.assertEqual(result["blockingGates"], [])
+        self.assertEqual(result["errors"], [])
 
     def test_path_escape_is_a_contract_error(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))

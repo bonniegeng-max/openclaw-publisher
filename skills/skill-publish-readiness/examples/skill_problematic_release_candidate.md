@@ -50,4 +50,4 @@
 2. 去掉危险示例
 3. 收窄目标用户
 4. 补一个真实使用示例
-5. 再执行 `clawhub skill publish <path> --dry-run`
+5. 再执行 `clawhub skill publish <path> --slug <stable-slug> --name "<Human Readable Name>" --dry-run`

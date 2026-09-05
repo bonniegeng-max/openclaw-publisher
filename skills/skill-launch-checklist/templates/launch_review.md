@@ -21,5 +21,9 @@
 ## 下一步命令
 
 ```bash
-clawhub skill publish <path> --dry-run --owner <owner>
+clawhub skill publish <path> \
+  --slug <stable-slug> \
+  --name "<Human Readable Name>" \
+  --dry-run \
+  --owner <owner>
 ```

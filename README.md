@@ -18,10 +18,10 @@ Ship ClawHub skills with evidence, not guesswork.
 |---|---|
 | 已发布 Skill | 7 |
 | ClawHub moderation | 全部 `clean` |
-| 安装验证 | 7 个 latest 版本均达到 `E4` |
+| 安装验证 | 此前 7 个 latest 基线达到 `E4`；本次候选版本尚未发布验收 |
 | 自动发布 | GitHub `main` → ClawHub |
 | 差分发布 | 只发布发生实质变化的 Skill |
-| 主入口 | `Skill Publish Readiness 1.0.7` |
+| 主入口 | 仓库候选 `Skill Publish Readiness 1.0.8` |
 
 公开数据会变化，当前快照、口径限制和决策记录在 [`skill_growth_monitor.md`](skill_growth_monitor.md)。
 
@@ -37,13 +37,13 @@ clawhub install skill-publish-readiness
 
 | 你正在面对的问题 | 推荐 Skill | 你会得到什么 |
 |---|---|---|
-| 第一次发布，不确定是否准备好 | [Skill Launch Checklist](https://clawhub.ai/bonniegeng-max/skills/skill-launch-checklist) | 一次轻量发布判断 |
-| dry-run 能过，但担心发布质量 | [Skill Publish Readiness](https://clawhub.ai/bonniegeng-max/skills/skill-publish-readiness) | 完整发布前审查 |
+| 第一次发布，不确定是否准备好 | [Skill Launch Checklist 1.0.3](https://clawhub.ai/bonniegeng-max/skills/skill-launch-checklist) | 一次轻量发布判断 |
+| dry-run 能过，但担心发布质量 | [Skill Publish Readiness 1.0.8](https://clawhub.ai/bonniegeng-max/skills/skill-publish-readiness) | 完整发布前审查 |
 | GitHub Actions 红了 | [GitHub Actions ClawHub Doctor](https://clawhub.ai/bonniegeng-max/skills/github-actions-clawhub-doctor) | 链路断点与最小修复 |
-| 已经 push，不确定是否真能下载 | [Release Proof Builder](https://clawhub.ai/bonniegeng-max/skills/release-proof-builder) | `E0-E4` 发布证据 |
+| 已经 push，不确定是否真能下载 | [Release Proof Builder 1.0.3](https://clawhub.ai/bonniegeng-max/skills/release-proof-builder) | `E0-E4` 发布证据 |
 | 页面看起来像模板 | [Skill Positioning Audit](https://clawhub.ai/bonniegeng-max/skills/skill-positioning-audit) | 定位与商店页诊断 |
 | 摘要太泛、太长 | [Skill Summary Rewriter](https://clawhub.ai/bonniegeng-max/skills/skill-summary-rewriter) | 可直接替换的摘要 |
-| 已经发布多个 Skill，不知道该押注谁 | [Skill Portfolio Growth Audit](https://clawhub.ai/bonniegeng-max/skills/skill-portfolio-growth-audit) | 作品集决策与证据边界 |
+| 已经发布多个 Skill，不知道该押注谁 | [Skill Portfolio Growth Audit 1.0.2](https://clawhub.ai/bonniegeng-max/skills/skill-portfolio-growth-audit) | 作品集决策与证据边界 |
 
 ## 产品路径
 
@@ -101,9 +101,9 @@ Portfolio Growth Audit
 |---|---|
 | `E0` | 只有本地文件 |
 | `E1` | GitHub 远端包含目标提交 |
-| `E2` | 发布 workflow 已执行 |
-| `E3` | ClawHub registry 可读取正确版本与元数据 |
-| `E4` | 指定版本可独立安装，核心文件与源码一致 |
+| `E2` | 目标发布 workflow 已完成且成功 |
+| `E3` | ClawHub registry 可读取正确版本与元数据，且 moderation 为 `clean` |
+| `E4` | 指定版本可独立安装、核心文件与源码一致，并记录主动安装造成的指标污染 |
 
 只有达到 `E4`，才在这里标记为“已上线、可下载使用”。
 
@@ -115,7 +115,7 @@ Portfolio Growth Audit
 - push 到 `main`：只发布改动过的 Skill
 - workflow dispatch：支持手动重跑
 - `.clawhub/skill-catalog.json`：统一管理展示名、categories 和 topics
-- 发布命令显式传递稳定 slug，避免展示名变化创建错误 ID
+- 发布命令显式传递稳定 slug 和人类可读 name，避免展示名变化创建错误 ID
 - 瞬时上传错误最多退避重试 3 次，确定性错误直接失败
 
 ### Plugin
@@ -245,4 +245,4 @@ python3 -m unittest discover -s tests
 - 竞品成熟且差异不足时，不复制同类产品
 - 新方向必须强化“ClawHub 发布与增长工具作者”这条主线
 
-当前处于 `Skill Publish Readiness 1.0.7` 的观察窗口。下一个产品或插件会由真实采用数据和竞争缺口决定。
+`Skill Publish Readiness 1.0.8` 当前仅为仓库候选版本，尚未进入发布后的自然观察窗口。下一个产品或插件会由真实采用数据和竞争缺口决定。

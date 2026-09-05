@@ -29,5 +29,5 @@
 
 ## 5. 发布动作
 
-- 已计划执行 `clawhub skill publish <path> --dry-run --owner <owner>`
+- 已计划执行 `clawhub skill publish <path> --slug <stable-slug> --name "<Human Readable Name>" --dry-run --owner <owner>`
 - 这次发布的目标是“值得上线”，不只是“命令能过”

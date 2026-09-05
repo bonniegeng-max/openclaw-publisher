@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3
+
+- 所有 Skill 发布命令显式传递稳定 `--slug` 与人类可读 `--name`
+- 同步更新快速评审模板和发布前检查清单
+
 ## 1.0.2
 
 - 将 frontmatter `name` 统一为人类可读展示名 `Skill Launch Checklist`

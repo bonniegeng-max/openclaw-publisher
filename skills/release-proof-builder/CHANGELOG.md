@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3
+
+- 收紧 E2：仅目标发布 workflow 完成且成功时成立
+- 收紧 E3：registry 元数据正确且 `moderation.verdict` 为 `clean` 时成立
+- E4 新增主动安装污染记录与自然观察起点重建要求
+- 同步更新证据等级、核验命令、冲突示例和报告模板
+
 ## 1.0.2
 
 - 将 frontmatter `name` 统一为人类可读展示名 `Release Proof Builder`

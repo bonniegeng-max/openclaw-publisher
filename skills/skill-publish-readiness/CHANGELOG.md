@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8
+
+- 所有 Skill 发布命令显式传递稳定 `--slug` 与人类可读 `--name`
+- 发布审查报告按 Skill / Plugin 分支输出下一步命令
+- Plugin 分支使用 `package validate` 与 `package publish --dry-run`，不再套用 Skill 参数
+
 ## 1.0.7
 
 - 新增基于真实 GitHub Actions → ClawHub 发布事故整理的复合失败审查案例

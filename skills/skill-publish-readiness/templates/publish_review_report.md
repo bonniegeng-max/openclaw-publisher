@@ -70,6 +70,8 @@
 
 ## 下一步命令
 
+### Skill 分支
+
 ```bash
 clawhub skill publish <path> \
   --slug <stable-slug> \
@@ -77,6 +79,22 @@ clawhub skill publish <path> \
   --dry-run \
   --owner <owner>
 ```
+
+### Plugin 分支
+
+先验证 package：
+
+```bash
+clawhub package validate <path>
+```
+
+再预演发布：
+
+```bash
+clawhub package publish <path> --dry-run
+```
+
+只保留与“审查对象”类型匹配的分支。Plugin 的身份来自 `package.json` 与 `openclaw.plugin.json`，不得套用 Skill 的 `--slug` / `--name` 参数。
 
 ## 证据边界
 

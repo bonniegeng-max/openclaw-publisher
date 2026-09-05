@@ -2,7 +2,7 @@
 name: Skill Publish Readiness
 slug: skill-publish-readiness
 description: Publish-ready review for ClawHub skills and plugins. 在正式发布前揪出文件缺失、版本不一致、环境声明、安全风险和同质化问题。
-version: 1.0.7
+version: 1.0.8
 metadata:
   openclaw:
     os: [macos]
@@ -67,7 +67,7 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 
 ## 不适合谁
 
-- 只想马上执行 `clawhub skill publish`，完全不关心质量的人
+- 只想马上执行 `clawhub skill publish <path> --slug <stable-slug> --name "<Human Readable Name>"`，完全不关心质量的人
 - 只需要一个最小 `dry-run` 结果，不需要修复建议的人
 - 手上还没有任何可检查目录和文件的人
 - 想让我替他伪造发布结果、跳过权限校验或淡化安全问题的人
@@ -95,7 +95,7 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 - 该声明的 `requires.env`、`primaryEnv`、`envVars` 有没有声明
 - 文案要求用户准备的命令和依赖，实际是否讲清楚了
 - 示例命令是否与当前目录结构匹配
-- 现在是否适合执行 `clawhub skill publish <path> --dry-run`
+- 现在是否适合执行 `clawhub skill publish <path> --slug <stable-slug> --name "<Human Readable Name>" --dry-run`
 - 现在是否适合执行 `clawhub package validate <path>` 和 `clawhub package publish <path> --dry-run`
 
 ### 安全和审核风险
@@ -159,7 +159,7 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 3. 风险问题：建议尽快修复的问题
 4. 最小修复路径：先改哪几处最值
 5. 差异化判断：是不是“又一个同类 skill”
-6. 下一步命令：最值得立刻执行的一条命令
+6. 下一步命令：Skill 输出显式带 `--slug`、`--name` 的 `skill publish`；Plugin 输出独立的 `package validate` / `package publish` 分支
 
 ## 我怎么判断差异化
 
@@ -191,7 +191,7 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 - 风险问题：`示例里把 token 写成了固定值`
 - 差异化判断：`目标用户过宽，页面读起来像通用模板`
 - 最小修复路径：`先补 description，把 token 改成环境变量示例，再把适用人群收窄到“准备把本地 skill 同步到 ClawHub 的个人开发者”`
-- 下一步命令：`clawhub skill publish ./skills/my-skill --dry-run --owner <owner>`
+- 下一步命令：`clawhub skill publish ./skills/my-skill --slug my-skill --name "My Skill" --dry-run --owner <owner>`
 
 ## 工作方式
 
@@ -199,6 +199,7 @@ Turn “it passes dry-run” into “it is actually worth publishing”.
 - 如果问题能最小修复，我会给最短路径
 - 如果差异化明显不够，我会直说不建议发
 - 如果可以发，但定位不够尖锐，我会给收窄建议
+- 如果对象是 Plugin，我会读取 `package.json` 与 `openclaw.plugin.json`，输出 package 验证/发布命令，而不是错误套用 skill publish
 
 ## 工作边界
 

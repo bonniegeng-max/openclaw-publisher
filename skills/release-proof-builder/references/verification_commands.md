@@ -21,7 +21,7 @@ clawhub inspect @<owner>/<slug> --json
 - `summary`
 - `tags.latest`
 - `topics`
-- `moderation`
+- `moderation.verdict` 必须明确为 `clean`
 
 ## 版本历史
 
@@ -38,3 +38,10 @@ clawhub --workdir <temporary-directory> install @<owner>/<slug>
 ```
 
 安装后检查目标目录中的 `SKILL.md` 和关键配套文件。临时目录应在验证后删除。
+
+执行安装前后还必须记录：
+
+- 安装时间、slug、指定版本和验收原因
+- 安装前的 downloads / installs 基线
+- 验收时段与紧随其后的指标增量属于主动安装污染
+- 安装完成时间作为新的自然观察起点

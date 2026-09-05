@@ -2,7 +2,7 @@
 name: Release Proof Builder
 slug: release-proof-builder
 description: Build verifiable proof that a ClawHub release is live and installable. 在发布后核验 GitHub、Actions、registry、公开元数据和安装结果，避免把推送成功误当成上架成功。
-version: 1.0.2
+version: 1.0.3
 metadata:
   openclaw:
     os: [macos]
@@ -54,28 +54,31 @@ Turn “the publish probably worked” into evidence that the release is live, c
 ### 2. 流水线证据
 
 - 目标提交是否触发发布 workflow
-- job 是成功、失败、跳过还是仍在运行
+- 目标发布 workflow 是否已完成且结论为成功
+- 失败、跳过、取消或仍在运行均不能达到 E2
 - 失败发生在发现、验证、上传还是 registry 返回阶段
 
 ### 3. Registry 证据
 
 - `clawhub inspect` 是否能找到目标 slug
 - `latest` 是否指向预期版本
-- 展示名、summary、topics、moderation 是否符合预期
+- 展示名、summary、topics 是否符合预期
+- `moderation.verdict` 是否明确为 `clean`；待审核、缺失或非 `clean` 均不能达到 E3
 
 ### 4. 安装证据
 
 - 是否能安装指定 slug 或指定版本
 - 安装后的文件是否齐全
 - 实际 `SKILL.md` 是否与预期版本一致
+- 是否记录本次主动安装的时间、slug、版本和原因，并标记受污染的指标观察区间
 
 ## 证据等级
 
 - `E0 未发布`：只有本地文件，没有远端提交
 - `E1 已推送`：GitHub 远端包含提交，但没有发布证据
-- `E2 已执行`：发布 workflow 已运行，但 registry 尚未确认
-- `E3 已上架`：registry 可读取正确版本和公开元数据
-- `E4 可安装`：已完成独立安装验证，文件可正常读取使用
+- `E2 流水线成功`：目标发布 workflow 已完成且结论为成功，但 registry 尚未确认
+- `E3 已上架且审核正常`：registry 可读取正确版本与公开元数据，且 moderation verdict 为 `clean`
+- `E4 可安装`：已完成指定版本的独立安装验证，文件与源码一致，并记录安装造成的指标污染
 
 只有达到 `E4`，才建议对外表述为“已上线、可下载使用”。
 
@@ -115,6 +118,7 @@ Turn “the publish probably worked” into evidence that the release is live, c
 - 优先使用机器可读取的状态，而不是截图或主观描述
 - 对“尚未证明”和“明确失败”做区分
 - 安装验证使用隔离目录，避免污染现有环境
+- 主动安装仍会污染 downloads / installs 观察；必须记录时间、slug、版本和原因，重建自然观察起点，验收时段及紧随其后的增量不得归因为自然用户
 - 不输出 token、cookie 或其他敏感凭据
 
 ## 配套文件

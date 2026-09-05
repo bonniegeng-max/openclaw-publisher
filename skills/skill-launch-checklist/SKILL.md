@@ -2,7 +2,7 @@
 name: Skill Launch Checklist
 slug: skill-launch-checklist
 description: Final launch checklist for ClawHub skills. 在正式发布前快速检查标题、摘要、分类、示例、版本、dry-run 和公开页可信度。
-version: 1.0.2
+version: 1.0.3
 metadata:
   openclaw:
     os: [macos]
@@ -51,7 +51,7 @@ Use one short checklist to decide whether your ClawHub skill is ready to launch,
 
 - `SKILL.md` 是否存在且 frontmatter 可解析
 - `name`、目录名、版本号是否一致
-- `clawhub skill publish <path> --dry-run` 现在是否值得执行
+- `clawhub skill publish <path> --slug <stable-slug> --name "<Human Readable Name>" --dry-run` 现在是否值得执行
 - 是否已经具备最小可解释的说明，而不是只剩骨架
 
 ### 页面转化
@@ -81,7 +81,7 @@ Use one short checklist to decide whether your ClawHub skill is ready to launch,
 2. 阻塞项：必须先补的地方
 3. 漏项：最容易被忽略但会拖累结果的地方
 4. 最小补法：先改哪一处最值
-5. 下一步命令：现在最值得跑的一条命令
+5. 下一步命令：显式带稳定 `--slug` 和人类可读 `--name` 的发布命令
 
 ## 一个真实示例
 

@@ -2,7 +2,7 @@
 name: Skill Portfolio Growth Audit
 slug: skill-portfolio-growth-audit
 description: Audit a ClawHub publisher portfolio using live registry evidence. Invoke when deciding which skills to improve, merge, stop, or build next based on downloads, installs, search competition, and version health.
-version: 1.0.1
+version: 1.0.2
 metadata:
   openclaw:
     os: [macos]
@@ -96,6 +96,18 @@ Turn a folder of published skills into an evidence-driven portfolio strategy.
 - `30 天以上`：可以做保留、合并、停更或重定位决策
 
 如果没有历史快照，必须标注“只有当前截面”，不能伪造趋势。
+
+## 决策就绪闸门
+
+只有以下条件全部满足，才允许根据采用指标与搜索可见性给出加码、修复、合并、停更、新建或重定位结论：
+
+- `evidenceQuality.decisionReady` 明确为 `true`
+- 前后两次快照使用相同采集方法
+- 前后两次快照都明确记录 `activeInstall: false`
+- 两次快照间隔至少 7 天
+- 搜索快照的 query 文本、每条 query 的 `limit` 和完整 query set 完全一致
+
+任一条件不满足时，结论必须降级为“继续观察”或“修复数据质量”。不得把不可比快照、主动安装造成的计数变化或不足 7 天的窗口解释为自然增长，也不得据此调整定位、合并或停更 Skill、创建相邻 Skill 或启动 Plugin。
 
 ## 五类决策
 
@@ -192,6 +204,7 @@ Turn a folder of published skills into an evidence-driven portfolio strategy.
 5. 系列结构：入口、主力、排障、增长、验证
 6. 下一步：只给一个当前最高优先级动作
 7. 证据边界：哪些是事实，哪些仍需时间验证
+8. 决策就绪：逐项报告五个闸门及最终 `decisionReady`
 
 ## 工作边界
 
@@ -200,6 +213,7 @@ Turn a folder of published skills into an evidence-driven portfolio strategy.
 - 不因竞品存在就自动放弃，也不忽略成熟强者
 - 不给每个 skill 都安排“继续优化”
 - 不为了数量持续创建同质化 skill
+- 不在决策就绪闸门未全部通过时输出增长归因或产品组合动作
 
 ## 配套文件
 

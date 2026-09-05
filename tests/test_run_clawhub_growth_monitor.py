@@ -16,7 +16,7 @@ SPEC.loader.exec_module(MODULE)
 OLD_TIME = "2026-08-20T00:00:00+00:00"
 NEW_TIME = "2026-09-05T00:00:00+00:00"
 NOW = datetime.fromisoformat("2026-09-05T01:00:00+00:00")
-OBSERVATION_END = "2026-09-12T02:26:39+00:00"
+OBSERVATION_END = "2026-09-12T10:45:38+00:00"
 
 
 def metrics_snapshot(label):

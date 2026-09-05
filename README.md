@@ -21,7 +21,7 @@ Ship ClawHub skills with evidence, not guesswork.
 | 安装验证 | 7 个 current latest 均达到 `E4` |
 | 自动发布 | GitHub `main` → ClawHub |
 | 差分发布 | 只发布发生实质变化的 Skill |
-| 主入口 | `Skill Publish Readiness 1.0.8` |
+| 主入口 | `Skill Publish Readiness 1.0.9` |
 
 公开数据会变化，当前快照、口径限制和决策记录在 [`skill_growth_monitor.md`](skill_growth_monitor.md)。
 
@@ -38,7 +38,7 @@ clawhub install skill-publish-readiness
 | 你正在面对的问题 | 推荐 Skill | 你会得到什么 |
 |---|---|---|
 | 第一次发布，不确定是否准备好 | [Skill Launch Checklist 1.0.3](https://clawhub.ai/bonniegeng-max/skills/skill-launch-checklist) | 一次轻量发布判断 |
-| dry-run 能过，但担心发布质量 | [Skill Publish Readiness 1.0.8](https://clawhub.ai/bonniegeng-max/skills/skill-publish-readiness) | 完整发布前审查 |
+| dry-run 能过，但担心发布质量 | [Skill Publish Readiness 1.0.9](https://clawhub.ai/bonniegeng-max/skills/skill-publish-readiness) | 完整发布前审查 |
 | GitHub Actions 红了 | [GitHub Actions ClawHub Doctor](https://clawhub.ai/bonniegeng-max/skills/github-actions-clawhub-doctor) | 链路断点与最小修复 |
 | 已经 push，不确定是否真能下载 | [Release Proof Builder 1.0.3](https://clawhub.ai/bonniegeng-max/skills/release-proof-builder) | `E0-E4` 发布证据 |
 | 页面看起来像模板 | [Skill Positioning Audit](https://clawhub.ai/bonniegeng-max/skills/skill-positioning-audit) | 定位与商店页诊断 |
@@ -247,4 +247,4 @@ python3 -m unittest discover -s tests
 - 竞品成熟且差异不足时，不复制同类产品
 - 新方向必须强化“ClawHub 发布与增长工具作者”这条主线
 
-`Skill Publish Readiness 1.0.8`、`Skill Launch Checklist 1.0.3`、`Release Proof Builder 1.0.3` 和 `Skill Portfolio Growth Audit 1.0.2` 已完成 E4 验收。新自然观察起点为 `2026-09-05 10:26:39`（北京时间）；验收流量不计入自然增长，下一个产品或插件仍由完整观察窗口后的真实采用数据和竞争缺口决定。
+`Skill Publish Readiness 1.0.9`、`Skill Launch Checklist 1.0.3`、`Release Proof Builder 1.0.3` 和 `Skill Portfolio Growth Audit 1.0.2` 已完成 E4 验收。最新自然观察起点为 `2026-09-05 18:45:38`（北京时间）；验收流量不计入自然增长，下一个产品或插件仍由完整观察窗口后的真实采用数据和竞争缺口决定。

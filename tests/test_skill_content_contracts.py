@@ -56,7 +56,7 @@ class SkillContentContractTests(unittest.TestCase):
     def test_target_versions_and_readme_are_in_sync(self):
         expected = {
             "skill-portfolio-growth-audit": "1.0.2",
-            "skill-publish-readiness": "1.0.8",
+            "skill-publish-readiness": "1.0.9",
             "skill-launch-checklist": "1.0.3",
             "release-proof-builder": "1.0.3",
         }

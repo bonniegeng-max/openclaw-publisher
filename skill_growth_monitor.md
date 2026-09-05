@@ -1,16 +1,16 @@
 # ClawHub 作品集增长基线
 
-更新时间：2026-09-05 10:26（Asia/Shanghai）
+更新时间：2026-09-05 18:45（北京时间）
 发布者：`@bonniegeng-max`  
-GitHub 基线提交：`617239c623fbf95374286a0695cc342aa47aadec`
+GitHub 最新 Skill 提交：`2748f047c26c57f9aa85c00a640ed0f5ae45db16`
 
 ## 当前结论
 
-作品集已经形成一条清晰主线：发布前审查、发布链路排障、发布后证明和商店页增长。当前 7 个 latest 均已达到 E4；其中 4 个 Skill 在本轮完成正确性修复和版本升级。
+作品集已经形成一条清晰主线：发布前审查、发布链路排障、发布后证明和商店页增长。当前 7 个 latest 均已达到 E4。
 
-本轮修复了增长决策闸门、显式 slug/name 命令合同、Plugin 发布分支和 E2/E3/E4 证据定义。`skill-publish-readiness 1.0.8`、`skill-launch-checklist 1.0.3`、`release-proof-builder 1.0.3`、`skill-portfolio-growth-audit 1.0.2` 均已发布、moderation `clean` 且通过指定版本隔离安装。
+此前合同修复批次完成了增长决策闸门、显式 slug/name 命令合同、Plugin 发布分支和 E2/E3/E4 证据定义。随后远端并行维护将主入口升级到 `skill-publish-readiness 1.0.9`；该版本已确认 moderation `clean`，并完成一次指定版本隔离安装。
 
-本轮主动维护发生在北京时间 `2026-09-05 10:10–10:26`。该时段及紧随其后的 downloads / installs 变化全部视为维护污染；新的自然观察起点是 `2026-09-05 10:26:39`，最早在 7 天后且五项决策闸门全部通过时才允许增长或产品组合结论。
+最新主动维护与验收结束于北京时间 `2026-09-05 18:45:38`。此前维护时段、这次发布验收及紧随其后的 downloads / installs 变化全部视为维护污染；新的自然观察起点是 `2026-09-05 18:45:38`，最早在 7 天后且五项决策闸门全部通过时才允许增长或产品组合结论。
 
 ## 合同修复验收
 
@@ -18,12 +18,12 @@ GitHub 修复提交：`617239c623fbf95374286a0695cc342aa47aadec`
 
 | Skill | Latest | Display | Moderation | 安装验证 |
 |---|---:|---|---|---|
-| `skill-publish-readiness` | 1.0.8 | Skill Publish Readiness | clean | 通过 |
+| `skill-publish-readiness` | 1.0.9 | Skill Publish Readiness | clean | 通过 |
 | `skill-launch-checklist` | 1.0.3 | Skill Launch Checklist | clean | 通过 |
 | `release-proof-builder` | 1.0.3 | Release Proof Builder | clean | 通过 |
 | `skill-portfolio-growth-audit` | 1.0.2 | Skill Portfolio Growth Audit | clean | 通过 |
 
-4 个指定版本各执行一次隔离安装，安装后的 `SKILL.md` 与提交文件 SHA-256 一致。完整证据见 `release_evidence/2026-09-05-skill-contract-fixes.md`。
+此前 4 个指定版本各执行一次隔离安装；主入口 `1.0.9` 只额外执行了一次限定安装。安装后的核心文件与对应提交 SHA-256 一致。证据见 `release_evidence/2026-09-05-skill-contract-fixes.md` 和 `release_evidence/2026-09-05-skill-publish-readiness-1.0.9.md`。
 
 本轮未修改另外 3 个 Skill，因此未对它们重复执行 dry-run、inspect 或安装；此前 E4 证据继续有效。
 
@@ -33,7 +33,7 @@ GitHub 修复提交：`617239c623fbf95374286a0695cc342aa47aadec`
 
 | Skill | Downloads | Installs | Versions | Latest |
 |---|---:|---:|---:|---:|
-| `skill-publish-readiness` | 108 | 1 | 9 | 1.0.8 |
+| `skill-publish-readiness` | 150 | 1 | 10 | 1.0.9 |
 | `skill-launch-checklist` | 73 | 1 | 4 | 1.0.3 |
 | `release-proof-builder` | 75 | 1 | 4 | 1.0.3 |
 | `skill-portfolio-growth-audit` | 65 | 1 | 3 | 1.0.2 |
@@ -110,7 +110,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 ## 巡检采样规则
 
 - 完整周检优先运行 `python3 scripts/run_clawhub_growth_monitor.py`，避免两类快照只更新一半。
-- `metrics/observation-policy.json` 将首次允许采样时间锁定为 `2026-09-12T02:26:39+00:00`；在此之前，常规入口即使没有历史快照也必须零请求退出。
+- `metrics/observation-policy.json` 将首次允许采样时间锁定为 `2026-09-12T10:45:38+00:00`；在此之前，常规入口即使没有历史快照也必须零请求退出。
 - 默认 144 小时防重复门槛不得在常规周检中绕过；`--force` 仅用于明确的版本或审核异常复核。
 - 常规采样优先运行 `python3 scripts/collect_clawhub_metrics.py`，生成只读 JSON 快照。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。
@@ -161,4 +161,4 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 唯一下一步
 
-保持作品集结构不变，不再发布同类优化版本。下一次增长决策不得早于 `2026-09-12 10:26:39`（北京时间），并且必须满足同采集方法、前后快照均 `activeInstall: false`、间隔至少 7 天、相同 query/limit/query set、前次与当前两组指标/搜索采集时间差均不超过 15 分钟，以及 `evidenceQuality.decisionReady: true`；否则唯一结论是继续观察或修复数据质量。
+保持作品集结构不变，不再发布同类优化版本。下一次增长决策不得早于 `2026-09-12 18:45:38`（北京时间），并且必须满足同采集方法、前后快照均 `activeInstall: false`、间隔至少 7 天、相同 query/limit/query set、前次与当前两组指标/搜索采集时间差均不超过 15 分钟，以及 `evidenceQuality.decisionReady: true`；否则唯一结论是继续观察或修复数据质量。

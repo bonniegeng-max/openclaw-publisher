@@ -4,7 +4,7 @@
 
 ## 当前决策
 
-作品集已有 7 个 Skill，覆盖发布准备、Actions 排障、发布证明、页面转化和组合决策。当前仍不立即发布第 8 个 Skill，先完成从 `2026-09-05 10:26:39`（北京时间）开始的 `Skill Publish Readiness 1.0.8` 自然采用观察窗口；最早决策时间为 `2026-09-12 10:26:39`，且仍须通过全部五项证据闸门。
+作品集已有 7 个 Skill，覆盖发布准备、Actions 排障、发布证明、页面转化和组合决策。当前仍不立即发布第 8 个 Skill，先完成从 `2026-09-05 18:45:38`（北京时间）开始的 `Skill Publish Readiness 1.0.9` 自然采用观察窗口；最早决策时间为 `2026-09-12 18:45:38`，且仍须通过全部五项证据闸门。
 
 下一高置信度 Skill 候选调整为 `package-publish-doctor`。ClawHub 官方仓库已出现至少 3 个由不同发布者提交、可复现且失败层不同的 package 发布案例，需求证据已超过“仅有供给空白”；但在观察窗口结束和竞品复核前不进入发布。
 
@@ -102,7 +102,7 @@
 
 | 产品 | 当前角色 | 后续只在有证据时补充 |
 |---|---|---|
-| `skill-publish-readiness` | 发布前完整审查主入口 | 观察 `1.0.8` 合同修复后的自然采用 |
+| `skill-publish-readiness` | 发布前完整审查主入口 | 观察 `1.0.9` 安全审查升级后的自然采用 |
 | `github-actions-clawhub-doctor` | GitHub Actions → ClawHub 排障 | 增加新出现且可复现的失败模式 |
 | `skill-positioning-audit` | 单页定位与转化诊断 | 吸收 topic fit 和页面 benchmark |
 | `skill-launch-checklist` | 低门槛发布入口 | 观察是否形成独立需求 |

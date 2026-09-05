@@ -2,7 +2,7 @@
   "scenario": "observation-window-not-ready",
   "evidenceState": {
     "pairedDecisionReportPresent": false,
-    "observationNotBefore": "2026-09-12T02:26:39+00:00",
+    "observationNotBefore": "2026-09-12T10:45:38+00:00",
     "queryContractPresent": true
   },
   "gates": {

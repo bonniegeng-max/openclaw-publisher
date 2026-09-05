@@ -271,6 +271,111 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             result["errors"],
         )
 
+    def test_malformed_catalog_metadata_is_structured_invalid(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        mutations = (
+            ("categories", "development"),
+            ("topics", {"bad": True}),
+            ("categories", [{"bad": True}]),
+            ("topics", [["artifact-verification"]]),
+            ("categories", ["development", ""]),
+            ("topics", ["artifact-verification", "   "]),
+            ("categories", ["development", "development"]),
+            (
+                "topics",
+                ["artifact-verification", "artifact-verification"],
+            ),
+        )
+
+        for field, value in mutations:
+            with self.subTest(field=field, value=value):
+                contract = copy.deepcopy(original)
+                contract["catalogEntry"][field] = value
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "contract.json"
+                    path.write_text(json.dumps(contract), encoding="utf-8")
+                    result = CHECK_MODULE.evaluate(
+                        ROOT,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertFalse(
+                    result["localEvidence"]["catalogCandidateValid"]
+                )
+                self.assertIn(
+                    "candidate catalog entry is invalid or inconsistent",
+                    result["errors"],
+                )
+
+    def test_schema_versions_are_mandatory(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract_mutations = (
+            ("missing", None),
+            ("wrong", 2),
+        )
+        for label, schema_version in contract_mutations:
+            with self.subTest(document="contract", mutation=label):
+                contract = copy.deepcopy(original)
+                if schema_version is None:
+                    contract.pop("schemaVersion")
+                else:
+                    contract["schemaVersion"] = schema_version
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "contract.json"
+                    path.write_text(json.dumps(contract), encoding="utf-8")
+                    result = CHECK_MODULE.evaluate(
+                        ROOT,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertIn(
+                    "promotion contract schemaVersion must equal 1",
+                    result["errors"],
+                )
+
+        for label, schema_version in contract_mutations:
+            with self.subTest(document="policy", mutation=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    root, path = make_staged_repo(
+                        directory,
+                        original,
+                        target=False,
+                        catalog=False,
+                    )
+                    policy_path = root / "metrics" / "observation-policy.json"
+                    policy = json.loads(
+                        policy_path.read_text(encoding="utf-8")
+                    )
+                    if schema_version is None:
+                        policy.pop("schemaVersion")
+                    else:
+                        policy["schemaVersion"] = schema_version
+                    policy_path.write_text(
+                        json.dumps(policy),
+                        encoding="utf-8",
+                    )
+                    result = CHECK_MODULE.evaluate(
+                        root,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertIn(
+                    "observation policy schemaVersion must equal 1",
+                    result["errors"],
+                )
+
     def test_complete_status_requires_formal_surfaces(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         contract["status"] = "complete"

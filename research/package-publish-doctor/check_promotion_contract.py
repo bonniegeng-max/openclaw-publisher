@@ -87,6 +87,15 @@ def inside(root, relative):
     return candidate
 
 
+def valid_unique_nonempty_strings(value):
+    return (
+        isinstance(value, list)
+        and bool(value)
+        and all(isinstance(item, str) and item.strip() for item in value)
+        and len(value) == len(set(value))
+    )
+
+
 def evaluate(repo_root, contract_path, now):
     errors = []
     local_evidence = {}
@@ -114,6 +123,11 @@ def evaluate(repo_root, contract_path, now):
             "localEvidence": {},
             "errors": [str(error)],
         }
+
+    if contract.get("schemaVersion") != 1:
+        errors.append("promotion contract schemaVersion must equal 1")
+    if policy.get("schemaVersion") != 1:
+        errors.append("observation policy schemaVersion must equal 1")
 
     required_present = all((source / path).is_file() for path in REQUIRED_DRAFT_FILES)
     local_evidence["requiredDraftFilesPresent"] = required_present
@@ -156,20 +170,8 @@ def evaluate(repo_root, contract_path, now):
     catalog_candidate_valid = (
         isinstance(catalog_entry, dict)
         and catalog_entry.get("displayName") == candidate.get("displayName")
-        and isinstance(catalog_entry.get("categories"), list)
-        and bool(catalog_entry["categories"])
-        and len(catalog_entry["categories"]) == len(set(catalog_entry["categories"]))
-        and all(
-            isinstance(item, str) and item
-            for item in catalog_entry["categories"]
-        )
-        and isinstance(catalog_entry.get("topics"), list)
-        and bool(catalog_entry["topics"])
-        and len(catalog_entry["topics"]) == len(set(catalog_entry["topics"]))
-        and all(
-            isinstance(item, str) and item
-            for item in catalog_entry["topics"]
-        )
+        and valid_unique_nonempty_strings(catalog_entry.get("categories"))
+        and valid_unique_nonempty_strings(catalog_entry.get("topics"))
     )
     local_evidence["catalogCandidateValid"] = catalog_candidate_valid
     if not catalog_candidate_valid:

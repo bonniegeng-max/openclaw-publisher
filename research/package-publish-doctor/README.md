@@ -83,6 +83,17 @@ python3 research/package-publish-doctor/draft/scripts/diagnose.py \
 
 输出包含诊断层、确定性 `conclusion`、证据、建议、`rejectedShortcuts`、`verificationSteps`、`doNotClaim`、来源和严格脱敏的 `observedContext`，不执行网络请求或修复动作。已知诊断只输出该规则实际使用且通过格式校验的 CLI/npm 版本、规范化 workflow ref、family 和 source commit；workflow owner/repository 会被移除，`UNKNOWN` 的 `observedContext` 恒为空，不透传错误、token、URL、release ID 或 artifact hash。无法满足完整判定条件时必须返回同结构的 `UNKNOWN`，其 `conclusion` 为 `partial`，并只指出一个最小补证，不能根据单个错误关键词猜测根因。`NPM_PACK_JSON_SHAPE` 绑定 package command、npm 11/12 的同一 package id/filename 与实际 artifact filename。`CLAWPACK_STAGING_GAP` 使用内置阈值，并要求 `clawhub.ai` 公共上传目标、标准 SHA-256 与同 artifact 验证成功。`TRUSTED_PUBLISH_TAG_REF_REGRESSION` 绑定 source-validation 阶段、tag ref、指定 source-validator commit、精确源码比较和 `source-ref-mismatch` 复现结果。`PACKAGE_RELEASE_SCAN_STALLED` 只匹配已证实的 `0.23.1`，且要求显式 `latestRelease: null`。`PACKAGE_SECURITY_AUDIT_FIELDS_MISSING` 要求同一已发布 release，并以完整字段名匹配 fail-closed 错误。
 
+## 运行资格
+
+草案的唯一可执行入口是离线 `scripts/diagnose.py`，真实运行依赖只有
+`python3`。它不调用 Git、ClawHub CLI 或 Node 安装器，也没有 macOS 专用
+命令，因此 frontmatter 不声明 `os`，不要求 `git` / `clawhub`，也不提供
+ClawHub CLI 安装步骤。
+
+仓库的 `Metrics Tools CI` 在 `ubuntu-latest` 与 Python 3.11 上编译该脚本并
+执行全量离线测试，构成 Linux 可运行证据。此证据只证明当前离线诊断器在
+该环境通过，不等于 Windows 已验证，也不证明未来新增命令天然跨平台。
+
 ## 草案包
 
 `draft/` 已按正式 Skill 的结构准备：

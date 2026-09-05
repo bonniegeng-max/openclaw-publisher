@@ -181,6 +181,36 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                 all(isinstance(item, str) for item in result[field])
             )
 
+    def test_draft_runtime_metadata_matches_offline_python_entrypoint(self):
+        skill = (
+            RESEARCH / "draft" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        frontmatter = skill.split("---", 2)[1]
+        metadata = frontmatter.split("metadata:", 1)[1]
+
+        self.assertIn("version: 0.1.13", frontmatter)
+        self.assertIn("        - python3", metadata)
+        self.assertNotIn("    os:", metadata)
+        self.assertNotIn("        - git", metadata)
+        self.assertNotIn("        - clawhub", metadata)
+        self.assertNotIn("    install:", metadata)
+
+    def test_linux_ci_covers_the_offline_entrypoint(self):
+        workflow = (
+            ROOT / ".github" / "workflows" / "metrics-tools-ci.yml"
+        ).read_text(encoding="utf-8")
+        readme = (RESEARCH / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("runs-on: ubuntu-latest", workflow)
+        self.assertIn('python-version: "3.11"', workflow)
+        self.assertIn(
+            "research/package-publish-doctor/draft/scripts/*.py",
+            workflow,
+        )
+        self.assertIn("真实运行依赖只有", readme)
+        self.assertIn("`python3`", readme)
+        self.assertIn("不等于 Windows 已验证", readme)
+
     def test_research_pack_has_distinct_extensible_package_cases(self):
         paths = sorted(FIXTURES.glob("*.json"))
         fixtures = [

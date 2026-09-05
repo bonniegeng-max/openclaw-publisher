@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.13 - 2026-09-05
+
+- 删除与离线诊断任务无关的 macOS 限制、Git/ClawHub 二进制要求和 ClawHub CLI 安装声明。
+- 只保留 bundled `scripts/diagnose.py` 实际执行所需的 `python3` 资格条件，避免在 Linux 或仅分析现有日志时被错误过滤。
+- 以仓库 `ubuntu-latest` CI 的 Python 3.11 编译与全量离线测试作为 Linux 可运行证据。
+- 增加 frontmatter 运行资格回归测试，防止草案重新引入与任务不符的依赖。
+
 ## 0.1.12 - 2026-09-05
 
 - 将必要证据目录升级为可声明多个完整字段结构的 variant 合同。

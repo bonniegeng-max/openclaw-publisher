@@ -56,7 +56,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.12")
+        self.assertEqual(values["version"], "0.1.13")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))

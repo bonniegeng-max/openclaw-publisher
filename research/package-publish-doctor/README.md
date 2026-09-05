@@ -169,6 +169,10 @@ gate 都会判定合同无效。`observation-window` 在 `notBefore` 之前不�
 `observation-window-hold`，正式目录与 catalog 必须同时缺席，ClawHub
 搜索、dry-run、发布、moderation、E4、市场空白及下载影响等外部
 evidence/claims 也不得提前标为 `true`。
+状态也不能跳级：`promotion-ready` 要求观察、版本复核、同口径竞品检索和
+本地测试均完成；`publication-pending` 还要求显式 slug/name dry-run；
+`verification-pending` 还要求授权发布完成；`complete` 要求全部八个 gate
+完成。状态字符串本身不构成完成证据。
 
 ## 启动门槛
 

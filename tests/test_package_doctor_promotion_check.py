@@ -67,23 +67,23 @@ def make_staged_repo(directory, contract, target=True, catalog=True):
     return root, contract_path
 
 
-def complete_release_gate_support(contract):
+def complete_selected_release_gates(contract, *gate_ids):
+    requested = set(gate_ids)
     for gate in contract["releaseGates"]:
+        if gate["id"] not in requested:
+            continue
         gate["state"] = "complete"
-    contract["evidence"].update(
-        {
-            "latestOfficialReleaseReconfirmed": True,
-            "clawhubCompetitorSearchComplete": True,
-            "dryRunComplete": True,
-            "registryModerationClean": True,
-            "e4Complete": True,
-        }
-    )
-    contract["claims"].update(
-        {
-            "publishedConfirmed": True,
-            "downloadableConfirmed": True,
-        }
+        for document, field in CHECK_MODULE.GATE_SUPPORT_REQUIREMENTS.get(
+            gate["id"],
+            (),
+        ):
+            contract[document][field] = True
+
+
+def complete_release_gate_support(contract):
+    complete_selected_release_gates(
+        contract,
+        *CHECK_MODULE.REQUIRED_GATE_IDS,
     )
 
 
@@ -131,6 +131,9 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             result["localEvidence"]["absentFromFormalSurfacesDuringHold"]
         )
         self.assertTrue(result["localEvidence"]["releasePolicyValid"])
+        self.assertTrue(
+            result["localEvidence"]["statusPrerequisitesSatisfied"]
+        )
         self.assertEqual(result["errors"], [])
 
     def test_elapsed_time_does_not_auto_complete_external_gates(self):
@@ -433,11 +436,10 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
     def test_completed_observation_gate_releases_time_lock(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         contract["status"] = "promotion-ready"
-        next(
-            gate
-            for gate in contract["releaseGates"]
-            if gate["id"] == "observation-window"
-        )["state"] = "complete"
+        complete_selected_release_gates(
+            contract,
+            *CHECK_MODULE.STATUS_REQUIRED_COMPLETE_GATES["promotion-ready"],
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "contract.json"
@@ -455,6 +457,9 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         )
         self.assertTrue(
             result["localEvidence"]["observationGateReleased"]
+        )
+        self.assertTrue(
+            result["localEvidence"]["statusPrerequisitesSatisfied"]
         )
         self.assertNotIn("observation-window", result["blockingGates"])
 
@@ -705,6 +710,92 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             result["errors"],
         )
 
+    def test_statuses_cannot_skip_required_gates(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        cases = (
+            (
+                "promotion-ready",
+                "same-method-clawhub-competitor-search",
+                False,
+            ),
+            (
+                "publication-pending",
+                "explicit-slug-name-dry-run",
+                True,
+            ),
+            (
+                "verification-pending",
+                "authorized-publish",
+                True,
+            ),
+            ("complete", "single-version-e4", True),
+        )
+
+        for status, missing_gate, staged in cases:
+            with self.subTest(status=status, missing_gate=missing_gate):
+                contract = copy.deepcopy(original)
+                contract["status"] = status
+                required = (
+                    CHECK_MODULE.STATUS_REQUIRED_COMPLETE_GATES[status]
+                    - {missing_gate}
+                )
+                complete_selected_release_gates(contract, *required)
+                with tempfile.TemporaryDirectory() as directory:
+                    root, path = make_staged_repo(
+                        directory,
+                        contract,
+                        target=staged,
+                        catalog=staged,
+                    )
+                    result = CHECK_MODULE.evaluate(
+                        root,
+                        path,
+                        datetime(2026, 9, 13, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertFalse(
+                    result["localEvidence"][
+                        "statusPrerequisitesSatisfied"
+                    ]
+                )
+                self.assertIn(
+                    (
+                        f"promotion status {status} requires completed gates: "
+                        f"{missing_gate}"
+                    ),
+                    result["errors"],
+                )
+
+    def test_verification_pending_requires_publish_but_not_e4(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["status"] = "verification-pending"
+        complete_selected_release_gates(
+            contract,
+            *CHECK_MODULE.STATUS_REQUIRED_COMPLETE_GATES[
+                "verification-pending"
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, path = make_staged_repo(directory, contract)
+            result = CHECK_MODULE.evaluate(
+                root,
+                path,
+                datetime(2026, 9, 13, tzinfo=timezone.utc),
+            )
+
+        self.assertTrue(result["valid"])
+        self.assertFalse(result["complete"])
+        self.assertTrue(
+            result["localEvidence"]["statusPrerequisitesSatisfied"]
+        )
+        self.assertNotIn("authorized-publish", result["blockingGates"])
+        self.assertIn("registry-moderation-check", result["blockingGates"])
+        self.assertIn("single-version-e4", result["blockingGates"])
+
     def test_formal_directory_and_catalog_must_appear_together(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         contract["status"] = "publication-pending"
@@ -736,11 +827,12 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
     def test_staged_surfaces_must_match_contract_identity(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         contract["status"] = "publication-pending"
-        next(
-            gate
-            for gate in contract["releaseGates"]
-            if gate["id"] == "observation-window"
-        )["state"] = "complete"
+        complete_selected_release_gates(
+            contract,
+            *CHECK_MODULE.STATUS_REQUIRED_COMPLETE_GATES[
+                "publication-pending"
+            ],
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             root, path = make_staged_repo(directory, contract)

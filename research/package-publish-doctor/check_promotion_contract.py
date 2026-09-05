@@ -23,13 +23,6 @@ ALLOWED_GATE_STATES = {
     "pending",
     "blocked-until-not-before",
 }
-ALLOWED_CONTRACT_STATUSES = {
-    "observation-window-hold",
-    "promotion-ready",
-    "publication-pending",
-    "verification-pending",
-    "complete",
-}
 REQUIRED_GATE_IDS = frozenset(
     {
         "observation-window",
@@ -42,6 +35,38 @@ REQUIRED_GATE_IDS = frozenset(
         "single-version-e4",
     }
 )
+STATUS_REQUIRED_COMPLETE_GATES = {
+    "observation-window-hold": frozenset(),
+    "promotion-ready": frozenset(
+        {
+            "observation-window",
+            "fresh-official-version-review",
+            "same-method-clawhub-competitor-search",
+            "local-tests",
+        }
+    ),
+    "publication-pending": frozenset(
+        {
+            "observation-window",
+            "fresh-official-version-review",
+            "same-method-clawhub-competitor-search",
+            "local-tests",
+            "explicit-slug-name-dry-run",
+        }
+    ),
+    "verification-pending": frozenset(
+        {
+            "observation-window",
+            "fresh-official-version-review",
+            "same-method-clawhub-competitor-search",
+            "local-tests",
+            "explicit-slug-name-dry-run",
+            "authorized-publish",
+        }
+    ),
+    "complete": REQUIRED_GATE_IDS,
+}
+ALLOWED_CONTRACT_STATUSES = frozenset(STATUS_REQUIRED_COMPLETE_GATES)
 GATE_SUPPORT_REQUIREMENTS = {
     "fresh-official-version-review": (
         ("evidence", "latestOfficialReleaseReconfirmed"),
@@ -363,6 +388,30 @@ def evaluate(repo_root, contract_path, now):
         errors.append(
             "unexpected release gates present: "
             + ", ".join(unexpected_gate_ids)
+        )
+    gate_states = {
+        gate.get("id"): gate.get("state")
+        for gate in gates
+        if isinstance(gate, dict) and isinstance(gate.get("id"), str)
+    }
+    required_for_status = STATUS_REQUIRED_COMPLETE_GATES.get(declared_status)
+    if required_for_status is None:
+        status_missing_gate_ids = []
+        status_prerequisites_satisfied = False
+    else:
+        status_missing_gate_ids = sorted(
+            gate_id
+            for gate_id in required_for_status
+            if gate_states.get(gate_id) != "complete"
+        )
+        status_prerequisites_satisfied = not status_missing_gate_ids
+    local_evidence["statusPrerequisitesSatisfied"] = (
+        status_prerequisites_satisfied
+    )
+    if status_missing_gate_ids:
+        errors.append(
+            f"promotion status {declared_status} requires completed gates: "
+            + ", ".join(status_missing_gate_ids)
         )
     for gate in gates:
         if (

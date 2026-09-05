@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.4
+version: 0.1.5
 metadata:
   openclaw:
     os: [macos]
@@ -116,6 +116,8 @@ Do not bump a version merely to escape a stuck registry state. Do not create a f
 For `CLAWPACK_STAGING_GAP`, an Inspector or local-validation success only counts when its artifact hash exactly matches the artifact that received the 413. Missing validation, failed validation, or a different hash is insufficient for a high-confidence diagnosis.
 
 For `TRUSTED_PUBLISH_TAG_REF_REGRESSION`, require source-comparison evidence from source-validator commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720`, including the comparison of `source.ref` with `candidateSha ?? token.sha`. A bare `rejected: true` observation is insufficient.
+
+For `PACKAGE_SECURITY_AUDIT_FIELDS_MISSING`, both `overview` and `securityAuditUrl` are required to be non-empty strings. Treat either field as malformed when it is missing, blank, or not a string, but only match when the fail-closed error names an invalid field and the exact-release trust verdict is otherwise clean.
 
 ### 5. Verify the repair
 

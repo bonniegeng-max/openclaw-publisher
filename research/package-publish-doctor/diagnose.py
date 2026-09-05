@@ -100,6 +100,10 @@ def _version_major(value):
     return int(first) if first.isdigit() else None
 
 
+def _is_non_empty_string(value):
+    return isinstance(value, str) and bool(value.strip())
+
+
 def _same_artifact_validation(inputs):
     artifact_hash = inputs.get("artifactHash")
     if not isinstance(artifact_hash, str) or not artifact_hash.strip():
@@ -348,6 +352,16 @@ def diagnose(case):
         ))
 
     trust = inputs.get("trust") or {}
+    invalid_audit_fields = [
+        name
+        for name in ("overview", "securityAuditUrl")
+        if not _is_non_empty_string(inputs.get(name))
+    ]
+    audit_error_matches = (
+        "malformed clawhub security response" in error_lower
+        and "non-empty string" in error_lower
+        and any(name.lower() in error_lower for name in invalid_audit_fields)
+    )
     if (
         inputs.get("family") == "code-plugin"
         and inputs.get("stage") == "install-verification"
@@ -357,9 +371,8 @@ def diagnose(case):
         and trust.get("pending") is False
         and trust.get("stale") is False
         and trust.get("reasons") == []
-        and inputs.get("overview") is None
-        and inputs.get("securityAuditUrl") is None
-        and "expected overview to be a non-empty string" in error_lower
+        and invalid_audit_fields
+        and audit_error_matches
     ):
         matches.append(_result(
             case,
@@ -368,7 +381,8 @@ def diagnose(case):
             [
                 "精确 package release 的 trust verdict 为 clean",
                 "blocked、pending 与 stale 均为 false",
-                "security response 的 overview 与 securityAuditUrl 均为空",
+                "security response 的必填字段无效："
+                + ", ".join(invalid_audit_fields),
                 "安装器按 fail-closed 策略拒绝 malformed trust response",
                 "修复已合并，但当前证据未证明部署完成",
             ],

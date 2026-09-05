@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 - 2026-09-05
+
+- 将 `overview` 与 `securityAuditUrl` 统一校验为必需的非空字符串。
+- 任一字段缺失、空白或类型错误，且 fail-closed 错误明确指向该字段时，均可匹配 security audit 响应故障。
+- 增加单字段失败矩阵、错误文本不匹配、非空 reasons 与非精确版本 endpoint 的负例。
+
 ## 0.1.4 - 2026-09-05
 
 - 将规则适用 CLI、npm、workflow、修复版本与固定源码事实内置到离线诊断器，不再使用 `case.affected` 决定命中。

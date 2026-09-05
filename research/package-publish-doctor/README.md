@@ -38,7 +38,7 @@ source
 | `reusable-workflow-actions-read` | 调用官方 `package-publish.yml@v0.23.3` | 本仓库已修复 | workflow 在创建 job 前报 nested job 请求 `actions: read` | 调用方显式授予 `actions: read`，保留最小权限 |
 | `package-release-scan-stalled` | `clawhub@0.23.1` bundle package | 已在 `v0.23.2` 修复 | publish 返回 release ID，但扫描超过 24 小时仍 pending、latest 为空、inspect 不可见且同版本已被保留 | 升级正式 CLI 后核验原 release；不连续 bump 制造更多孤立版本 |
 | `trusted-publish-tag-ref-regression` | ordinary GitHub Actions trusted publisher，source-validator commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720` | `source-reproduced-at-commit`，不据此推断当前部署 | token 的 tag ref 与 source ref 一致，且该 commit 的源码明确比较 `source.ref !== (candidateSha ?? token.sha)` | 保留 tag 与 commit 语义，等待安全审查后的服务端修复 |
-| `package-security-audit-fields-missing` | exact code-plugin release security endpoint | 修复 PR `#3550` 已合并，部署状态未独立验证 | trust 为 clean，但 `overview` / `securityAuditUrl` 为空，安装器按 fail-closed 拒绝 | 不伪造审计文本、不绕过信任检查；部署后核验精确版本 endpoint |
+| `package-security-audit-fields-missing` | exact code-plugin release security endpoint | 修复 PR `#3550` 已合并，部署状态未独立验证 | trust 为 clean，但 `overview` / `securityAuditUrl` 至少一个不是非空字符串，安装器按 fail-closed 拒绝 | 不伪造审计文本、不绕过信任检查；部署后核验精确版本 endpoint |
 
 九层失败模型用于定位证据边界；当前离线诊断器只有
 `workflow-permission`、`source-resolution`、`pack`、`family-detection`、
@@ -79,7 +79,7 @@ python3 research/package-publish-doctor/diagnose.py \
   research/package-publish-doctor/fixtures/clawpack-staging-gap.json
 ```
 
-输出只包含诊断层、证据、建议和来源，不执行网络请求或修复动作。无法满足完整判定条件时必须返回 `UNKNOWN`，不能根据单个错误关键词猜测根因。`CLAWPACK_STAGING_GAP` 还要求 Inspector 或本地验证成功，且验证记录中的 artifact hash 必须与上传失败的 artifact hash 相同；验证失败、缺失或 hash 不同都不能高置信命中。`TRUSTED_PUBLISH_TAG_REF_REGRESSION` 必须同时拿到指定 source-validator commit 与 `source.ref !== (candidateSha ?? token.sha)` 的源码比较证据；只有 `rejected: true` 必须保持 `UNKNOWN`。
+输出只包含诊断层、证据、建议和来源，不执行网络请求或修复动作。无法满足完整判定条件时必须返回 `UNKNOWN`，不能根据单个错误关键词猜测根因。`CLAWPACK_STAGING_GAP` 还要求 Inspector 或本地验证成功，且验证记录中的 artifact hash 必须与上传失败的 artifact hash 相同；验证失败、缺失或 hash 不同都不能高置信命中。`TRUSTED_PUBLISH_TAG_REF_REGRESSION` 必须同时拿到指定 source-validator commit 与 `source.ref !== (candidateSha ?? token.sha)` 的源码比较证据；只有 `rejected: true` 必须保持 `UNKNOWN`。`PACKAGE_SECURITY_AUDIT_FIELDS_MISSING` 把 `overview` 与 `securityAuditUrl` 都视为必需的非空字符串，并要求错误正文明确指向实际无效字段。
 
 ## 草案包
 

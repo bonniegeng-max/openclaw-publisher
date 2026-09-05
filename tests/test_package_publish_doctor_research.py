@@ -288,6 +288,44 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         )
         self.assertEqual(diagnose(complete_response)["diagnosis"], "UNKNOWN")
 
+    def test_security_fields_rule_matches_each_malformed_required_field(self):
+        fixture = load_fixture("package-security-audit-fields-missing.json")
+        valid_values = {
+            "overview": "Clean package audit",
+            "securityAuditUrl": (
+                "https://clawhub.ai/example/plugins/example/security-audit"
+            ),
+        }
+        for field in ("overview", "securityAuditUrl"):
+            for invalid_value in (None, "", "   ", 123, []):
+                with self.subTest(field=field, invalid_value=invalid_value):
+                    candidate = copy.deepcopy(fixture)
+                    candidate["input"].update(valid_values)
+                    candidate["input"][field] = invalid_value
+                    candidate["input"]["reportedError"] = (
+                        "Malformed ClawHub security response: "
+                        f"expected {field} to be a non-empty string."
+                    )
+                    self.assertEqual(
+                        diagnose(candidate)["diagnosis"],
+                        "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING",
+                    )
+
+    def test_security_fields_rule_requires_matching_error_and_clean_trust(self):
+        fixture = load_fixture("package-security-audit-fields-missing.json")
+
+        unrelated_error = copy.deepcopy(fixture)
+        unrelated_error["input"]["reportedError"] = "request timed out"
+        self.assertEqual(diagnose(unrelated_error)["diagnosis"], "UNKNOWN")
+
+        nonempty_reasons = copy.deepcopy(fixture)
+        nonempty_reasons["input"]["trust"]["reasons"] = ["manual review"]
+        self.assertEqual(diagnose(nonempty_reasons)["diagnosis"], "UNKNOWN")
+
+        wrong_endpoint = copy.deepcopy(fixture)
+        wrong_endpoint["input"]["exactReleaseSecurityEndpoint"] = False
+        self.assertEqual(diagnose(wrong_endpoint)["diagnosis"], "UNKNOWN")
+
     def test_generic_413_is_not_misclassified_as_staging_gap(self):
         fixture = load_fixture("clawpack-staging-gap.json")
         below_edge_limit = copy.deepcopy(fixture)

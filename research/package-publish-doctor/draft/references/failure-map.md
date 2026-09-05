@@ -112,8 +112,8 @@ permissions:
 - 证据来自精确版本的 code-plugin security endpoint
 - trust verdict 为 clean，且 `blockedFromDownload`、`pending`、`stale` 均为 false
 - reasons 为空
-- `overview` 与 `securityAuditUrl` 同时为空
-- 安装器明确因缺少非空 overview 而 fail-closed
+- `overview` 与 `securityAuditUrl` 均应为非空字符串，其中至少一个缺失、空白或类型错误
+- 安装器的 malformed-response 错误明确指向其中一个无效字段并要求非空字符串
 - 对应修复已合并，但部署状态尚未独立验证
 
 当前分类：`fix-merged-deployment-unverified`。

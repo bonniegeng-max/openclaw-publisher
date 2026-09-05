@@ -42,6 +42,31 @@ REQUIRED_GATE_IDS = frozenset(
         "single-version-e4",
     }
 )
+GATE_SUPPORT_REQUIREMENTS = {
+    "fresh-official-version-review": (
+        ("evidence", "latestOfficialReleaseReconfirmed"),
+    ),
+    "same-method-clawhub-competitor-search": (
+        ("evidence", "clawhubCompetitorSearchComplete"),
+    ),
+    "local-tests": (
+        ("evidence", "completeDraftPackage"),
+        ("evidence", "offlineExecutable"),
+    ),
+    "explicit-slug-name-dry-run": (
+        ("evidence", "dryRunComplete"),
+    ),
+    "authorized-publish": (
+        ("claims", "publishedConfirmed"),
+    ),
+    "registry-moderation-check": (
+        ("evidence", "registryModerationClean"),
+    ),
+    "single-version-e4": (
+        ("evidence", "e4Complete"),
+        ("claims", "downloadableConfirmed"),
+    ),
+}
 
 
 def parse_time(value):
@@ -55,7 +80,10 @@ def parse_time(value):
 
 
 def parse_frontmatter(path):
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ValueError(f"SKILL.md cannot be read: {error}") from error
     match = re.match(r"\A---\n(.*?)\n---\n", text, re.DOTALL)
     if not match:
         raise ValueError("draft SKILL.md frontmatter missing")
@@ -129,6 +157,19 @@ def evaluate(repo_root, contract_path, now):
     if policy.get("schemaVersion") != 1:
         errors.append("observation policy schemaVersion must equal 1")
 
+    evidence = contract.get("evidence")
+    if not isinstance(evidence, dict):
+        errors.append("evidence must be a JSON object")
+        evidence = {}
+    claims = contract.get("claims")
+    if not isinstance(claims, dict):
+        errors.append("claims must be a JSON object")
+        claims = {}
+    support_documents = {
+        "evidence": evidence,
+        "claims": claims,
+    }
+
     required_present = all((source / path).is_file() for path in REQUIRED_DRAFT_FILES)
     local_evidence["requiredDraftFilesPresent"] = required_present
     if not required_present:
@@ -157,6 +198,36 @@ def evaluate(repo_root, contract_path, now):
     local_evidence["stableSlugAllowed"] = safe_slug
     if not safe_slug:
         errors.append("candidate stable slug uses a protected namespace")
+
+    first_release_version_valid = (
+        candidate.get("proposedFirstReleaseVersion") == "1.0.0"
+    )
+    local_evidence["firstReleaseVersionValid"] = first_release_version_valid
+    if not first_release_version_valid:
+        errors.append("candidate proposed first release version must be 1.0.0")
+
+    expected_dry_run_command = [
+        "clawhub",
+        "skill",
+        "publish",
+        f"./{candidate.get('targetDirectory')}",
+        "--slug",
+        candidate.get("stableSlug"),
+        "--name",
+        candidate.get("displayName"),
+        "--dry-run",
+        "--owner",
+        "<owner>",
+    ]
+    dry_run_command_valid = (
+        contract.get("dryRunCommand") == expected_dry_run_command
+    )
+    local_evidence["dryRunCommandValid"] = dry_run_command_valid
+    if not dry_run_command_valid:
+        errors.append(
+            "dryRunCommand must bind the target, stable slug, display name, "
+            "dry-run flag, and owner placeholder"
+        )
 
     policy_matches = (
         contract.get("observationNotBefore") == policy.get("notBefore")
@@ -255,6 +326,19 @@ def evaluate(repo_root, contract_path, now):
             errors.append(f"release gate {gate_id} must be required")
         if state not in ALLOWED_GATE_STATES:
             errors.append(f"release gate {gate_id} has invalid state")
+        if state == "complete":
+            for document_name, field_name in GATE_SUPPORT_REQUIREMENTS.get(
+                gate_id,
+                (),
+            ):
+                if (
+                    support_documents[document_name].get(field_name)
+                    is not True
+                ):
+                    errors.append(
+                        f"release gate {gate_id} is complete without "
+                        f"{document_name}.{field_name}=true"
+                    )
     if len(gate_ids) != len(set(gate_ids)):
         errors.append("release gate ids must be unique")
     observed_gate_ids = set(gate_ids)

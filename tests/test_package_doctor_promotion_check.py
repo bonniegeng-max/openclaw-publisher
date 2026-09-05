@@ -67,6 +67,26 @@ def make_staged_repo(directory, contract, target=True, catalog=True):
     return root, contract_path
 
 
+def complete_release_gate_support(contract):
+    for gate in contract["releaseGates"]:
+        gate["state"] = "complete"
+    contract["evidence"].update(
+        {
+            "latestOfficialReleaseReconfirmed": True,
+            "clawhubCompetitorSearchComplete": True,
+            "dryRunComplete": True,
+            "registryModerationClean": True,
+            "e4Complete": True,
+        }
+    )
+    contract["claims"].update(
+        {
+            "publishedConfirmed": True,
+            "downloadableConfirmed": True,
+        }
+    )
+
+
 class PackageDoctorPromotionCheckTests(unittest.TestCase):
     def test_current_contract_is_valid_but_blocked(self):
         result = CHECK_MODULE.evaluate(
@@ -93,6 +113,10 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             result["localEvidence"]["draftIdentityMatchesContract"]
         )
         self.assertTrue(result["localEvidence"]["stableSlugAllowed"])
+        self.assertTrue(
+            result["localEvidence"]["firstReleaseVersionValid"]
+        )
+        self.assertTrue(result["localEvidence"]["dryRunCommandValid"])
         self.assertTrue(result["localEvidence"]["catalogCandidateValid"])
         self.assertFalse(
             result["localEvidence"]["formalTargetDirectoryPresent"]
@@ -168,8 +192,7 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
 
     def test_all_complete_gates_cannot_bypass_declared_status(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
-        for gate in contract["releaseGates"]:
-            gate["state"] = "complete"
+        complete_release_gate_support(contract)
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "contract.json"
@@ -183,6 +206,81 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertTrue(result["valid"])
         self.assertFalse(result["complete"])
         self.assertEqual(result["blockingGates"], ["contract-status"])
+
+    def test_complete_gates_require_corresponding_evidence_and_claims(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        original["status"] = "complete"
+        complete_release_gate_support(original)
+        mutations = (
+            (
+                "evidence",
+                "latestOfficialReleaseReconfirmed",
+                "fresh-official-version-review",
+            ),
+            (
+                "evidence",
+                "clawhubCompetitorSearchComplete",
+                "same-method-clawhub-competitor-search",
+            ),
+            ("evidence", "completeDraftPackage", "local-tests"),
+            ("evidence", "offlineExecutable", "local-tests"),
+            ("evidence", "dryRunComplete", "explicit-slug-name-dry-run"),
+            ("claims", "publishedConfirmed", "authorized-publish"),
+            (
+                "evidence",
+                "registryModerationClean",
+                "registry-moderation-check",
+            ),
+            ("evidence", "e4Complete", "single-version-e4"),
+            ("claims", "downloadableConfirmed", "single-version-e4"),
+        )
+
+        for document, field, gate_id in mutations:
+            with self.subTest(document=document, field=field, gate=gate_id):
+                contract = copy.deepcopy(original)
+                contract[document][field] = False
+                with tempfile.TemporaryDirectory() as directory:
+                    root, path = make_staged_repo(directory, contract)
+                    result = CHECK_MODULE.evaluate(
+                        root,
+                        path,
+                        datetime(2026, 9, 13, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertIn(
+                    (
+                        f"release gate {gate_id} is complete without "
+                        f"{document}.{field}=true"
+                    ),
+                    result["errors"],
+                )
+
+    def test_evidence_and_claims_must_be_objects(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+
+        for field, value in (("evidence", []), ("claims", "confirmed")):
+            with self.subTest(field=field):
+                contract = copy.deepcopy(original)
+                contract[field] = value
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "contract.json"
+                    path.write_text(json.dumps(contract), encoding="utf-8")
+                    result = CHECK_MODULE.evaluate(
+                        ROOT,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertIn(
+                    f"{field} must be a JSON object",
+                    result["errors"],
+                )
 
     def test_missing_or_unexpected_gate_is_invalid(self):
         original = json.loads(CONTRACT.read_text(encoding="utf-8"))
@@ -270,6 +368,69 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             "release policy does not preserve required safeguards",
             result["errors"],
         )
+
+    def test_first_release_version_is_fixed(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["candidate"]["proposedFirstReleaseVersion"] = "0.1.17"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            result = CHECK_MODULE.evaluate(
+                ROOT,
+                path,
+                datetime(2026, 9, 5, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["localEvidence"]["firstReleaseVersionValid"])
+        self.assertIn(
+            "candidate proposed first release version must be 1.0.0",
+            result["errors"],
+        )
+
+    def test_dry_run_command_is_bound_to_candidate_identity(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        mutations = (
+            ("missing-slug", lambda command: command.__delitem__(4)),
+            (
+                "wrong-target",
+                lambda command: command.__setitem__(
+                    3,
+                    "./skills/another-skill",
+                ),
+            ),
+            (
+                "wrong-display-name",
+                lambda command: command.__setitem__(7, "Wrong Name"),
+            ),
+            ("missing-dry-run", lambda command: command.remove("--dry-run")),
+        )
+
+        for label, mutate in mutations:
+            with self.subTest(mutation=label):
+                contract = copy.deepcopy(original)
+                mutate(contract["dryRunCommand"])
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "contract.json"
+                    path.write_text(json.dumps(contract), encoding="utf-8")
+                    result = CHECK_MODULE.evaluate(
+                        ROOT,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(
+                    result["localEvidence"]["dryRunCommandValid"]
+                )
+                self.assertIn(
+                    (
+                        "dryRunCommand must bind the target, stable slug, "
+                        "display name, dry-run flag, and owner placeholder"
+                    ),
+                    result["errors"],
+                )
 
     def test_malformed_catalog_metadata_is_structured_invalid(self):
         original = json.loads(CONTRACT.read_text(encoding="utf-8"))
@@ -379,8 +540,7 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
     def test_complete_status_requires_formal_surfaces(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         contract["status"] = "complete"
-        for gate in contract["releaseGates"]:
-            gate["state"] = "complete"
+        complete_release_gate_support(contract)
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "contract.json"
@@ -473,8 +633,7 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
     def test_complete_status_requires_matching_surfaces_and_all_gates(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         contract["status"] = "complete"
-        for gate in contract["releaseGates"]:
-            gate["state"] = "complete"
+        complete_release_gate_support(contract)
 
         with tempfile.TemporaryDirectory() as directory:
             root, path = make_staged_repo(directory, contract)
@@ -489,6 +648,69 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertEqual(result["contractStatus"], "complete")
         self.assertEqual(result["blockingGates"], [])
         self.assertEqual(result["errors"], [])
+
+    def test_missing_or_invalid_source_skill_is_structured_invalid(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+
+        for mutation in ("missing", "invalid-utf8"):
+            with self.subTest(mutation=mutation):
+                with tempfile.TemporaryDirectory() as directory:
+                    root, path = make_staged_repo(
+                        directory,
+                        contract,
+                        target=False,
+                        catalog=False,
+                    )
+                    skill_path = (
+                        root
+                        / contract["candidate"]["sourceDirectory"]
+                        / "SKILL.md"
+                    )
+                    if mutation == "missing":
+                        skill_path.unlink()
+                    else:
+                        skill_path.write_bytes(b"\xff")
+                    result = CHECK_MODULE.evaluate(
+                        root,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertEqual(result["localEvidence"], {})
+                self.assertIn("SKILL.md cannot be read", result["errors"][0])
+
+    def test_missing_source_skill_cli_returns_json_without_traceback(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["candidate"]["sourceDirectory"] = "research/missing"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(CHECKER),
+                    "--repo-root",
+                    str(ROOT),
+                    "--contract",
+                    str(path),
+                    "--now",
+                    "2026-09-05T00:00:00+00:00",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        result = json.loads(completed.stdout)
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stderr, "")
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["contractStatus"], "invalid")
+        self.assertIn("SKILL.md cannot be read", result["errors"][0])
 
     def test_path_escape_is_a_contract_error(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))

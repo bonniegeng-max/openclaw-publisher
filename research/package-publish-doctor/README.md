@@ -160,6 +160,10 @@ python3 research/package-publish-doctor/check_promotion_contract.py \
 gate 都会判定合同无效。`observation-window` 在 `notBefore` 之前不得标为
 完成，其他 gate 也不能冒用时间阻塞状态；单版本最多一次 E4、观察期内不
 写正式 catalog、E4 后重置观察起点等策略同样属于不可放宽的合同。
+任何 gate 标为完成时，还必须有对应的 evidence/claims 布尔证据；dry-run
+命令必须精确绑定 target、stable slug、display name、`--dry-run` 与 owner
+占位符。候选 `SKILL.md` 缺失、不可读或不是 UTF-8 时只返回结构化
+`invalid`，不得输出 traceback。
 
 ## 启动门槛
 

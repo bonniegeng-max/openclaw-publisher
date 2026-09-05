@@ -586,14 +586,17 @@ def evaluate(
 
     if auth_relative not in normalized_paths:
         errors.append("authorization file must change in the evaluated commit range")
+    protected_control_changes = []
     for changed_path in sorted(normalized_paths):
         if (
             changed_path in PROTECTED_CONTROL_PATHS
             or changed_path.startswith(".github/workflows/")
         ):
-            errors.append(
+            message = (
                 f"release commit cannot modify protected control path: {changed_path}"
             )
+            errors.append(message)
+            protected_control_changes.append(message)
     target_slugs, catalog_changed, formal_errors = formal_changed_slugs(
         normalized_paths,
         base_catalog,
@@ -669,7 +672,8 @@ def evaluate(
                 f"releaseId must equal target slug and version: {expected_release_id}"
             )
 
-    errors.extend(validate_catalog(repo_root, catalog_path))
+    if not protected_control_changes:
+        errors.extend(validate_catalog(repo_root, catalog_path))
     try:
         observed_digest = compute_content_digest(
             repo_root,

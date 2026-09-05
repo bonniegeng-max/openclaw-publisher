@@ -20,6 +20,12 @@ TEMPLATE = (
     / "skill-release-authorization-vnext"
     / "authorization-template.json"
 )
+INTEGRATION_PLAN = (
+    ROOT
+    / "research"
+    / "skill-release-authorization-vnext"
+    / "workflow-integration-plan.md"
+)
 METRICS_WORKFLOW = ROOT / ".github" / "workflows" / "metrics-tools-ci.yml"
 PUBLISH_WORKFLOWS = (
     ROOT / ".github" / "workflows" / "clawhub-skill-publish.yml",
@@ -297,6 +303,22 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                     workflow,
                 )
 
+    def test_integration_plan_preserves_trusted_approval_boundary(self):
+        plan = INTEGRATION_PLAN.read_text(encoding="utf-8")
+
+        for required in (
+            "deferred-until-observation-review",
+            "prevent_self_review: true",
+            "environment: clawhub-production",
+            "受信任完整 SHA",
+            "CLAWHUB_TOKEN",
+            "pull_request_target",
+            "E3 moderation",
+            "E4 隔离安装",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, plan)
+
     def test_matching_one_time_authorization_allows_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root, base_catalog = make_repo(directory)
@@ -429,6 +451,44 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 ".github/workflows/publish.yml"
             ),
             result["errors"],
+        )
+
+    def test_changed_validator_is_rejected_without_loading_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base_catalog = make_repo(directory)
+            validator_path = root / "scripts" / "validate_skill_catalog.py"
+            validator_path.write_text(
+                "raise RuntimeError('must not execute')\n",
+                encoding="utf-8",
+            )
+            changed_paths = [
+                CHECK_MODULE.DEFAULT_AUTHORIZATION_PATH,
+                "skills/demo-skill/SKILL.md",
+                "scripts/validate_skill_catalog.py",
+                "review.md",
+            ]
+            authorization_path, _ = make_authorization(
+                root,
+                base_catalog,
+                changed_paths=changed_paths,
+            )
+            result = evaluate(
+                root,
+                base_catalog,
+                authorization_path,
+                changed_paths=changed_paths,
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            (
+                "release commit cannot modify protected control path: "
+                "scripts/validate_skill_catalog.py"
+            ),
+            result["errors"],
+        )
+        self.assertFalse(
+            any("must not execute" in error for error in result["errors"])
         )
 
     def test_content_and_version_drift_invalidate_authorization(self):

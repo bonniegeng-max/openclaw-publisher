@@ -10,6 +10,8 @@ scripts/check_skill_release_authorization.py
 
 当前不会修改或调用两个 ClawHub 发布 workflow。观察窗口结束前，只在
 `Metrics Tools CI` 中编译并通过离线测试；不能把本草案解释为已授权发布。
+GitHub environment、受信任 workflow SHA 和 secret 迁移方案见
+`workflow-integration-plan.md`。
 
 ## 已确认断点
 

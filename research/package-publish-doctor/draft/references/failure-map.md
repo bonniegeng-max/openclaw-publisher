@@ -2,6 +2,8 @@
 
 先确认版本和证据，再套用规则。相同错误文本在不同版本、family 或上传路径中可能有不同根因。
 
+当前高置信规则覆盖 `workflow-permission`、`source-resolution`、`pack`、`family-detection`、`upload`、`moderation` 和 `verification`。`inspector` 与 `index` 仅用于失败层分类；在补齐真实来源、正例与负例之前，不得输出对应的高置信诊断代码。
+
 ## 高置信度规则
 
 ### `REUSABLE_WORKFLOW_ACTIONS_PERMISSION`
@@ -75,7 +77,8 @@ permissions:
 - 预构建 ClawPack 超过公共边缘预算
 - artifact 仍低于旧 staging 阈值
 - 公共 registry 返回 `413 Request Entity Too Large`
-- 同一 artifact 的 Inspector 或本地验证没有证明内容本身无效
+- 同一 artifact 的 Inspector 或本地验证明确成功
+- 成功验证记录中的 artifact hash 与上传失败 artifact 的 hash 完全一致
 
 当前版本事实：
 
@@ -151,6 +154,7 @@ permissions:
 - package trust 状态为 blocked、pending 或 stale
 - security endpoint 已返回非空 overview 与 audit URL
 - 输入未明确标记 `surface: package`
-- source、Inspector、moderation 和 upload 多层同时失败，无法确认首个失败点
+- `CLAWPACK_STAGING_GAP` 缺少 Inspector/本地验证成功记录、验证失败，或验证 hash 与上传 artifact 不同
+- source、Inspector、moderation 和 upload 多层同时匹配，但没有覆盖全部匹配层的 `failureSequence` 时间顺序
 
 输出最小缺失证据，不要推荐多个互相冲突的修复。

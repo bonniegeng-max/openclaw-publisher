@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 - 2026-09-05
+
+- 诊断器改为先收集全部匹配信号；不同失败层冲突且缺少完整 `failureSequence` 时返回 `UNKNOWN`。
+- 收紧 `CLAWPACK_STAGING_GAP`：只有 Inspector 或本地验证成功且 artifact hash 相同才高置信命中。
+- 增加验证缺失、验证失败、hash 不同以及多层冲突的反例测试。
+- fixture 测试改为校验可扩展基线，不再固定总数为 7。
+- 明确九层调查框架中只有七层具备可执行高置信规则；`inspector` 与 `index` 暂为分类层。
+- 将研究目录加入 Metrics Tools CI 的路径触发范围。
+
 ## 0.1.2 - 2026-09-05
 
 - 增加 ordinary trusted publisher tag ref 的 source-validation 回归诊断。

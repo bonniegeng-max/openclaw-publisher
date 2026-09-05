@@ -57,9 +57,10 @@ versionStatus: product-decision
 ```text
 workflow: package-publish.yml@v0.23.3
 artifact: 8,032,797 bytes
+artifact hash: sha256:6e86...bdaf
 public edge budget: 4,194,304 bytes
 legacy staging threshold: 18,874,368 bytes
-Inspector: success
+Inspector: success, artifact hash sha256:6e86...bdaf
 upload: 413 Request Entity Too Large
 ```
 
@@ -72,7 +73,7 @@ confidence: high
 versionStatus: main-only-fix
 ```
 
-理由：artifact 超过公共边缘预算，但低于旧 staging 阈值，因此旧版会错误地走直接 multipart 上传。内容验证成功并不能证明传输路径可用。
+理由：同一 hash 的 artifact 已通过 Inspector，且大小超过公共边缘预算、低于旧 staging 阈值，因此旧版会错误地走直接 multipart 上传。内容验证成功并不能证明传输路径可用；如果 Inspector 失败、缺失或记录的是不同 hash，则本规则必须返回 `UNKNOWN`。
 
 最小修复：等待并升级到包含修复的正式 release；不要把未发布 `main` 当生产依赖。
 

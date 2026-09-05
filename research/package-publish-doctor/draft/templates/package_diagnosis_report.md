@@ -15,7 +15,9 @@
 | CLI / Node / npm 版本 |  |  |
 | family 与 manifest |  |  |
 | artifact 大小与 hash |  |  |
+| Inspector / 本地验证状态与 artifact hash |  |  |
 | 错误与退出状态 |  |  |
+| 多层信号的 `failureSequence` |  |  |
 | publication / verify 状态 |  |  |
 
 ## 版本适用性

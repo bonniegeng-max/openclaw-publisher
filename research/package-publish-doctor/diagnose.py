@@ -11,6 +11,31 @@ BUNDLE_MARKERS = {
     ".claude-plugin/plugin.json",
     ".cursor-plugin/plugin.json",
 }
+FAILURE_LAYERS = frozenset(
+    {
+        "workflow-permission",
+        "source-resolution",
+        "pack",
+        "family-detection",
+        "inspector",
+        "upload",
+        "moderation",
+        "index",
+        "verification",
+    }
+)
+EXECUTABLE_RULE_LAYERS = frozenset(
+    {
+        "workflow-permission",
+        "source-resolution",
+        "pack",
+        "family-detection",
+        "upload",
+        "moderation",
+        "verification",
+    }
+)
+CLASSIFICATION_ONLY_LAYERS = FAILURE_LAYERS - EXECUTABLE_RULE_LAYERS
 
 
 def _result(
@@ -35,7 +60,7 @@ def _result(
     }
 
 
-def _unknown(case, missing_evidence):
+def _unknown(case, missing_evidence, evidence=None):
     return {
         "matched": False,
         "caseId": case.get("id"),
@@ -43,7 +68,7 @@ def _unknown(case, missing_evidence):
         "layer": "unknown",
         "confidence": "low",
         "versionStatus": "unknown",
-        "evidence": [],
+        "evidence": evidence or [],
         "recommendation": "证据不足；保留原始日志并继续定位，不要套用已知 workaround。",
         "missingEvidence": missing_evidence,
         "source": case.get("source"),
@@ -57,6 +82,82 @@ def _version_tuple(value):
     return tuple(int(part) for part in parts)
 
 
+def _same_artifact_validation(inputs):
+    artifact_hash = inputs.get("artifactHash")
+    if not isinstance(artifact_hash, str) or not artifact_hash.strip():
+        return None
+
+    for name, label in (
+        ("inspector", "Inspector"),
+        ("localValidation", "本地验证"),
+    ):
+        validation = inputs.get(name)
+        if not isinstance(validation, dict):
+            continue
+        status = str(validation.get("status") or "").lower()
+        validation_hash = validation.get("artifactHash")
+        if status in {"success", "passed"} and validation_hash == artifact_hash:
+            return f"同一 artifact（{artifact_hash}）的 {label} 已成功"
+    return None
+
+
+def _resolve_matches(case, matches):
+    if not matches:
+        return _unknown(
+            case,
+            [
+                "可证明首个失败层的完整状态组合",
+                "与已知规则对应的 CLI 或 workflow 版本",
+            ],
+        )
+    if len(matches) == 1:
+        return matches[0]
+
+    layers = {match["layer"] for match in matches}
+    codes = [match["diagnosis"] for match in matches]
+    if len(layers) == 1:
+        return _unknown(
+            case,
+            ["能够排除同层多个诊断信号的直接证据"],
+            [f"同层同时匹配：{', '.join(codes)}"],
+        )
+
+    sequence = (case.get("input") or {}).get("failureSequence")
+    if not isinstance(sequence, list) or any(layer not in sequence for layer in layers):
+        return _unknown(
+            case,
+            ["覆盖所有匹配层的 input.failureSequence 时间顺序"],
+            [f"多层同时匹配：{', '.join(codes)}"],
+        )
+
+    positions = {layer: sequence.index(layer) for layer in layers}
+    first_position = min(positions.values())
+    first_layers = [
+        layer for layer, position in positions.items() if position == first_position
+    ]
+    if len(first_layers) != 1:
+        return _unknown(
+            case,
+            ["能够唯一确定首个失败层的 input.failureSequence"],
+            [f"多层同时匹配：{', '.join(codes)}"],
+        )
+
+    first_layer = first_layers[0]
+    first_matches = [match for match in matches if match["layer"] == first_layer]
+    if len(first_matches) != 1:
+        return _unknown(
+            case,
+            ["能够排除首个失败层内多个诊断信号的直接证据"],
+            [f"首个失败层 {first_layer} 同时匹配多个规则"],
+        )
+
+    result = first_matches[0]
+    result["evidence"].append(
+        f"failureSequence 证明 {first_layer} 是首个匹配失败层"
+    )
+    return result
+
+
 def diagnose(case):
     """Return one conservative diagnosis for a normalized fixture."""
     inputs = case.get("input") or {}
@@ -66,6 +167,7 @@ def diagnose(case):
 
     error = str(inputs.get("reportedError") or "")
     error_lower = error.lower()
+    matches = []
 
     token_sha = inputs.get("tokenSha")
     token_ref = inputs.get("tokenRef")
@@ -83,7 +185,7 @@ def diagnose(case):
         and source_ref == token_ref
         and source_ref != token_sha
     ):
-        return _result(
+        matches.append(_result(
             case,
             "TRUSTED_PUBLISH_TAG_REF_REGRESSION",
             "source-resolution",
@@ -95,7 +197,7 @@ def diagnose(case):
             ],
             "保留已验证的 tag ref 与 commit 语义，等待受安全审查的服务端修复；不要把普通模式改写成 split-candidate 模式。",
             "current-server",
-        )
+        ))
 
     permissions = inputs.get("callerPermissions") or {}
     actions_permission = str(permissions.get("actions") or "none").lower()
@@ -104,7 +206,7 @@ def diagnose(case):
         and "requesting 'actions: read'" in error_lower
         and actions_permission == "none"
     ):
-        return _result(
+        matches.append(_result(
             case,
             "REUSABLE_WORKFLOW_ACTIONS_PERMISSION",
             "workflow-permission",
@@ -115,7 +217,7 @@ def diagnose(case):
             ],
             "在调用方 workflow 顶层显式加入 actions: read；不要扩大为 write。",
             "current-release",
-        )
+        ))
 
     npm12_output = inputs.get("npm12")
     if (
@@ -124,7 +226,7 @@ def diagnose(case):
         and "npm pack did not return a tarball filename" in error_lower
         and str(affected.get("npm") or "").startswith("12")
     ):
-        return _result(
+        matches.append(_result(
             case,
             "NPM_PACK_JSON_SHAPE",
             "pack",
@@ -135,7 +237,7 @@ def diagnose(case):
             ],
             "升级到包含兼容解析的正式 CLI；临时方案只在发布 job 内固定 npm 11。",
             "unknown",
-        )
+        ))
 
     files = set(inputs.get("files") or [])
     if (
@@ -144,7 +246,7 @@ def diagnose(case):
         and inputs.get("openclawPluginManifestPresent") is False
         and "openclaw.plugin.json required" in error_lower
     ):
-        return _result(
+        matches.append(_result(
             case,
             "BUNDLE_NATIVE_MANIFEST_CONTRACT",
             "family-detection",
@@ -155,11 +257,12 @@ def diagnose(case):
             ],
             "标记为产品合约阻塞并等待维护者决策；不要伪造 native manifest。",
             "product-decision",
-        )
+        ))
 
     artifact_bytes = inputs.get("artifactBytes")
     edge_budget = inputs.get("publicEdgeBudgetBytes")
     legacy_threshold = inputs.get("legacyStagingThresholdBytes")
+    validation_evidence = _same_artifact_validation(inputs)
     if (
         inputs.get("reportedStatus") == 413
         and "request entity too large" in error_lower
@@ -169,8 +272,9 @@ def diagnose(case):
         and edge_budget < artifact_bytes < legacy_threshold
         and affected.get("releaseContainsFix") is False
         and affected.get("mainContainsFix") is True
+        and validation_evidence is not None
     ):
-        return _result(
+        matches.append(_result(
             case,
             "CLAWPACK_STAGING_GAP",
             "upload",
@@ -178,11 +282,12 @@ def diagnose(case):
                 f"artifact 为 {artifact_bytes} bytes",
                 f"超过公共边缘预算 {edge_budget} bytes",
                 f"低于旧 staging 阈值 {legacy_threshold} bytes",
+                validation_evidence,
                 "修复仅存在于 main，当前 release 未包含",
             ],
             "等待并升级到包含 staging 修复的正式 release；不要把未发布 main 当生产依赖。",
             "main-only-fix",
-        )
+        ))
 
     installed_version = _version_tuple(inputs.get("clawhubVersion"))
     fixed_version = _version_tuple(affected.get("fixedIn"))
@@ -201,7 +306,7 @@ def diagnose(case):
         and fixed_version is not None
         and installed_version < fixed_version
     ):
-        return _result(
+        matches.append(_result(
             case,
             "PACKAGE_RELEASE_SCAN_STALLED",
             "moderation",
@@ -214,7 +319,7 @@ def diagnose(case):
             ],
             "升级到包含修复的正式 CLI 后核验原 release 的最终状态；不要通过连续 bump 版本制造更多孤立 release。",
             "fixed-in-release",
-        )
+        ))
 
     trust = inputs.get("trust") or {}
     if (
@@ -232,7 +337,7 @@ def diagnose(case):
         and affected.get("fixMerged") is True
         and affected.get("deploymentVerified") is False
     ):
-        return _result(
+        matches.append(_result(
             case,
             "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING",
             "verification",
@@ -245,15 +350,9 @@ def diagnose(case):
             ],
             "保持 fail-closed；部署后只读核验精确版本 security endpoint 返回非空审计字段，再重试受支持的安装流程。",
             "fix-merged-deployment-unverified",
-        )
+        ))
 
-    return _unknown(
-        case,
-        [
-            "可证明首个失败层的完整状态组合",
-            "与已知规则对应的 CLI 或 workflow 版本",
-        ],
-    )
+    return _resolve_matches(case, matches)
 
 
 def main():

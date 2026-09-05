@@ -23,19 +23,28 @@ def load_fixture(name):
 
 
 class PackagePublishDoctorResearchTests(unittest.TestCase):
-    def test_research_pack_has_seven_distinct_package_cases(self):
+    def test_research_pack_has_distinct_extensible_package_cases(self):
+        paths = sorted(FIXTURES.glob("*.json"))
         fixtures = [
             json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted(FIXTURES.glob("*.json"))
+            for path in paths
         ]
+        baseline_names = {
+            "npm-pack-json-shape.json",
+            "bundle-native-manifest-contract.json",
+            "clawpack-staging-gap.json",
+            "reusable-workflow-actions-read.json",
+            "package-release-scan-stalled.json",
+            "trusted-publish-tag-ref-regression.json",
+            "package-security-audit-fields-missing.json",
+        }
 
-        self.assertEqual(len(fixtures), 7)
-        self.assertEqual(len({fixture["id"] for fixture in fixtures}), 7)
+        self.assertTrue(baseline_names.issubset({path.name for path in paths}))
+        self.assertEqual(len({fixture["id"] for fixture in fixtures}), len(fixtures))
         self.assertTrue(
             all(fixture["input"]["surface"] == "package" for fixture in fixtures)
         )
-        self.assertEqual(
-            {fixture["expected"]["layer"] for fixture in fixtures},
+        self.assertTrue(
             {
                 "pack",
                 "family-detection",
@@ -44,7 +53,25 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                 "moderation",
                 "source-resolution",
                 "verification",
-            },
+            }.issubset(
+                {fixture["expected"]["layer"] for fixture in fixtures}
+            )
+        )
+        self.assertTrue(
+            {
+                fixture["expected"]["layer"] for fixture in fixtures
+            }.issubset(DIAGNOSE_MODULE.EXECUTABLE_RULE_LAYERS)
+        )
+
+    def test_rule_coverage_distinguishes_classification_only_layers(self):
+        self.assertEqual(
+            DIAGNOSE_MODULE.CLASSIFICATION_ONLY_LAYERS,
+            {"inspector", "index"},
+        )
+        self.assertEqual(
+            DIAGNOSE_MODULE.FAILURE_LAYERS,
+            DIAGNOSE_MODULE.EXECUTABLE_RULE_LAYERS
+            | DIAGNOSE_MODULE.CLASSIFICATION_ONLY_LAYERS,
         )
 
     def test_all_fixtures_match_their_expected_diagnosis(self):
@@ -112,7 +139,37 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         self.assertFalse(fixture["affected"]["releaseContainsFix"])
         self.assertTrue(fixture["affected"]["mainContainsFix"])
         self.assertEqual(
+            values["artifactHash"],
+            values["inspector"]["artifactHash"],
+        )
+        self.assertEqual(values["inspector"]["status"], "success")
+        self.assertEqual(
             fixture["expected"]["diagnosis"],
+            "CLAWPACK_STAGING_GAP",
+        )
+
+    def test_clawpack_staging_gap_requires_success_for_same_artifact(self):
+        fixture = load_fixture("clawpack-staging-gap.json")
+
+        missing = copy.deepcopy(fixture)
+        del missing["input"]["inspector"]
+        self.assertEqual(diagnose(missing)["diagnosis"], "UNKNOWN")
+
+        failed = copy.deepcopy(fixture)
+        failed["input"]["inspector"]["status"] = "failed"
+        self.assertEqual(diagnose(failed)["diagnosis"], "UNKNOWN")
+
+        mismatched = copy.deepcopy(fixture)
+        mismatched["input"]["inspector"]["artifactHash"] = "sha256:different"
+        self.assertEqual(diagnose(mismatched)["diagnosis"], "UNKNOWN")
+
+        local_success = copy.deepcopy(missing)
+        local_success["input"]["localValidation"] = {
+            "status": "passed",
+            "artifactHash": local_success["input"]["artifactHash"],
+        }
+        self.assertEqual(
+            diagnose(local_success)["diagnosis"],
             "CLAWPACK_STAGING_GAP",
         )
 
@@ -204,6 +261,55 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         no_artifact["input"]["artifactExists"] = False
 
         self.assertEqual(diagnose(no_artifact)["diagnosis"], "UNKNOWN")
+
+    def test_conflicting_layers_without_failure_sequence_are_unknown(self):
+        fixture = load_fixture("bundle-native-manifest-contract.json")
+        fixture["affected"]["npm"] = "12.x"
+        fixture["input"].update(
+            {
+                "artifactExists": True,
+                "npm12": {
+                    "example": {
+                        "filename": "example-1.0.0.tgz",
+                    }
+                },
+                "reportedError": (
+                    "openclaw.plugin.json required; "
+                    "npm pack did not return a tarball filename"
+                ),
+            }
+        )
+
+        result = diagnose(fixture)
+
+        self.assertEqual(result["diagnosis"], "UNKNOWN")
+        self.assertIn("input.failureSequence", result["missingEvidence"][0])
+        self.assertIn("NPM_PACK_JSON_SHAPE", result["evidence"][0])
+        self.assertIn("BUNDLE_NATIVE_MANIFEST_CONTRACT", result["evidence"][0])
+
+    def test_failure_sequence_selects_first_matching_layer(self):
+        fixture = load_fixture("bundle-native-manifest-contract.json")
+        fixture["affected"]["npm"] = "12.x"
+        fixture["input"].update(
+            {
+                "artifactExists": True,
+                "npm12": {
+                    "example": {
+                        "filename": "example-1.0.0.tgz",
+                    }
+                },
+                "reportedError": (
+                    "openclaw.plugin.json required; "
+                    "npm pack did not return a tarball filename"
+                ),
+                "failureSequence": ["pack", "family-detection"],
+            }
+        )
+
+        result = diagnose(fixture)
+
+        self.assertEqual(result["diagnosis"], "NPM_PACK_JSON_SHAPE")
+        self.assertEqual(result["layer"], "pack")
 
     def test_unknown_case_stays_unknown(self):
         result = diagnose(

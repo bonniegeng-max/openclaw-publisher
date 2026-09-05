@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.2
+version: 0.1.3
 metadata:
   openclaw:
     os: [macos]
@@ -79,7 +79,9 @@ Classify the first proven failure:
 | `index` | publish response exists but public release/latest state is missing or stale |
 | `verification` | package is public but provenance, integrity, or hash verification fails |
 
-Do not diagnose from the last line alone. Prefer the earliest layer with direct evidence.
+The nine layers define the investigation framework, not nine executable diagnoses. The current evidence map has high-confidence rules for `workflow-permission`, `source-resolution`, `pack`, `family-detection`, `upload`, `moderation`, and `verification`. Treat `inspector` and `index` as classification-only layers until each has a sourced positive fixture and explicit negative boundaries; return `UNKNOWN` instead of inventing a rule.
+
+Do not diagnose from the last line alone. Collect all matching rule signals before choosing a diagnosis. Prefer the earliest layer with direct evidence. If multiple layers match and the evidence does not provide a complete `failureSequence`, return `UNKNOWN` rather than relying on rule order.
 
 ### 3. Apply version-aware rules
 
@@ -106,6 +108,8 @@ Treat these as evidence conflicts, not success:
 - GitHub reports a startup failure before any job exists
 
 Do not bump a version merely to escape a stuck registry state. Do not create a fake native manifest to bypass a family contract.
+
+For `CLAWPACK_STAGING_GAP`, an Inspector or local-validation success only counts when its artifact hash exactly matches the artifact that received the 413. Missing validation, failed validation, or a different hash is insufficient for a high-confidence diagnosis.
 
 ### 5. Verify the repair
 

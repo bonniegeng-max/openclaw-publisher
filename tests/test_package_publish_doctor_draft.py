@@ -46,7 +46,7 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertEqual(values["name"], "ClawHub Package Publish Doctor")
         self.assertEqual(values["slug"], "package-publish-doctor")
-        self.assertEqual(values["version"], "0.1.2")
+        self.assertEqual(values["version"], "0.1.3")
         self.assertLessEqual(len(values["description"]), 200)
         self.assertFalse(values["slug"].startswith("clawhub-"))
         self.assertFalse(values["slug"].endswith("-clawhub"))
@@ -61,6 +61,16 @@ class PackagePublishDoctorDraftTests(unittest.TestCase):
 
         self.assertNotIn("package-publish-doctor", serialized)
         self.assertFalse((ROOT / "skills" / "package-publish-doctor").exists())
+
+    def test_research_changes_are_covered_by_ci(self):
+        workflow = (
+            ROOT / ".github" / "workflows" / "metrics-tools-ci.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(
+            workflow.count('"research/package-publish-doctor/**"'),
+            2,
+        )
 
     def test_skill_declares_core_safety_boundaries(self):
         text = SKILL.read_text(encoding="utf-8")

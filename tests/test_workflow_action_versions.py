@@ -50,6 +50,10 @@ class WorkflowActionVersionTests(unittest.TestCase):
             "python -m py_compile scripts/*.py tests/*.py",
             workflow,
         )
+        self.assertIn(
+            "research/package-publish-doctor/*.py",
+            workflow,
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,23 @@
+{
+  "id": "reusable-workflow-actions-read",
+  "source": "https://github.com/bonniegeng-max/openclaw-publisher/actions/runs/33932029001",
+  "affected": {
+    "workflow": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3"
+  },
+  "input": {
+    "event": "push",
+    "jobsCreated": 0,
+    "callerPermissions": {
+      "contents": "read",
+      "id-token": "write"
+    },
+    "reportedError": "The nested job 'publish' is requesting 'actions: read', but is only allowed 'actions: none'."
+  },
+  "expected": {
+    "diagnosis": "REUSABLE_WORKFLOW_ACTIONS_PERMISSION",
+    "layer": "workflow-permission",
+    "confidence": "high",
+    "requiredPermission": "actions: read",
+    "doNotRecommend": "grant broad write permissions"
+  }
+}

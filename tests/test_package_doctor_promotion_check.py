@@ -106,6 +106,9 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertFalse(
             result["localEvidence"]["observationWindowElapsed"]
         )
+        self.assertFalse(
+            result["localEvidence"]["observationGateReleased"]
+        )
         self.assertTrue(
             result["localEvidence"]["requiredDraftFilesPresent"]
         )
@@ -141,6 +144,9 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
         self.assertFalse(result["complete"])
         self.assertTrue(
             result["localEvidence"]["observationWindowElapsed"]
+        )
+        self.assertFalse(
+            result["localEvidence"]["observationGateReleased"]
         )
         self.assertIn("observation-window", result["blockingGates"])
         self.assertIn(
@@ -348,6 +354,147 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
             "observation-window cannot be complete before notBefore",
             result["errors"],
         )
+
+    def test_pre_observation_status_and_formal_surfaces_are_locked(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+
+        promotion_ready = copy.deepcopy(original)
+        promotion_ready["status"] = "promotion-ready"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(promotion_ready), encoding="utf-8")
+            status_result = CHECK_MODULE.evaluate(
+                ROOT,
+                path,
+                datetime(2026, 9, 5, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(status_result["valid"])
+        self.assertIn(
+            (
+                "promotion status must remain observation-window-hold "
+                "until observation-window is complete"
+            ),
+            status_result["errors"],
+        )
+
+        publication_pending = copy.deepcopy(original)
+        publication_pending["status"] = "publication-pending"
+        with tempfile.TemporaryDirectory() as directory:
+            root, path = make_staged_repo(directory, publication_pending)
+            surface_result = CHECK_MODULE.evaluate(
+                root,
+                path,
+                datetime(2026, 9, 5, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(surface_result["valid"])
+        self.assertTrue(
+            surface_result["localEvidence"]["formalTargetDirectoryPresent"]
+        )
+        self.assertTrue(
+            surface_result["localEvidence"]["formalCatalogEntryPresent"]
+        )
+        self.assertIn(
+            (
+                "formal skill directory and catalog entry cannot exist "
+                "until observation-window is complete"
+            ),
+            surface_result["errors"],
+        )
+
+    def test_date_alone_does_not_release_observation_gate(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["status"] = "publication-pending"
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, path = make_staged_repo(directory, contract)
+            result = CHECK_MODULE.evaluate(
+                root,
+                path,
+                datetime(2026, 9, 13, tzinfo=timezone.utc),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            result["localEvidence"]["observationWindowElapsed"]
+        )
+        self.assertFalse(
+            result["localEvidence"]["observationGateReleased"]
+        )
+        self.assertIn(
+            (
+                "formal skill directory and catalog entry cannot exist "
+                "until observation-window is complete"
+            ),
+            result["errors"],
+        )
+
+    def test_completed_observation_gate_releases_time_lock(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        contract["status"] = "promotion-ready"
+        next(
+            gate
+            for gate in contract["releaseGates"]
+            if gate["id"] == "observation-window"
+        )["state"] = "complete"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            result = CHECK_MODULE.evaluate(
+                ROOT,
+                path,
+                datetime(2026, 9, 13, tzinfo=timezone.utc),
+            )
+
+        self.assertTrue(result["valid"])
+        self.assertFalse(result["complete"])
+        self.assertTrue(
+            result["localEvidence"]["observationWindowElapsed"]
+        )
+        self.assertTrue(
+            result["localEvidence"]["observationGateReleased"]
+        )
+        self.assertNotIn("observation-window", result["blockingGates"])
+
+    def test_external_evidence_requires_completed_observation_gate(self):
+        original = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        mutations = (
+            ("evidence", "latestOfficialReleaseReconfirmed"),
+            ("evidence", "clawhubCompetitorSearchComplete"),
+            ("evidence", "dryRunComplete"),
+            ("evidence", "registryModerationClean"),
+            ("evidence", "e4Complete"),
+            ("claims", "clawhubMarketGapConfirmed"),
+            ("claims", "downloadImpactConfirmed"),
+            ("claims", "publishedConfirmed"),
+            ("claims", "downloadableConfirmed"),
+        )
+
+        for document, field in mutations:
+            with self.subTest(document=document, field=field):
+                contract = copy.deepcopy(original)
+                contract[document][field] = True
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "contract.json"
+                    path.write_text(json.dumps(contract), encoding="utf-8")
+                    result = CHECK_MODULE.evaluate(
+                        ROOT,
+                        path,
+                        datetime(2026, 9, 5, tzinfo=timezone.utc),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["complete"])
+                self.assertEqual(result["contractStatus"], "invalid")
+                self.assertIn(
+                    (
+                        f"{document}.{field} cannot be true "
+                        "until observation-window is complete"
+                    ),
+                    result["errors"],
+                )
 
     def test_release_policy_safeguards_are_mandatory(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
@@ -589,6 +736,11 @@ class PackageDoctorPromotionCheckTests(unittest.TestCase):
     def test_staged_surfaces_must_match_contract_identity(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         contract["status"] = "publication-pending"
+        next(
+            gate
+            for gate in contract["releaseGates"]
+            if gate["id"] == "observation-window"
+        )["state"] = "complete"
 
         with tempfile.TemporaryDirectory() as directory:
             root, path = make_staged_repo(directory, contract)

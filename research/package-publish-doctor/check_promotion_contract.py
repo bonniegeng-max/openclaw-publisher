@@ -67,6 +67,17 @@ GATE_SUPPORT_REQUIREMENTS = {
         ("claims", "downloadableConfirmed"),
     ),
 }
+PRE_OBSERVATION_FORBIDDEN_TRUE = (
+    ("evidence", "latestOfficialReleaseReconfirmed"),
+    ("evidence", "clawhubCompetitorSearchComplete"),
+    ("evidence", "dryRunComplete"),
+    ("evidence", "registryModerationClean"),
+    ("evidence", "e4Complete"),
+    ("claims", "clawhubMarketGapConfirmed"),
+    ("claims", "downloadImpactConfirmed"),
+    ("claims", "publishedConfirmed"),
+    ("claims", "downloadableConfirmed"),
+)
 
 
 def parse_time(value):
@@ -385,6 +396,14 @@ def evaluate(repo_root, contract_path, now):
             ),
             None,
         )
+        observation_gate_released = (
+            observation_elapsed
+            and observation_gate is not None
+            and observation_gate.get("state") == "complete"
+        )
+        local_evidence["observationGateReleased"] = (
+            observation_gate_released
+        )
         if (
             not observation_elapsed
             and observation_gate is not None
@@ -393,9 +412,27 @@ def evaluate(repo_root, contract_path, now):
             errors.append(
                 "observation-window cannot be complete before notBefore"
             )
+        if not observation_gate_released:
+            if declared_status != "observation-window-hold":
+                errors.append(
+                    "promotion status must remain observation-window-hold "
+                    "until observation-window is complete"
+                )
+            if not absent_from_formal_surfaces:
+                errors.append(
+                    "formal skill directory and catalog entry cannot exist "
+                    "until observation-window is complete"
+                )
+            for document_name, field_name in PRE_OBSERVATION_FORBIDDEN_TRUE:
+                if support_documents[document_name].get(field_name) is True:
+                    errors.append(
+                        f"{document_name}.{field_name} cannot be true "
+                        "until observation-window is complete"
+                    )
     except ValueError as error:
         errors.append(str(error))
         local_evidence["observationWindowElapsed"] = False
+        local_evidence["observationGateReleased"] = False
 
     release_policy = contract.get("releasePolicy")
     release_policy_valid = (

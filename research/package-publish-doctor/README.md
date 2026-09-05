@@ -164,6 +164,11 @@ gate 都会判定合同无效。`observation-window` 在 `notBefore` 之前不�
 命令必须精确绑定 target、stable slug、display name、`--dry-run` 与 owner
 占位符。候选 `SKILL.md` 缺失、不可读或不是 UTF-8 时只返回结构化
 `invalid`，不得输出 traceback。
+只有 `notBefore` 已到且 `observation-window` gate 明确完成后，时间锁才会
+释放；日期本身不能自动完成 gate。释放前状态必须保持
+`observation-window-hold`，正式目录与 catalog 必须同时缺席，ClawHub
+搜索、dry-run、发布、moderation、E4、市场空白及下载影响等外部
+evidence/claims 也不得提前标为 `true`。
 
 ## 启动门槛
 

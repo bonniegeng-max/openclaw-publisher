@@ -43,9 +43,16 @@ def write_json(path, payload):
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def comparison_snapshot(status="eligible", decision_ready=True):
+def comparison_snapshot(
+    status="eligible",
+    decision_ready=True,
+    previous_at=OLD_TIME,
+    current_at=NEW_TIME,
+):
     return {
         "schemaVersion": 1,
+        "previousCollectedAt": previous_at,
+        "currentCollectedAt": current_at,
         "evidenceQuality": {
             "status": status,
             "decisionReady": decision_ready,
@@ -459,6 +466,36 @@ class RunClawHubGrowthMonitorTests(unittest.TestCase):
             decision["recommendedAction"],
             "repair-data-quality",
         )
+
+    def test_combined_gate_rejects_cross_run_snapshot_pair(self):
+        decision = MODULE.combine_decisions(
+            comparison_snapshot(),
+            comparison_snapshot(
+                previous_at="2026-08-20T00:20:01+00:00",
+                current_at="2026-09-05T00:20:01+00:00",
+            ),
+        )
+
+        self.assertFalse(decision["decisionReady"])
+        self.assertEqual(decision["status"], "data-quality-blocked")
+        self.assertFalse(decision["pairing"]["aligned"])
+        self.assertGreater(
+            decision["pairing"]["currentSkewMinutes"],
+            MODULE.MAX_PAIR_SKEW_MINUTES,
+        )
+
+    def test_combined_gate_accepts_small_collector_time_skew(self):
+        decision = MODULE.combine_decisions(
+            comparison_snapshot(),
+            comparison_snapshot(
+                previous_at="2026-08-20T00:14:59+00:00",
+                current_at="2026-09-05T00:14:59+00:00",
+            ),
+        )
+
+        self.assertTrue(decision["decisionReady"])
+        self.assertEqual(decision["status"], "eligible")
+        self.assertTrue(decision["pairing"]["aligned"])
 
     def test_combined_gate_rejects_malformed_component_evidence(self):
         malformed = {

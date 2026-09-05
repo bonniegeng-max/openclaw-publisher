@@ -16,6 +16,7 @@ from typing import Any, Callable
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
 ReplaceFile = Callable[[Path, Path], None]
 DEFAULT_MIN_INTERVAL_HOURS = 144
+MAX_PAIR_SKEW_MINUTES = 15
 
 
 def run_child(
@@ -221,15 +222,56 @@ def combine_decisions(
         components[name] = component
         reasons.extend(f"{label}：{reason}" for reason in component["reasons"])
 
+    pairing = {
+        "maximumSkewMinutes": MAX_PAIR_SKEW_MINUTES,
+        "previousSkewMinutes": None,
+        "currentSkewMinutes": None,
+        "aligned": False,
+    }
+    pairing_valid = isinstance(metrics_comparison, dict) and isinstance(
+        search_comparison,
+        dict,
+    )
+    if pairing_valid:
+        for key, output_key, label in (
+            ("previousCollectedAt", "previousSkewMinutes", "前次"),
+            ("currentCollectedAt", "currentSkewMinutes", "当前"),
+        ):
+            try:
+                metrics_time = parse_collected_at(
+                    {"collectedAt": metrics_comparison.get(key)},
+                    f"指标{label}快照",
+                )
+                search_time = parse_collected_at(
+                    {"collectedAt": search_comparison.get(key)},
+                    f"搜索{label}快照",
+                )
+            except ValueError as exc:
+                pairing_valid = False
+                reasons.append(f"配对：{exc}")
+                continue
+            skew_minutes = abs(
+                (metrics_time - search_time).total_seconds()
+            ) / 60
+            pairing[output_key] = skew_minutes
+            if skew_minutes > MAX_PAIR_SKEW_MINUTES:
+                pairing_valid = False
+                reasons.append(
+                    f"配对：{label}指标与搜索快照相差 "
+                    f"{skew_minutes:.2f} 分钟，超过 "
+                    f"{MAX_PAIR_SKEW_MINUTES} 分钟"
+                )
+    pairing["aligned"] = pairing_valid
+
     decision_ready = all(
         component["decisionReady"] for component in components.values()
-    )
+    ) and pairing_valid
     statuses = {component["status"] for component in components.values()}
     data_quality_statuses = {"contaminated", "incomparable", "insufficient"}
     if decision_ready:
         status = "eligible"
         recommended_action = "review-growth-signals"
-    elif statuses.intersection(data_quality_statuses):
+    elif statuses.intersection(data_quality_statuses) or not pairing_valid:
         status = "data-quality-blocked"
         recommended_action = "repair-data-quality"
     else:
@@ -242,6 +284,7 @@ def combine_decisions(
         "decisionReady": decision_ready,
         "recommendedAction": recommended_action,
         "components": components,
+        "pairing": pairing,
         "reasons": reasons,
         "attribution": (
             "只有指标与搜索两侧同时通过证据门槛，才允许进入增长或产品组合决策。"
@@ -263,6 +306,10 @@ def render_combined_decision(decision: dict[str, Any]) -> str:
         f"- 唯一下一步：`{decision['recommendedAction']}`",
         f"- 指标证据：`{metrics['status']}`",
         f"- 搜索证据：`{search['status']}`",
+        (
+            "- 观察轮次配对："
+            f"`{'aligned' if decision['pairing']['aligned'] else 'misaligned'}`"
+        ),
         "",
         "> downloads、installs、stars 与搜索排名必须分开解释；"
         "单侧合格不能替代组合闸门。",

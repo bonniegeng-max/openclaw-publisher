@@ -114,6 +114,7 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 - 常规采样优先运行 `python3 scripts/collect_clawhub_metrics.py`，生成只读 JSON 快照。
 - 趋势判断使用 `python3 scripts/compare_clawhub_metrics.py <previous> <current>` 离线对比，不重复访问 registry。
 - 统一入口生成 `clawhub-growth-decision.json` 与 Markdown 报告；只有指标和搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，组合结果才允许进入加码、合并或停更判断。
+- 前次与当前两组指标/搜索快照必须分别来自同一观察轮次，采集时间差均不得超过 15 分钟；超出时按跨轮次误拼处理，只能修复数据质量。
 - 搜索排名使用 `python3 scripts/collect_clawhub_search_visibility.py` 按 `metrics/search-queries.json` 每轮各查询一次。
 - 周检先读取 `inspect` 和搜索结果，不重复安装未变化的版本。
 - 只有 latest 变化、moderation 异常、公开文件缺失或用户明确要求时，才执行一次隔离安装。
@@ -159,4 +160,4 @@ GitHub 修复提交：`27bb7f5f87e882856eb9a7c6e2484c6d30c9b421`
 
 ## 唯一下一步
 
-保持作品集结构不变，不再发布同类优化版本。下一次增长决策不得早于 `2026-09-12 10:26:39`（北京时间），并且必须满足同采集方法、前后快照均 `activeInstall: false`、间隔至少 7 天、相同 query/limit/query set 以及 `evidenceQuality.decisionReady: true`；否则唯一结论是继续观察或修复数据质量。
+保持作品集结构不变，不再发布同类优化版本。下一次增长决策不得早于 `2026-09-12 10:26:39`（北京时间），并且必须满足同采集方法、前后快照均 `activeInstall: false`、间隔至少 7 天、相同 query/limit/query set、前次与当前两组指标/搜索采集时间差均不超过 15 分钟，以及 `evidenceQuality.decisionReady: true`；否则唯一结论是继续观察或修复数据质量。

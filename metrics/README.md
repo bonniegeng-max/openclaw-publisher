@@ -136,7 +136,7 @@ metrics/clawhub-growth-decision.json
 metrics/clawhub-growth-decision.md
 ```
 
-只有指标与搜索两侧都返回 `decisionReady: true`，组合闸门才会给出 `review-growth-signals`。任一侧观察窗口不足时返回 `continue-observation`；污染、口径不一致、配置变化或证据格式错误时返回 `repair-data-quality`。
+只有指标与搜索两侧都返回 `decisionReady: true`，且前次与当前两组快照各自的指标/搜索采集时间差不超过 15 分钟，组合闸门才会给出 `review-growth-signals`。任一侧观察窗口不足时返回 `continue-observation`；跨轮次误拼、污染、口径不一致、配置变化或证据格式错误时返回 `repair-data-quality`。
 
 为防止同日重跑覆盖有效基线，统一入口默认要求距离两类 latest 中较新的采集时间至少 144 小时。不满足时会在发起任何 ClawHub 请求前退出：
 

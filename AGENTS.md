@@ -65,6 +65,7 @@ python3 scripts/run_clawhub_growth_monitor.py --force
 - 两次快照均明确为 `activeInstall: false`
 - 观察窗口至少 7 天
 - 搜索查询文本、limit 和查询集合保持一致
+- 前次与当前两组指标/搜索快照的采集时间差均不超过 15 分钟
 
 若任一条件不满足，结论只能是“继续观察”或“修复数据质量”，不得据此：
 

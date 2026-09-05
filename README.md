@@ -228,7 +228,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 
 它会先在临时目录完成两类采集、Markdown 差异报告和机器可读 JSON 对比结果，全部成功后再将 latest、previous、差异报告和组合闸门作为一个可回滚输出集合提交。任一采集、对比或正式文件替换失败时，现有完整基线都会恢复。
 
-统一入口还会生成 `metrics/clawhub-growth-decision.json` 和 `metrics/clawhub-growth-decision.md`。只有指标与搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，组合闸门才会返回 `decisionReady: true`；单侧合格只能继续观察，污染、口径不一致或证据格式错误会优先要求修复数据质量。
+统一入口还会生成 `metrics/clawhub-growth-decision.json` 和 `metrics/clawhub-growth-decision.md`。只有指标与搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，且前后两组指标/搜索快照的采集时间分别相差不超过 15 分钟，组合闸门才会返回 `decisionReady: true`；单侧合格只能继续观察，跨轮次误拼、污染、口径不一致或证据格式错误会优先要求修复数据质量。
 
 默认情况下，距离最近一次完整采集不足 144 小时会直接跳过，且不执行任何 ClawHub 请求，防止手动重跑覆盖有效基线。只有确有异常核验需求时才使用 `--force`；强制采集不会绕过对比器的 7 天决策门槛。
 

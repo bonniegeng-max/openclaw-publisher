@@ -100,6 +100,82 @@ class FakeRunner:
 
 
 class RunClawHubGrowthMonitorTests(unittest.TestCase):
+    def test_output_bundle_rolls_back_mid_commit_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.txt"
+            second = root / "second.txt"
+            first.write_text("old first", encoding="utf-8")
+            second.write_text("old second", encoding="utf-8")
+            failure_injected = False
+
+            def replace_with_failure(source, target):
+                nonlocal failure_injected
+                if (
+                    not failure_injected
+                    and target == second
+                    and ".new." in source.name
+                ):
+                    failure_injected = True
+                    raise OSError("simulated replace failure")
+                source.replace(target)
+
+            with self.assertRaisesRegex(OSError, "simulated replace failure"):
+                MODULE.commit_output_bundle(
+                    [
+                        (first, b"new first"),
+                        (second, b"new second"),
+                    ],
+                    replace_file=replace_with_failure,
+                )
+
+            self.assertEqual(first.read_text(encoding="utf-8"), "old first")
+            self.assertEqual(second.read_text(encoding="utf-8"), "old second")
+            self.assertEqual(
+                {path.name for path in root.iterdir()},
+                {"first.txt", "second.txt"},
+            )
+
+    def test_output_bundle_rejects_duplicate_targets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "same.txt"
+
+            with self.assertRaisesRegex(ValueError, "目标路径不能重复"):
+                MODULE.commit_output_bundle(
+                    [(target, b"first"), (target, b"second")]
+                )
+
+    def test_output_bundle_removes_new_files_during_rollback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            new_target = root / "new.txt"
+            existing_target = root / "existing.txt"
+            existing_target.write_text("old", encoding="utf-8")
+
+            def fail_existing_replacement(source, target):
+                if target == existing_target and ".new." in source.name:
+                    raise OSError("simulated replace failure")
+                source.replace(target)
+
+            with self.assertRaisesRegex(OSError, "simulated replace failure"):
+                MODULE.commit_output_bundle(
+                    [
+                        (new_target, b"created"),
+                        (existing_target, b"new"),
+                    ],
+                    replace_file=fail_existing_replacement,
+                )
+
+            self.assertFalse(new_target.exists())
+            self.assertEqual(
+                existing_target.read_text(encoding="utf-8"),
+                "old",
+            )
+            self.assertEqual(
+                {path.name for path in root.iterdir()},
+                {"existing.txt"},
+            )
+
     def test_first_run_writes_latest_without_previous_or_reports(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

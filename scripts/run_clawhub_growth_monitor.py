@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
+ReplaceFile = Callable[[Path, Path], None]
 DEFAULT_MIN_INTERVAL_HOURS = 144
 
 
@@ -41,35 +42,73 @@ def read_json_object(path: Path) -> dict[str, Any]:
     return payload
 
 
-def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        delete=False,
-    ) as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
-        temporary_path = Path(handle.name)
-    temporary_path.replace(path)
+def json_bytes(payload: dict[str, Any]) -> bytes:
+    return (
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    ).encode("utf-8")
 
 
-def write_text_atomic(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        delete=False,
-    ) as handle:
-        handle.write(content)
-        temporary_path = Path(handle.name)
-    temporary_path.replace(path)
+def replace_path(source: Path, target: Path) -> None:
+    source.replace(target)
+
+
+def commit_output_bundle(
+    outputs: list[tuple[Path, bytes]],
+    replace_file: ReplaceFile = replace_path,
+) -> None:
+    resolved_targets = [target.resolve() for target, _ in outputs]
+    if len(set(resolved_targets)) != len(resolved_targets):
+        raise ValueError("监控输出目标路径不能重复")
+
+    prepared: list[tuple[Path, Path]] = []
+    backups: list[tuple[Path, Path | None, bool]] = []
+    try:
+        for target, content in outputs:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=target.parent,
+                prefix=f".{target.name}.new.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                handle.write(content)
+                prepared.append((Path(handle.name), target))
+
+        for prepared_path, target in prepared:
+            existed = target.exists()
+            backup_path: Path | None = None
+            if existed:
+                with tempfile.NamedTemporaryFile(
+                    dir=target.parent,
+                    prefix=f".{target.name}.backup.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as handle:
+                    backup_path = Path(handle.name)
+                replace_file(target, backup_path)
+            backups.append((target, backup_path, existed))
+            replace_file(prepared_path, target)
+    except Exception as exc:
+        rollback_errors: list[str] = []
+        for target, backup_path, existed in reversed(backups):
+            try:
+                if target.exists():
+                    target.unlink()
+                if existed and backup_path is not None and backup_path.exists():
+                    replace_file(backup_path, target)
+            except OSError as rollback_exc:
+                rollback_errors.append(f"{target}: {rollback_exc}")
+        if rollback_errors:
+            details = "; ".join(rollback_errors)
+            raise RuntimeError(f"监控输出提交失败且回滚不完整：{details}") from exc
+        raise
+    finally:
+        for prepared_path, _ in prepared:
+            prepared_path.unlink(missing_ok=True)
+        for _, backup_path, _ in backups:
+            if backup_path is not None:
+                backup_path.unlink(missing_ok=True)
 
 
 def load_existing_snapshot(path: Path) -> dict[str, Any] | None:
@@ -129,19 +168,6 @@ def evaluate_run_guard(
         "reason": f"距最近成功采集 {age_hours:.2f} 小时",
         "ageHours": age_hours,
     }
-
-
-def promote_snapshot(
-    staged_payload: dict[str, Any],
-    existing_payload: dict[str, Any] | None,
-    latest_path: Path,
-    previous_path: Path,
-) -> None:
-    if latest_path.resolve() == previous_path.resolve():
-        raise ValueError("latest 与 previous 不能是同一路径")
-    if existing_payload is not None:
-        write_json_atomic(previous_path, existing_payload)
-    write_json_atomic(latest_path, staged_payload)
 
 
 def combine_decisions(
@@ -406,24 +432,28 @@ def run_monitor(
         )
         combined_report_text = render_combined_decision(combined_decision)
 
-        promote_snapshot(
-            new_metrics,
-            old_metrics,
-            metrics_latest,
-            metrics_previous,
-        )
-        promote_snapshot(
-            new_search,
-            old_search,
-            search_latest,
-            search_previous,
-        )
+        outputs: list[tuple[Path, bytes]] = []
+        if old_metrics is not None:
+            outputs.append((metrics_previous, json_bytes(old_metrics)))
+        outputs.append((metrics_latest, json_bytes(new_metrics)))
+        if old_search is not None:
+            outputs.append((search_previous, json_bytes(old_search)))
+        outputs.append((search_latest, json_bytes(new_search)))
         if metrics_report_text is not None:
-            write_text_atomic(metrics_report, metrics_report_text)
+            outputs.append(
+                (metrics_report, metrics_report_text.encode("utf-8"))
+            )
         if search_report_text is not None:
-            write_text_atomic(search_report, search_report_text)
-        write_json_atomic(decision_json, combined_decision)
-        write_text_atomic(decision_report, combined_report_text)
+            outputs.append(
+                (search_report, search_report_text.encode("utf-8"))
+            )
+        outputs.extend(
+            [
+                (decision_json, json_bytes(combined_decision)),
+                (decision_report, combined_report_text.encode("utf-8")),
+            ]
+        )
+        commit_output_bundle(outputs)
 
     return {
         "skipped": False,

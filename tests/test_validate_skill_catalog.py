@@ -29,6 +29,18 @@ def stage_repo(directory):
     return root, root / ".clawhub" / "skill-catalog.json"
 
 
+def replace_frontmatter_field(path, field, value):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    prefix = f"{field}:"
+    for index, line in enumerate(lines):
+        if line.startswith(prefix):
+            lines[index] = f"{field}: {value}"
+            break
+    else:
+        raise AssertionError(f"frontmatter field missing: {field}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 class ValidateSkillCatalogTests(unittest.TestCase):
     def test_current_catalog_is_valid(self):
         result = MODULE.validate(ROOT, CATALOG)
@@ -123,6 +135,96 @@ class ValidateSkillCatalogTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertIn("REQUIRED_FILE_MISSING", codes)
         self.assertIn("CATALOG_ENTRY_MISSING", codes)
+
+    def test_frontmatter_version_requires_three_part_semver(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        for version in ("1.0", "01.0.0", "v1.0.0", "1.0.0-beta"):
+            with self.subTest(version=version):
+                with tempfile.TemporaryDirectory() as directory:
+                    root, catalog_path = stage_repo(directory)
+                    replace_frontmatter_field(
+                        root / first_key / "SKILL.md",
+                        "version",
+                        version,
+                    )
+                    result = MODULE.validate(root, catalog_path)
+
+                self.assertFalse(result["valid"])
+                self.assertTrue(
+                    any(
+                        error["code"] == "SKILL_VERSION_INVALID"
+                        for error in result["errors"]
+                    )
+                )
+
+    def test_changelog_must_include_frontmatter_version(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            replace_frontmatter_field(
+                root / first_key / "SKILL.md",
+                "version",
+                "9.9.9",
+            )
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(
+                error["code"] == "CHANGELOG_VERSION_MISSING"
+                for error in result["errors"]
+            )
+        )
+
+    def test_description_must_be_nonempty(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key = sorted(original)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            replace_frontmatter_field(
+                root / first_key / "SKILL.md",
+                "description",
+                "",
+            )
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(
+                error["code"] == "SKILL_DESCRIPTION_INVALID"
+                for error in result["errors"]
+            )
+        )
+
+    def test_display_names_must_be_unique(self):
+        original = json.loads(CATALOG.read_text(encoding="utf-8"))
+        first_key, second_key = sorted(original)[:2]
+        duplicate_name = original[first_key]["displayName"]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, catalog_path = stage_repo(directory)
+            catalog = copy.deepcopy(original)
+            catalog[second_key]["displayName"] = duplicate_name
+            catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+            replace_frontmatter_field(
+                root / second_key / "SKILL.md",
+                "name",
+                duplicate_name,
+            )
+            result = MODULE.validate(root, catalog_path)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(
+                error["code"] == "DISPLAY_NAME_DUPLICATE"
+                for error in result["errors"]
+            )
+        )
 
     def test_invalid_slug_and_protected_namespace_are_rejected(self):
         cases = (

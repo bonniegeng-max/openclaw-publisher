@@ -19,6 +19,9 @@ REQUIRED_ENTRY_FIELDS = {
 }
 SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+SEMVER_PATTERN = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+)
 
 
 def reject_nonstandard_number(value):
@@ -102,6 +105,7 @@ def validate(repo_root, catalog_path):
         }
 
     catalog_keys = set()
+    display_name_paths = {}
     for catalog_key, entry in catalog.items():
         if not isinstance(catalog_key, str):
             errors.append(
@@ -189,6 +193,10 @@ def validate(repo_root, catalog_path):
                     "displayName must be a trimmed non-empty string",
                 )
             )
+        else:
+            display_name_paths.setdefault(display_name, []).append(
+                catalog_key
+            )
         for field in ("categories", "topics"):
             if not valid_metadata_tokens(entry.get(field)):
                 errors.append(
@@ -228,6 +236,61 @@ def validate(repo_root, catalog_path):
                             "frontmatter name does not match catalog displayName",
                         )
                     )
+                description = frontmatter.get("description")
+                if (
+                    not isinstance(description, str)
+                    or not description.strip()
+                ):
+                    errors.append(
+                        issue(
+                            "SKILL_DESCRIPTION_INVALID",
+                            f"{catalog_key}/SKILL.md",
+                            "frontmatter description must be non-empty",
+                        )
+                    )
+                version = frontmatter.get("version")
+                if (
+                    not isinstance(version, str)
+                    or SEMVER_PATTERN.fullmatch(version) is None
+                ):
+                    errors.append(
+                        issue(
+                            "SKILL_VERSION_INVALID",
+                            f"{catalog_key}/SKILL.md",
+                            "frontmatter version must use three-part semver",
+                        )
+                    )
+                else:
+                    changelog_path = skill_dir / "CHANGELOG.md"
+                    if changelog_path.is_file():
+                        try:
+                            changelog = changelog_path.read_text(
+                                encoding="utf-8"
+                            )
+                        except (OSError, UnicodeError) as error:
+                            errors.append(
+                                issue(
+                                    "CHANGELOG_INVALID",
+                                    f"{catalog_key}/CHANGELOG.md",
+                                    f"CHANGELOG cannot be read: {error}",
+                                )
+                            )
+                        else:
+                            version_heading = re.compile(
+                                rf"^## {re.escape(version)}\s*$",
+                                re.MULTILINE,
+                            )
+                            if version_heading.search(changelog) is None:
+                                errors.append(
+                                    issue(
+                                        "CHANGELOG_VERSION_MISSING",
+                                        f"{catalog_key}/CHANGELOG.md",
+                                        (
+                                            "CHANGELOG has no heading for "
+                                            f"frontmatter version {version}"
+                                        ),
+                                    )
+                                )
 
     skills_root = repo_root / "skills"
     discovered_keys = {
@@ -242,6 +305,18 @@ def validate(repo_root, catalog_path):
                 "published skill directory is absent from the catalog",
             )
         )
+    for display_name, paths in sorted(display_name_paths.items()):
+        if len(paths) > 1:
+            errors.append(
+                issue(
+                    "DISPLAY_NAME_DUPLICATE",
+                    "$.displayName",
+                    (
+                        f"displayName {display_name!r} is reused by: "
+                        + ", ".join(sorted(paths))
+                    ),
+                )
+            )
 
     return {
         "valid": not errors,

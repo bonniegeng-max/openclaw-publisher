@@ -1,14 +1,9 @@
 {
   "id": "package-security-audit-fields-missing",
   "source": "https://github.com/openclaw/clawhub/issues/3546",
-  "affected": {
-    "family": "code-plugin",
-    "fixPullRequest": 3550,
-    "fixMerged": true,
-    "deploymentVerified": false
-  },
   "input": {
     "surface": "package",
+    "family": "code-plugin",
     "stage": "install-verification",
     "exactReleaseSecurityEndpoint": true,
     "trust": {

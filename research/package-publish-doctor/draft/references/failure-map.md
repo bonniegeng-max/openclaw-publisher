@@ -1,6 +1,6 @@
 # Package 发布故障映射
 
-先确认版本和证据，再套用规则。相同错误文本在不同版本、family 或上传路径中可能有不同根因。
+先确认版本和证据，再套用规则。相同错误文本在不同版本、family 或上传路径中可能有不同根因。规则适用版本、修复版本和已确认源码事实由规则内置；CLI、npm、workflow、family 和 source-validator commit 必须作为观测输入提供，调用方填写的 `affected` 元数据不参与命中。
 
 当前高置信规则覆盖 `workflow-permission`、`source-resolution`、`pack`、`family-detection`、`upload`、`moderation` 和 `verification`。`inspector` 与 `index` 仅用于失败层分类；在补齐真实来源、正例与负例之前，不得输出对应的高置信诊断代码。
 
@@ -34,9 +34,10 @@ permissions:
 - `source.commit` 等于 token SHA
 - `source.ref` 等于 token 中已验证的 tag ref
 - tag ref 与 commit SHA 字符串不同，服务端仍直接比较两者并拒绝
-- 当前服务端代码包含该回归，修复 PR 尚未合并
+- 输入包含 source-validator commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720`
+- 该 commit 的源码比较证据明确为 `source.ref !== (candidateSha ?? token.sha)`
 
-当前分类：`current-server`。
+当前分类：`source-reproduced-at-commit`。这只证明回归可在指定源码 commit 重现，不推断当前部署。
 
 最小修复：保留 ordinary token 的 tag ref 与 commit 语义，等待受安全审查的服务端修复。不要把 ordinary 模式伪装成 split-candidate，也不要放宽 candidate provenance。
 
@@ -45,7 +46,8 @@ permissions:
 必须同时满足：
 
 - `npm pack` 已生成 tarball
-- npm 为 12.x
+- 输入的 ClawHub CLI 为 `0.23.1`
+- 输入的 npm 为 12.x
 - CLI 报 `npm pack did not return a tarball filename`
 - npm JSON 输出为包名到结果对象的映射，而不是旧数组
 
@@ -61,6 +63,7 @@ permissions:
 必须同时满足：
 
 - family 为 `bundle-plugin`
+- 输入的 ClawHub CLI 为 `0.23.3`
 - 至少存在一个兼容 bundle marker
 - 根目录不存在 `openclaw.plugin.json`
 - CLI 报 `openclaw.plugin.json required`
@@ -73,7 +76,7 @@ permissions:
 
 必须同时满足：
 
-- 使用不包含修复的正式 CLI 或 `package-publish.yml` ref
+- 输入的 workflow ref 为 `openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3`
 - 预构建 ClawPack 超过公共边缘预算
 - artifact 仍低于旧 staging 阈值
 - 公共 registry 返回 `413 Request Entity Too Large`
@@ -151,6 +154,7 @@ permissions:
 - 调用方已经授予 `actions: read`
 - package scan 卡住案例使用 `v0.23.2+`，或 pending 未满 24 小时
 - trusted publisher 使用 split-candidate 模式，或 source commit/ref 本身与 token 不一致
+- trusted publisher 只有 `rejected: true`，缺少指定 source-validator commit 或精确源码比较证据
 - package trust 状态为 blocked、pending 或 stale
 - security endpoint 已返回非空 overview 与 audit URL
 - 输入未明确标记 `surface: package`

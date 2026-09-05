@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.3
+version: 0.1.4
 metadata:
   openclaw:
     os: [macos]
@@ -49,6 +49,7 @@ Collect existing evidence before rerunning anything:
 6. Artifact byte size and hash when an archive exists.
 7. Full error text, exit code, job creation state, and relevant permissions.
 8. Publish response, release ID, publication status, scan age, Inspector result, and `package verify` result when available.
+9. For a source-validation regression, the exact source-validator commit and the compared source fields; rejection alone is not source evidence.
 
 Never request tokens, cookies, authorization headers, or raw secret values.
 
@@ -91,11 +92,14 @@ Use `references/failure-map.md`. Every rule must state one of:
 - `fixed-in-release`: a formal release contains the fix
 - `main-only-fix`: source fix exists but no formal release contains it
 - `current-server`: the current service code or live server contains the defect
+- `source-reproduced-at-commit`: the defect is reproduced from a named source commit, without claiming that commit is currently deployed
 - `fix-merged-deployment-unverified`: the repair merged, but deployment is not proven
 - `product-decision`: behavior remains unresolved by maintainers
 - `unknown`: evidence is insufficient or contradictory
 
 Do not recommend an unreleased `main` commit as a production dependency. A temporary workaround must be scoped, reversible, and labeled as temporary.
+
+Rule applicability and fixed historical facts belong to the bundled rule map and diagnostic implementation. Treat observed CLI, npm, workflow, family, and source-validator commit values as `input`; never let caller-supplied `affected` metadata decide whether a rule matches.
 
 ### 4. Check conflict signals
 
@@ -110,6 +114,8 @@ Treat these as evidence conflicts, not success:
 Do not bump a version merely to escape a stuck registry state. Do not create a fake native manifest to bypass a family contract.
 
 For `CLAWPACK_STAGING_GAP`, an Inspector or local-validation success only counts when its artifact hash exactly matches the artifact that received the 413. Missing validation, failed validation, or a different hash is insufficient for a high-confidence diagnosis.
+
+For `TRUSTED_PUBLISH_TAG_REF_REGRESSION`, require source-comparison evidence from source-validator commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720`, including the comparison of `source.ref` with `candidateSha ?? token.sha`. A bare `rejected: true` observation is insufficient.
 
 ### 5. Verify the repair
 

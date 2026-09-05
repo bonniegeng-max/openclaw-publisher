@@ -1,13 +1,9 @@
 {
   "id": "clawpack-staging-gap",
   "source": "https://github.com/openclaw/clawhub/issues/3577",
-  "affected": {
-    "workflow": "package-publish.yml@v0.23.3",
-    "releaseContainsFix": false,
-    "mainContainsFix": true
-  },
   "input": {
     "surface": "package",
+    "workflowRef": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3",
     "artifactBytes": 8032797,
     "artifactHash": "sha256:6e86efb9a9802dddc0f424707b0e44b7f8f67c0d61e39d885aa0bb812d24bdaf",
     "publicEdgeBudgetBytes": 4194304,

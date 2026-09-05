@@ -1,11 +1,9 @@
 {
   "id": "reusable-workflow-actions-read",
   "source": "https://github.com/bonniegeng-max/openclaw-publisher/actions/runs/33932029001",
-  "affected": {
-    "workflow": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3"
-  },
   "input": {
     "surface": "package",
+    "workflowRef": "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3",
     "event": "push",
     "jobsCreated": 0,
     "callerPermissions": {

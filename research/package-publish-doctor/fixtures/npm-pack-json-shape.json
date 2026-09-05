@@ -1,12 +1,10 @@
 {
   "id": "npm-pack-json-shape",
   "source": "https://github.com/openclaw/clawhub/issues/3275",
-  "affected": {
-    "clawhub": "0.23.1",
-    "npm": "12.x"
-  },
   "input": {
     "surface": "package",
+    "clawhubVersion": "0.23.1",
+    "npmVersion": "12.x",
     "npm11": [
       {
         "id": "my-plugin@0.4.0",

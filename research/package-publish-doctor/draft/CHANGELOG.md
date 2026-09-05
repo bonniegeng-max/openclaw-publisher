@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 - 2026-09-05
+
+- 将规则适用 CLI、npm、workflow、修复版本与固定源码事实内置到离线诊断器，不再使用 `case.affected` 决定命中。
+- fixtures 将实际 CLI、npm、workflow ref、family 与 source-validator commit 迁入 `input`。
+- 收紧 trusted publisher 规则：必须提供 commit `845c6d3bdb1a36573d8d28be2a8fb85a3c476720` 的 `source.ref !== (candidateSha ?? token.sha)` 源码比较证据；只有 `rejected: true` 返回 `UNKNOWN`。
+- 将该规则的 `versionStatus` 改为 `source-reproduced-at-commit`，避免把源码重现误写成当前部署事实。
+- 增加版本边界、错误 workflow ref、缺失/错误源码比较证据和 `affected` 污染的负例测试。
+
 ## 0.1.3 - 2026-09-05
 
 - 诊断器改为先收集全部匹配信号；不同失败层冲突且缺少完整 `failureSequence` 时返回 `UNKNOWN`。

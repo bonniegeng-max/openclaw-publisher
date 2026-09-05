@@ -1,15 +1,15 @@
 {
   "id": "trusted-publish-tag-ref-regression",
   "source": "https://github.com/openclaw/clawhub/issues/3507",
-  "affected": {
-    "serverCommit": "845c6d3bdb1a36573d8d28be2a8fb85a3c476720",
-    "currentMainContainsRegression": true,
-    "fixPullRequest": 3528,
-    "fixMerged": false
-  },
   "input": {
     "surface": "package",
     "publishMode": "trusted-github-actions",
+    "sourceValidatorCommit": "845c6d3bdb1a36573d8d28be2a8fb85a3c476720",
+    "sourceValidationComparison": {
+      "left": "source.ref",
+      "operator": "!==",
+      "right": "candidateSha ?? token.sha"
+    },
     "candidateShaPresent": false,
     "tokenSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "tokenRef": "refs/tags/v1.2.3",
@@ -21,7 +21,7 @@
     "diagnosis": "TRUSTED_PUBLISH_TAG_REF_REGRESSION",
     "layer": "source-resolution",
     "confidence": "high",
-    "versionStatus": "current-server",
+    "versionStatus": "source-reproduced-at-commit",
     "doNotRecommend": "weaken split-candidate provenance or replace a verified tag ref with unrelated metadata"
   }
 }

@@ -11,6 +11,19 @@ BUNDLE_MARKERS = {
     ".claude-plugin/plugin.json",
     ".cursor-plugin/plugin.json",
 }
+TRUSTED_SOURCE_VALIDATOR_COMMIT = "845c6d3bdb1a36573d8d28be2a8fb85a3c476720"
+TRUSTED_SOURCE_COMPARISON = {
+    "left": "source.ref",
+    "operator": "!==",
+    "right": "candidateSha ?? token.sha",
+}
+NPM_PACK_JSON_SHAPE_CLI_VERSION = (0, 23, 1)
+NPM_PACK_JSON_SHAPE_NPM_MAJOR = 12
+BUNDLE_NATIVE_MANIFEST_CLI_VERSION = (0, 23, 3)
+PACKAGE_PUBLISH_WORKFLOW_REF = (
+    "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3"
+)
+PACKAGE_RELEASE_SCAN_FIXED_VERSION = (0, 23, 2)
 FAILURE_LAYERS = frozenset(
     {
         "workflow-permission",
@@ -80,6 +93,11 @@ def _version_tuple(value):
     if len(parts) != 3 or not all(part.isdigit() for part in parts):
         return None
     return tuple(int(part) for part in parts)
+
+
+def _version_major(value):
+    first = str(value or "").lstrip("v").split(".", 1)[0]
+    return int(first) if first.isdigit() else None
 
 
 def _same_artifact_validation(inputs):
@@ -161,7 +179,6 @@ def _resolve_matches(case, matches):
 def diagnose(case):
     """Return one conservative diagnosis for a normalized fixture."""
     inputs = case.get("input") or {}
-    affected = case.get("affected") or {}
     if inputs.get("surface") != "package":
         return _unknown(case, ["input.surface=package"])
 
@@ -173,12 +190,14 @@ def diagnose(case):
     token_ref = inputs.get("tokenRef")
     source_commit = inputs.get("sourceCommit")
     source_ref = inputs.get("sourceRef")
+    source_comparison = inputs.get("sourceValidationComparison")
     if (
         inputs.get("publishMode") == "trusted-github-actions"
         and inputs.get("candidateShaPresent") is False
         and inputs.get("rejected") is True
-        and affected.get("currentMainContainsRegression") is True
-        and affected.get("fixMerged") is False
+        and inputs.get("sourceValidatorCommit")
+        == TRUSTED_SOURCE_VALIDATOR_COMMIT
+        and source_comparison == TRUSTED_SOURCE_COMPARISON
         and bool(token_sha)
         and bool(token_ref)
         and source_commit == token_sha
@@ -193,10 +212,11 @@ def diagnose(case):
                 "ordinary trusted-publisher token 不含 candidateSha",
                 "source.commit 与 token SHA 一致",
                 "source.ref 与 token tag ref 一致",
-                "服务端仍把 tag ref 与 commit SHA 直接比较并拒绝",
+                f"源码 {TRUSTED_SOURCE_VALIDATOR_COMMIT} 明确比较 source.ref 与 candidateSha ?? token.sha",
+                "ordinary 模式下该比较拒绝了字符串不同的 tag ref 与 token SHA",
             ],
             "保留已验证的 tag ref 与 commit 语义，等待受安全审查的服务端修复；不要把普通模式改写成 split-candidate 模式。",
-            "current-server",
+            "source-reproduced-at-commit",
         ))
 
     permissions = inputs.get("callerPermissions") or {}
@@ -205,6 +225,7 @@ def diagnose(case):
         inputs.get("jobsCreated") == 0
         and "requesting 'actions: read'" in error_lower
         and actions_permission == "none"
+        and inputs.get("workflowRef") == PACKAGE_PUBLISH_WORKFLOW_REF
     ):
         matches.append(_result(
             case,
@@ -212,6 +233,7 @@ def diagnose(case):
             "workflow-permission",
             [
                 "GitHub 未创建任何 job",
+                f"调用固定版本 workflow {PACKAGE_PUBLISH_WORKFLOW_REF}",
                 "被调用 workflow 请求 actions: read",
                 "调用方未授予 actions 权限",
             ],
@@ -224,7 +246,10 @@ def diagnose(case):
         inputs.get("artifactExists") is True
         and isinstance(npm12_output, dict)
         and "npm pack did not return a tarball filename" in error_lower
-        and str(affected.get("npm") or "").startswith("12")
+        and _version_tuple(inputs.get("clawhubVersion"))
+        == NPM_PACK_JSON_SHAPE_CLI_VERSION
+        and _version_major(inputs.get("npmVersion"))
+        == NPM_PACK_JSON_SHAPE_NPM_MAJOR
     ):
         matches.append(_result(
             case,
@@ -241,7 +266,9 @@ def diagnose(case):
 
     files = set(inputs.get("files") or [])
     if (
-        affected.get("family") == "bundle-plugin"
+        inputs.get("family") == "bundle-plugin"
+        and _version_tuple(inputs.get("clawhubVersion"))
+        == BUNDLE_NATIVE_MANIFEST_CLI_VERSION
         and files.intersection(BUNDLE_MARKERS)
         and inputs.get("openclawPluginManifestPresent") is False
         and "openclaw.plugin.json required" in error_lower
@@ -270,8 +297,7 @@ def diagnose(case):
         and isinstance(edge_budget, int)
         and isinstance(legacy_threshold, int)
         and edge_budget < artifact_bytes < legacy_threshold
-        and affected.get("releaseContainsFix") is False
-        and affected.get("mainContainsFix") is True
+        and inputs.get("workflowRef") == PACKAGE_PUBLISH_WORKFLOW_REF
         and validation_evidence is not None
     ):
         matches.append(_result(
@@ -290,10 +316,9 @@ def diagnose(case):
         ))
 
     installed_version = _version_tuple(inputs.get("clawhubVersion"))
-    fixed_version = _version_tuple(affected.get("fixedIn"))
     pending_hours = inputs.get("pendingHours")
     if (
-        affected.get("family") == "bundle-plugin"
+        inputs.get("family") == "bundle-plugin"
         and inputs.get("publishAccepted") is True
         and bool(inputs.get("releaseId"))
         and inputs.get("scanStatus") == "pending"
@@ -303,8 +328,7 @@ def diagnose(case):
         and inputs.get("inspectVisible") is False
         and inputs.get("duplicateOnRepublish") is True
         and installed_version is not None
-        and fixed_version is not None
-        and installed_version < fixed_version
+        and installed_version < PACKAGE_RELEASE_SCAN_FIXED_VERSION
     ):
         matches.append(_result(
             case,
@@ -315,7 +339,9 @@ def diagnose(case):
                 f"安全扫描持续 pending 至少 {pending_hours:g} 小时",
                 "latestRelease 仍为空且指定版本不可 inspect",
                 "同版本重发被 duplicate guard 拒绝",
-                f"当前 CLI {inputs.get('clawhubVersion')} 早于修复版本 {affected.get('fixedIn')}",
+                "当前 CLI "
+                f"{inputs.get('clawhubVersion')} 早于修复版本 "
+                f"{'.'.join(map(str, PACKAGE_RELEASE_SCAN_FIXED_VERSION))}",
             ],
             "升级到包含修复的正式 CLI 后核验原 release 的最终状态；不要通过连续 bump 版本制造更多孤立 release。",
             "fixed-in-release",
@@ -323,7 +349,7 @@ def diagnose(case):
 
     trust = inputs.get("trust") or {}
     if (
-        affected.get("family") == "code-plugin"
+        inputs.get("family") == "code-plugin"
         and inputs.get("stage") == "install-verification"
         and inputs.get("exactReleaseSecurityEndpoint") is True
         and trust.get("scanStatus") == "clean"
@@ -334,8 +360,6 @@ def diagnose(case):
         and inputs.get("overview") is None
         and inputs.get("securityAuditUrl") is None
         and "expected overview to be a non-empty string" in error_lower
-        and affected.get("fixMerged") is True
-        and affected.get("deploymentVerified") is False
     ):
         matches.append(_result(
             case,

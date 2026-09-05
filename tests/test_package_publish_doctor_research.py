@@ -99,6 +99,8 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         npm11 = fixture["input"]["npm11"]
         npm12 = fixture["input"]["npm12"]
 
+        self.assertEqual(fixture["input"]["clawhubVersion"], "0.23.1")
+        self.assertEqual(fixture["input"]["npmVersion"], "12.x")
         self.assertIsInstance(npm11, list)
         self.assertIsInstance(npm12, dict)
         self.assertEqual(
@@ -115,6 +117,8 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         fixture = load_fixture("bundle-native-manifest-contract.json")
         files = set(fixture["input"]["files"])
 
+        self.assertEqual(fixture["input"]["clawhubVersion"], "0.23.3")
+        self.assertEqual(fixture["input"]["family"], "bundle-plugin")
         self.assertIn(".codex-plugin/plugin.json", files)
         self.assertIn(".claude-plugin/plugin.json", files)
         self.assertFalse(fixture["input"]["openclawPluginManifestPresent"])
@@ -136,8 +140,10 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
             values["artifactBytes"],
             values["legacyStagingThresholdBytes"],
         )
-        self.assertFalse(fixture["affected"]["releaseContainsFix"])
-        self.assertTrue(fixture["affected"]["mainContainsFix"])
+        self.assertEqual(
+            values["workflowRef"],
+            "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.3",
+        )
         self.assertEqual(
             values["artifactHash"],
             values["inspector"]["artifactHash"],
@@ -184,6 +190,25 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         already_fixed["input"]["callerPermissions"]["actions"] = "read"
         self.assertEqual(diagnose(already_fixed)["diagnosis"], "UNKNOWN")
 
+        wrong_workflow = copy.deepcopy(fixture)
+        wrong_workflow["input"]["workflowRef"] = (
+            "openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.2"
+        )
+        self.assertEqual(diagnose(wrong_workflow)["diagnosis"], "UNKNOWN")
+
+    def test_version_bounded_rules_reject_other_cli_versions(self):
+        npm_fixture = load_fixture("npm-pack-json-shape.json")
+        npm_fixture["input"]["clawhubVersion"] = "0.23.2"
+        self.assertEqual(diagnose(npm_fixture)["diagnosis"], "UNKNOWN")
+
+        npm_fixture = load_fixture("npm-pack-json-shape.json")
+        npm_fixture["input"]["npmVersion"] = "11.6.2"
+        self.assertEqual(diagnose(npm_fixture)["diagnosis"], "UNKNOWN")
+
+        bundle_fixture = load_fixture("bundle-native-manifest-contract.json")
+        bundle_fixture["input"]["clawhubVersion"] = "0.23.2"
+        self.assertEqual(diagnose(bundle_fixture)["diagnosis"], "UNKNOWN")
+
     def test_stalled_release_only_matches_affected_package_version(self):
         fixture = load_fixture("package-release-scan-stalled.json")
         self.assertEqual(
@@ -210,9 +235,12 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
     def test_trusted_tag_ref_rule_preserves_candidate_mode_boundary(self):
         fixture = load_fixture("trusted-publish-tag-ref-regression.json")
+        result = diagnose(fixture)
+        self.assertEqual(result["diagnosis"], "TRUSTED_PUBLISH_TAG_REF_REGRESSION")
+        self.assertEqual(result["versionStatus"], "source-reproduced-at-commit")
         self.assertEqual(
-            diagnose(fixture)["diagnosis"],
-            "TRUSTED_PUBLISH_TAG_REF_REGRESSION",
+            fixture["input"]["sourceValidatorCommit"],
+            "845c6d3bdb1a36573d8d28be2a8fb85a3c476720",
         )
 
         candidate_mode = copy.deepcopy(fixture)
@@ -222,6 +250,25 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
         mismatched_commit = copy.deepcopy(fixture)
         mismatched_commit["input"]["sourceCommit"] = "b" * 40
         self.assertEqual(diagnose(mismatched_commit)["diagnosis"], "UNKNOWN")
+
+    def test_trusted_tag_ref_rule_requires_source_comparison_evidence(self):
+        fixture = load_fixture("trusted-publish-tag-ref-regression.json")
+
+        rejected_only = copy.deepcopy(fixture)
+        del rejected_only["input"]["sourceValidatorCommit"]
+        del rejected_only["input"]["sourceValidationComparison"]
+        self.assertTrue(rejected_only["input"]["rejected"])
+        self.assertEqual(diagnose(rejected_only)["diagnosis"], "UNKNOWN")
+
+        wrong_commit = copy.deepcopy(fixture)
+        wrong_commit["input"]["sourceValidatorCommit"] = "b" * 40
+        self.assertEqual(diagnose(wrong_commit)["diagnosis"], "UNKNOWN")
+
+        wrong_comparison = copy.deepcopy(fixture)
+        wrong_comparison["input"]["sourceValidationComparison"]["right"] = (
+            "source.commit"
+        )
+        self.assertEqual(diagnose(wrong_comparison)["diagnosis"], "UNKNOWN")
 
     def test_security_fields_rule_keeps_fail_closed_boundary(self):
         fixture = load_fixture("package-security-audit-fields-missing.json")
@@ -251,7 +298,7 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
     def test_missing_manifest_for_code_plugin_is_not_bundle_contract_case(self):
         fixture = load_fixture("bundle-native-manifest-contract.json")
         code_plugin = copy.deepcopy(fixture)
-        code_plugin["affected"]["family"] = "code-plugin"
+        code_plugin["input"]["family"] = "code-plugin"
 
         self.assertEqual(diagnose(code_plugin)["diagnosis"], "UNKNOWN")
 
@@ -264,18 +311,20 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
     def test_conflicting_layers_without_failure_sequence_are_unknown(self):
         fixture = load_fixture("bundle-native-manifest-contract.json")
-        fixture["affected"]["npm"] = "12.x"
         fixture["input"].update(
             {
-                "artifactExists": True,
-                "npm12": {
-                    "example": {
-                        "filename": "example-1.0.0.tgz",
-                    }
+                "workflowRef": (
+                    "openclaw/clawhub/.github/workflows/"
+                    "package-publish.yml@v0.23.3"
+                ),
+                "jobsCreated": 0,
+                "callerPermissions": {
+                    "contents": "read",
+                    "id-token": "write",
                 },
                 "reportedError": (
                     "openclaw.plugin.json required; "
-                    "npm pack did not return a tarball filename"
+                    "nested job is requesting 'actions: read'"
                 ),
             }
         )
@@ -284,32 +333,64 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
         self.assertEqual(result["diagnosis"], "UNKNOWN")
         self.assertIn("input.failureSequence", result["missingEvidence"][0])
-        self.assertIn("NPM_PACK_JSON_SHAPE", result["evidence"][0])
+        self.assertIn(
+            "REUSABLE_WORKFLOW_ACTIONS_PERMISSION",
+            result["evidence"][0],
+        )
         self.assertIn("BUNDLE_NATIVE_MANIFEST_CONTRACT", result["evidence"][0])
 
     def test_failure_sequence_selects_first_matching_layer(self):
         fixture = load_fixture("bundle-native-manifest-contract.json")
-        fixture["affected"]["npm"] = "12.x"
         fixture["input"].update(
             {
-                "artifactExists": True,
-                "npm12": {
-                    "example": {
-                        "filename": "example-1.0.0.tgz",
-                    }
+                "workflowRef": (
+                    "openclaw/clawhub/.github/workflows/"
+                    "package-publish.yml@v0.23.3"
+                ),
+                "jobsCreated": 0,
+                "callerPermissions": {
+                    "contents": "read",
+                    "id-token": "write",
                 },
                 "reportedError": (
                     "openclaw.plugin.json required; "
-                    "npm pack did not return a tarball filename"
+                    "nested job is requesting 'actions: read'"
                 ),
-                "failureSequence": ["pack", "family-detection"],
+                "failureSequence": [
+                    "workflow-permission",
+                    "family-detection",
+                ],
             }
         )
 
         result = diagnose(fixture)
 
-        self.assertEqual(result["diagnosis"], "NPM_PACK_JSON_SHAPE")
-        self.assertEqual(result["layer"], "pack")
+        self.assertEqual(
+            result["diagnosis"],
+            "REUSABLE_WORKFLOW_ACTIONS_PERMISSION",
+        )
+        self.assertEqual(result["layer"], "workflow-permission")
+
+    def test_matching_never_depends_on_affected_metadata(self):
+        for path in sorted(FIXTURES.glob("*.json")):
+            with self.subTest(fixture=path.name):
+                fixture = json.loads(path.read_text(encoding="utf-8"))
+                poisoned = copy.deepcopy(fixture)
+                poisoned["affected"] = {
+                    "clawhub": "99.99.99",
+                    "npm": "1.x",
+                    "workflow": "wrong",
+                    "family": "wrong",
+                    "fixedIn": "0.0.0",
+                    "serverCommit": "wrong",
+                    "currentMainContainsRegression": False,
+                    "fixMerged": False,
+                    "deploymentVerified": True,
+                }
+                self.assertEqual(
+                    diagnose(poisoned)["diagnosis"],
+                    fixture["expected"]["diagnosis"],
+                )
 
     def test_unknown_case_stays_unknown(self):
         result = diagnose(

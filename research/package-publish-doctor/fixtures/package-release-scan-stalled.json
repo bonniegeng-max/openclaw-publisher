@@ -1,14 +1,10 @@
 {
   "id": "package-release-scan-stalled",
   "source": "https://github.com/openclaw/clawhub/issues/3288",
-  "affected": {
-    "clawhub": "0.23.1",
-    "fixedIn": "0.23.2",
-    "family": "bundle-plugin"
-  },
   "input": {
     "surface": "package",
     "clawhubVersion": "0.23.1",
+    "family": "bundle-plugin",
     "publishAccepted": true,
     "releaseId": "rd7abka2cmrgys87a85kz390498bchva",
     "scanStatus": "pending",

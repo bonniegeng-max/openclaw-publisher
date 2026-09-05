@@ -2,7 +2,7 @@
 name: ClawHub Package Publish Doctor
 slug: package-publish-doctor
 description: Diagnose ClawHub package and plugin publication failures across workflow permissions, packing, manifests, Inspector, uploads, publication state, and artifact verification.
-version: 0.1.1
+version: 0.1.2
 metadata:
   openclaw:
     os: [macos]
@@ -88,6 +88,8 @@ Use `references/failure-map.md`. Every rule must state one of:
 - `current-release`: reproduced or documented in the latest formal release
 - `fixed-in-release`: a formal release contains the fix
 - `main-only-fix`: source fix exists but no formal release contains it
+- `current-server`: the current service code or live server contains the defect
+- `fix-merged-deployment-unverified`: the repair merged, but deployment is not proven
 - `product-decision`: behavior remains unresolved by maintainers
 - `unknown`: evidence is insufficient or contradictory
 
@@ -153,4 +155,5 @@ If no rule has enough evidence, return `UNKNOWN` and specify the smallest missin
 - `templates/package_diagnosis_report.md`: stable report structure.
 - `examples/three_layer_diagnosis.md`: examples that distinguish pack, contract, and upload failures.
 - `examples/package_release_scan_stalled.md`: version-bounded package scan stall with explicit Skill-surface counterexamples.
+- `examples/source_and_verification_failures.md`: trusted source-ref regression and fail-closed audit-response verification.
 - `CHANGELOG.md`: draft evolution history.

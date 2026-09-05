@@ -23,7 +23,7 @@
 - 当前正式 release：
 - 使用中的 workflow ref：
 - 已知修复位置：
-- 分类：`current-release | fixed-in-release | main-only-fix | product-decision | unknown`
+- 分类：`current-release | fixed-in-release | main-only-fix | current-server | fix-merged-deployment-unverified | product-decision | unknown`
 
 ## 最小修复
 

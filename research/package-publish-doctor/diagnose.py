@@ -67,6 +67,36 @@ def diagnose(case):
     error = str(inputs.get("reportedError") or "")
     error_lower = error.lower()
 
+    token_sha = inputs.get("tokenSha")
+    token_ref = inputs.get("tokenRef")
+    source_commit = inputs.get("sourceCommit")
+    source_ref = inputs.get("sourceRef")
+    if (
+        inputs.get("publishMode") == "trusted-github-actions"
+        and inputs.get("candidateShaPresent") is False
+        and inputs.get("rejected") is True
+        and affected.get("currentMainContainsRegression") is True
+        and affected.get("fixMerged") is False
+        and bool(token_sha)
+        and bool(token_ref)
+        and source_commit == token_sha
+        and source_ref == token_ref
+        and source_ref != token_sha
+    ):
+        return _result(
+            case,
+            "TRUSTED_PUBLISH_TAG_REF_REGRESSION",
+            "source-resolution",
+            [
+                "ordinary trusted-publisher token 不含 candidateSha",
+                "source.commit 与 token SHA 一致",
+                "source.ref 与 token tag ref 一致",
+                "服务端仍把 tag ref 与 commit SHA 直接比较并拒绝",
+            ],
+            "保留已验证的 tag ref 与 commit 语义，等待受安全审查的服务端修复；不要把普通模式改写成 split-candidate 模式。",
+            "current-server",
+        )
+
     permissions = inputs.get("callerPermissions") or {}
     actions_permission = str(permissions.get("actions") or "none").lower()
     if (
@@ -184,6 +214,37 @@ def diagnose(case):
             ],
             "升级到包含修复的正式 CLI 后核验原 release 的最终状态；不要通过连续 bump 版本制造更多孤立 release。",
             "fixed-in-release",
+        )
+
+    trust = inputs.get("trust") or {}
+    if (
+        affected.get("family") == "code-plugin"
+        and inputs.get("stage") == "install-verification"
+        and inputs.get("exactReleaseSecurityEndpoint") is True
+        and trust.get("scanStatus") == "clean"
+        and trust.get("blockedFromDownload") is False
+        and trust.get("pending") is False
+        and trust.get("stale") is False
+        and trust.get("reasons") == []
+        and inputs.get("overview") is None
+        and inputs.get("securityAuditUrl") is None
+        and "expected overview to be a non-empty string" in error_lower
+        and affected.get("fixMerged") is True
+        and affected.get("deploymentVerified") is False
+    ):
+        return _result(
+            case,
+            "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING",
+            "verification",
+            [
+                "精确 package release 的 trust verdict 为 clean",
+                "blocked、pending 与 stale 均为 false",
+                "security response 的 overview 与 securityAuditUrl 均为空",
+                "安装器按 fail-closed 策略拒绝 malformed trust response",
+                "修复已合并，但当前证据未证明部署完成",
+            ],
+            "保持 fail-closed；部署后只读核验精确版本 security endpoint 返回非空审计字段，再重试受支持的安装流程。",
+            "fix-merged-deployment-unverified",
         )
 
     return _unknown(

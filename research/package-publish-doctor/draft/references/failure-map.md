@@ -23,6 +23,21 @@ permissions:
 
 不要授予 `actions: write`。修复后确认 discover job 能创建；如果没有变更目标，publish job 正常跳过不算失败。
 
+### `TRUSTED_PUBLISH_TAG_REF_REGRESSION`
+
+必须同时满足：
+
+- 证据来自 package trusted publishing
+- ordinary token 不含 `candidateSha`
+- `source.commit` 等于 token SHA
+- `source.ref` 等于 token 中已验证的 tag ref
+- tag ref 与 commit SHA 字符串不同，服务端仍直接比较两者并拒绝
+- 当前服务端代码包含该回归，修复 PR 尚未合并
+
+当前分类：`current-server`。
+
+最小修复：保留 ordinary token 的 tag ref 与 commit 语义，等待受安全审查的服务端修复。不要把 ordinary 模式伪装成 split-candidate，也不要放宽 candidate provenance。
+
 ### `NPM_PACK_JSON_SHAPE`
 
 必须同时满足：
@@ -84,6 +99,21 @@ permissions:
 
 最小修复：升级到包含修复的正式 CLI，再核验原 release 的 scan、latest 与 inspect 状态。不要连续 bump 版本；这只会保留更多不可见 release。
 
+### `PACKAGE_SECURITY_AUDIT_FIELDS_MISSING`
+
+必须同时满足：
+
+- 证据来自精确版本的 code-plugin security endpoint
+- trust verdict 为 clean，且 `blockedFromDownload`、`pending`、`stale` 均为 false
+- reasons 为空
+- `overview` 与 `securityAuditUrl` 同时为空
+- 安装器明确因缺少非空 overview 而 fail-closed
+- 对应修复已合并，但部署状态尚未独立验证
+
+当前分类：`fix-merged-deployment-unverified`。
+
+最小修复：保持 fail-closed。部署后先只读核验精确版本 endpoint 返回非空审计字段，再重试支持的安装流程；不要在客户端伪造审计文本或绕过信任策略。
+
 ## 冲突状态
 
 ### Publish 成功但 index 缺失
@@ -117,6 +147,9 @@ permissions:
 - tarball 实际不存在
 - 调用方已经授予 `actions: read`
 - package scan 卡住案例使用 `v0.23.2+`，或 pending 未满 24 小时
+- trusted publisher 使用 split-candidate 模式，或 source commit/ref 本身与 token 不一致
+- package trust 状态为 blocked、pending 或 stale
+- security endpoint 已返回非空 overview 与 audit URL
 - 输入未明确标记 `surface: package`
 - source、Inspector、moderation 和 upload 多层同时失败，无法确认首个失败点
 

@@ -1,0 +1,32 @@
+{
+  "id": "package-security-audit-fields-missing",
+  "source": "https://github.com/openclaw/clawhub/issues/3546",
+  "affected": {
+    "family": "code-plugin",
+    "fixPullRequest": 3550,
+    "fixMerged": true,
+    "deploymentVerified": false
+  },
+  "input": {
+    "surface": "package",
+    "stage": "install-verification",
+    "exactReleaseSecurityEndpoint": true,
+    "trust": {
+      "blockedFromDownload": false,
+      "pending": false,
+      "stale": false,
+      "scanStatus": "clean",
+      "reasons": []
+    },
+    "overview": null,
+    "securityAuditUrl": null,
+    "reportedError": "Malformed ClawHub security response: expected overview to be a non-empty string."
+  },
+  "expected": {
+    "diagnosis": "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING",
+    "layer": "verification",
+    "confidence": "high",
+    "versionStatus": "fix-merged-deployment-unverified",
+    "doNotRecommend": "fabricate audit text or bypass the fail-closed trust policy"
+  }
+}

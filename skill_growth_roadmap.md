@@ -106,7 +106,7 @@ GitHub issue 证据已经显示，ClawHub Package 发布不是 Skill 发布链�
 
 它应独立诊断 `validate / pack / publish / wait / verify`，并输出失败层、版本适用性、最小修复和 artifact hash 验证路径。它不吸收 catalog metadata 治理，也不重复现有 Skill 发布 Doctor。
 
-当前状态：`draft-ready`，暂不发布。版本化故障矩阵、5 个离线 fixture、带 package surface 防串线约束的保守诊断原型、GitHub 竞品预筛和完整 Skill 草案已完成；先完成当前 7 天自然观察窗口，再复核最新 ClawHub release 与 ClawHub 站内直接竞品，通过后才把草案移入正式 catalog。
+当前状态：`draft-ready`，暂不发布。版本化故障矩阵、7 个离线 fixture、带 package surface 防串线约束的保守诊断原型、GitHub 竞品预筛和完整 Skill 草案已完成；规则已覆盖 workflow permission、source resolution、pack、family detection、upload、moderation 和 verification。先完成当前 7 天自然观察窗口，再复核最新 ClawHub release 与 ClawHub 站内直接竞品，通过后才把草案移入正式 catalog。
 
 ## 当前组合建议
 

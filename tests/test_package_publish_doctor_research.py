@@ -23,14 +23,14 @@ def load_fixture(name):
 
 
 class PackagePublishDoctorResearchTests(unittest.TestCase):
-    def test_research_pack_has_five_distinct_package_cases(self):
+    def test_research_pack_has_seven_distinct_package_cases(self):
         fixtures = [
             json.loads(path.read_text(encoding="utf-8"))
             for path in sorted(FIXTURES.glob("*.json"))
         ]
 
-        self.assertEqual(len(fixtures), 5)
-        self.assertEqual(len({fixture["id"] for fixture in fixtures}), 5)
+        self.assertEqual(len(fixtures), 7)
+        self.assertEqual(len({fixture["id"] for fixture in fixtures}), 7)
         self.assertTrue(
             all(fixture["input"]["surface"] == "package" for fixture in fixtures)
         )
@@ -42,6 +42,8 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
                 "upload",
                 "workflow-permission",
                 "moderation",
+                "source-resolution",
+                "verification",
             },
         )
 
@@ -148,6 +150,39 @@ class PackagePublishDoctorResearchTests(unittest.TestCase):
 
         self.assertEqual(result["diagnosis"], "UNKNOWN")
         self.assertEqual(result["missingEvidence"], ["input.surface=package"])
+
+    def test_trusted_tag_ref_rule_preserves_candidate_mode_boundary(self):
+        fixture = load_fixture("trusted-publish-tag-ref-regression.json")
+        self.assertEqual(
+            diagnose(fixture)["diagnosis"],
+            "TRUSTED_PUBLISH_TAG_REF_REGRESSION",
+        )
+
+        candidate_mode = copy.deepcopy(fixture)
+        candidate_mode["input"]["candidateShaPresent"] = True
+        self.assertEqual(diagnose(candidate_mode)["diagnosis"], "UNKNOWN")
+
+        mismatched_commit = copy.deepcopy(fixture)
+        mismatched_commit["input"]["sourceCommit"] = "b" * 40
+        self.assertEqual(diagnose(mismatched_commit)["diagnosis"], "UNKNOWN")
+
+    def test_security_fields_rule_keeps_fail_closed_boundary(self):
+        fixture = load_fixture("package-security-audit-fields-missing.json")
+        self.assertEqual(
+            diagnose(fixture)["diagnosis"],
+            "PACKAGE_SECURITY_AUDIT_FIELDS_MISSING",
+        )
+
+        blocked_release = copy.deepcopy(fixture)
+        blocked_release["input"]["trust"]["blockedFromDownload"] = True
+        self.assertEqual(diagnose(blocked_release)["diagnosis"], "UNKNOWN")
+
+        complete_response = copy.deepcopy(fixture)
+        complete_response["input"]["overview"] = "Clean package audit"
+        complete_response["input"]["securityAuditUrl"] = (
+            "https://clawhub.ai/example/plugins/example/security-audit"
+        )
+        self.assertEqual(diagnose(complete_response)["diagnosis"], "UNKNOWN")
 
     def test_generic_413_is_not_misclassified_as_staging_gap(self):
         fixture = load_fixture("clawpack-staging-gap.json")

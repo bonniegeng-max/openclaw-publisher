@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 - 2026-09-05
+
+- 增加 ordinary trusted publisher tag ref 的 source-validation 回归诊断。
+- 增加 clean code-plugin security response 缺少审计字段的 verification 诊断。
+- 区分 `current-server` 与 `fix-merged-deployment-unverified`，不把合并状态误写成线上恢复。
+- 增加 candidate provenance、trust fail-closed 和完整审计响应反例。
+
 ## 0.1.1 - 2026-09-05
 
 - 为所有离线规则增加显式 `surface: package` 边界，拒绝套用普通 Skill 发布故障。

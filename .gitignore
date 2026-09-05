@@ -14,3 +14,7 @@ metrics/clawhub-search-change-report.json
 metrics/clawhub-growth-decision.json
 metrics/clawhub-growth-decision.md
 metrics/.growth-run-*/
+metrics/.growth-monitor.lock
+metrics/.growth-output-transaction.json
+metrics/.growth-output-transaction.*.tmp
+metrics/.growth-transactions/

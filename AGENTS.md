@@ -49,6 +49,7 @@ python3 scripts/run_clawhub_growth_monitor.py
 - 不执行 install、download、publish、dry-run 或隔离安装。
 - 不修改 Skill 文件、版本号或 catalog。
 - 生产入口固定使用 `clawhub`，新快照必须在轮换前通过 schema、slug/query 覆盖、`activeInstall` 和同轮时间配对校验。
+- 统一入口必须持有单实例锁；读取快照或访问 ClawHub 前必须处理遗留事务：`prepared` 回滚旧基线，`committed` 保留新基线并完成清理。
 - 只读取生成的 latest、previous、差异报告和 `clawhub-growth-decision` 组合闸门。
 - 任一子步骤失败时保留上一轮完整基线，不用部分结果做判断。
 

@@ -119,12 +119,13 @@ python3 scripts/run_clawhub_growth_monitor.py
 
 执行顺序：
 
-1. 在 `metrics` 下的临时目录采集采用指标。
-2. 在同一临时目录采集搜索可见性。
-3. 校验两份新快照的 schema、方法、`activeInstall: false`、catalog/query 覆盖及 15 分钟同轮配对；生产 CLI 固定使用 `clawhub`，不接受替代可执行文件。
-4. 如果已有 latest，则先在临时目录生成两份 Markdown 报告和对应 JSON sidecar。
-5. 合并指标与搜索证据，生成唯一组合闸门。
-6. 全部步骤成功后，才以可回滚的输出集合轮换正式 latest、previous、报告和组合闸门。
+1. 获取 `metrics/.growth-monitor.lock` 单实例锁。
+2. 如存在未完成事务日志，先恢复上一套完整基线，再读取 latest 或发起请求。
+3. 在 `metrics` 下的临时目录采集采用指标和搜索可见性。
+4. 校验两份新快照的 schema、方法、`activeInstall: false`、catalog/query 覆盖及 15 分钟同轮配对；生产 CLI 固定使用 `clawhub`，不接受替代可执行文件。
+5. 如果已有 latest，则先在临时目录生成两份 Markdown 报告和对应 JSON sidecar。
+6. 合并指标与搜索证据，生成唯一组合闸门。
+7. 先持久化 `prepared` journal，再原子轮换正式 latest、previous、Markdown/JSON 报告和组合闸门；全部输出同步后写入 `committed` journal。不可捕获终止由下次启动恢复：`prepared` 回滚旧基线，`committed` 保留新基线并完成清理。
 
 任何子命令失败都会中止本轮，保留上一次完整输出。正式文件替换若在中途失败，已替换目标也会逆序恢复，避免留下指标与搜索时间点不一致的半套基线。首次运行生成 latest 和不可决策的组合闸门；第二次开始才会生成 previous 和差异报告。
 

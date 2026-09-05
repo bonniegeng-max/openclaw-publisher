@@ -4,14 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
+import hashlib
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import threading
+import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 try:
     from clawhub_monitor_capability import create_monitor_capability_env
@@ -23,6 +30,25 @@ RunCommand = Callable[..., subprocess.CompletedProcess[str]]
 ReplaceFile = Callable[[Path, Path], None]
 DEFAULT_MIN_INTERVAL_HOURS = 144
 MAX_PAIR_SKEW_MINUTES = 15
+TRANSACTION_JOURNAL_NAME = ".growth-output-transaction.json"
+TRANSACTION_ROOT_NAME = ".growth-transactions"
+MONITOR_LOCK_NAME = ".growth-monitor.lock"
+MONITOR_OUTPUT_NAMES = frozenset(
+    {
+        "clawhub-latest.json",
+        "clawhub-previous.json",
+        "clawhub-change-report.md",
+        "clawhub-change-report.json",
+        "clawhub-search-latest.json",
+        "clawhub-search-previous.json",
+        "clawhub-search-change-report.md",
+        "clawhub-search-change-report.json",
+        "clawhub-growth-decision.json",
+        "clawhub-growth-decision.md",
+    }
+)
+_LOCK_OWNERS: dict[Path, int] = {}
+_LOCK_STATE_GUARD = threading.Lock()
 
 
 def run_child(
@@ -53,6 +79,21 @@ def read_json_object(path: Path) -> dict[str, Any]:
     return payload
 
 
+def read_required_report(path: Path, label: str) -> str:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError(f"{label}未生成约定的 Markdown 报告")
+    content = path.read_text(encoding="utf-8")
+    if not content.strip():
+        raise RuntimeError(f"{label}生成了空 Markdown 报告")
+    return content
+
+
+def read_required_comparison(path: Path, label: str) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError(f"{label}未生成约定的 JSON 对比结果")
+    return read_json_object(path)
+
+
 def json_bytes(payload: dict[str, Any]) -> bytes:
     return (
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -63,63 +104,430 @@ def replace_path(source: Path, target: Path) -> None:
     source.replace(target)
 
 
+def sync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def write_transaction_journal(
+    path: Path,
+    payload: dict[str, Any],
+) -> None:
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f"{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+        temporary_path = Path(handle.name)
+    try:
+        temporary_path.replace(path)
+        sync_directory(path.parent)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _safe_filename(directory: Path, name: Any, label: str) -> Path:
+    if (
+        not isinstance(name, str)
+        or not name
+        or name in {".", ".."}
+        or Path(name).name != name
+    ):
+        raise ValueError(f"事务日志中的 {label} 必须是安全文件名")
+    return directory / name
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_fsynced_file(path: Path, content: bytes) -> None:
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        0o600,
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
+def require_monitor_lock(directory: Path) -> Path:
+    directory = directory.resolve()
+    with _LOCK_STATE_GUARD:
+        owner = _LOCK_OWNERS.get(directory)
+    if owner != threading.get_ident():
+        raise RuntimeError("操作监控事务前，当前线程必须持有单实例锁")
+    return directory
+
+
+def remove_transaction_directory(
+    directory: Path,
+    transaction_directory: Path,
+) -> None:
+    transaction_root = directory / TRANSACTION_ROOT_NAME
+    if transaction_directory.exists():
+        shutil.rmtree(transaction_directory)
+        sync_directory(transaction_root)
+    if not transaction_root.exists():
+        return
+    try:
+        transaction_root.rmdir()
+    except OSError:
+        return
+    sync_directory(directory)
+
+
+def remove_orphan_transactions(directory: Path) -> None:
+    transaction_root = directory / TRANSACTION_ROOT_NAME
+    if transaction_root.is_symlink():
+        raise RuntimeError("监控事务根目录不能是 symlink")
+    if not transaction_root.exists():
+        return
+    if not transaction_root.is_dir():
+        raise RuntimeError("监控事务根路径必须是目录")
+
+    removed = False
+    for candidate in transaction_root.iterdir():
+        name = candidate.name
+        if (
+            len(name) != 32
+            or any(character not in "0123456789abcdef" for character in name)
+        ):
+            continue
+        if candidate.is_symlink() or not candidate.is_dir():
+            raise RuntimeError(f"孤立监控事务目录类型无效：{name}")
+        shutil.rmtree(candidate)
+        removed = True
+    if removed:
+        sync_directory(transaction_root)
+    try:
+        transaction_root.rmdir()
+    except OSError:
+        return
+    sync_directory(directory)
+
+
+def _load_transaction(
+    directory: Path,
+) -> tuple[Path, str, list[dict[str, Any]]]:
+    journal_path = directory / TRANSACTION_JOURNAL_NAME
+    if journal_path.is_symlink() or not journal_path.is_file():
+        raise RuntimeError("监控事务日志必须是普通文件")
+    journal = read_json_object(journal_path)
+    if journal.get("schemaVersion") != 1:
+        raise ValueError("监控事务日志 schemaVersion 必须为 1")
+    phase = journal.get("phase")
+    if phase not in {"prepared", "committed"}:
+        raise ValueError("监控事务日志 phase 必须为 prepared 或 committed")
+    transaction_id = journal.get("transactionId")
+    if (
+        not isinstance(transaction_id, str)
+        or len(transaction_id) != 32
+        or any(character not in "0123456789abcdef" for character in transaction_id)
+    ):
+        raise ValueError("监控事务 ID 必须是 32 位小写十六进制")
+    transaction_root = directory / TRANSACTION_ROOT_NAME
+    transaction_directory = transaction_root / transaction_id
+    if (
+        transaction_root.is_symlink()
+        or transaction_directory.is_symlink()
+        or not transaction_directory.is_dir()
+    ):
+        raise RuntimeError("监控事务目录缺失或类型无效")
+
+    raw_entries = journal.get("entries")
+    if not isinstance(raw_entries, list) or not raw_entries:
+        raise ValueError("监控事务日志 entries 必须是非空数组")
+    entries: list[dict[str, Any]] = []
+    seen_targets: set[str] = set()
+    for raw_entry in raw_entries:
+        if not isinstance(raw_entry, dict):
+            raise ValueError("监控事务日志 entry 必须是 JSON 对象")
+        target_name = raw_entry.get("target")
+        if target_name not in MONITOR_OUTPUT_NAMES:
+            raise ValueError(f"监控事务 target 不受支持：{target_name}")
+        if target_name in seen_targets:
+            raise ValueError("监控事务日志 target 不能重复")
+        prepared = _safe_filename(
+            transaction_directory,
+            raw_entry.get("prepared"),
+            "prepared",
+        )
+        raw_backup = raw_entry.get("backup")
+        backup = (
+            None
+            if raw_backup is None
+            else _safe_filename(transaction_directory, raw_backup, "backup")
+        )
+        existed = raw_entry.get("existed")
+        backup_sha256 = raw_entry.get("backupSha256")
+        if not isinstance(existed, bool):
+            raise ValueError("监控事务日志 existed 必须是布尔值")
+        if existed is not (backup is not None):
+            raise ValueError("监控事务日志 existed 与 backup 不一致")
+        if prepared.name != f"new--{target_name}":
+            raise ValueError("监控事务 prepared 与 target 不匹配")
+        if backup is not None and backup.name != f"old--{target_name}":
+            raise ValueError("监控事务 backup 与 target 不匹配")
+        if existed:
+            if (
+                not isinstance(backup_sha256, str)
+                or len(backup_sha256) != 64
+                or backup is None
+                or backup.is_symlink()
+                or not backup.is_file()
+            ):
+                raise ValueError("监控事务备份证据无效")
+            if sha256_file(backup) != backup_sha256:
+                raise ValueError("监控事务备份哈希不匹配")
+        elif backup_sha256 is not None:
+            raise ValueError("新建目标不能声明备份哈希")
+        if prepared.is_symlink():
+            raise ValueError("监控事务 prepared 不能是 symlink")
+        seen_targets.add(target_name)
+        entries.append(
+            {
+                "target": directory / target_name,
+                "prepared": prepared,
+                "backup": backup,
+                "existed": existed,
+            }
+        )
+    return transaction_directory, phase, entries
+
+
+def recover_output_bundle(
+    directory: Path,
+    replace_file: ReplaceFile = replace_path,
+) -> str | None:
+    """恢复未完成事务，返回 rolled-back、committed 或 None。"""
+    directory = require_monitor_lock(directory)
+    journal_path = directory / TRANSACTION_JOURNAL_NAME
+    if journal_path.is_symlink():
+        raise RuntimeError("监控事务日志不能是 symlink")
+    if not journal_path.exists():
+        remove_orphan_transactions(directory)
+        return None
+    transaction_directory, phase, entries = _load_transaction(directory)
+    if phase == "prepared":
+        for entry in reversed(entries):
+            target = entry["target"]
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise RuntimeError(f"{target.name} 不是可恢复的普通文件")
+            if entry["existed"]:
+                backup = entry["backup"]
+                with tempfile.NamedTemporaryFile(
+                    mode="wb",
+                    dir=transaction_directory,
+                    prefix=f"restore-{target.name}-",
+                    delete=False,
+                ) as handle:
+                    with backup.open("rb") as source:
+                        shutil.copyfileobj(source, handle)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                    restore_path = Path(handle.name)
+                replace_file(restore_path, target)
+            else:
+                target.unlink(missing_ok=True)
+        sync_directory(directory)
+    journal_path.unlink()
+    sync_directory(directory)
+    remove_transaction_directory(directory, transaction_directory)
+    return "rolled-back" if phase == "prepared" else "committed"
+
+
+@contextmanager
+def monitor_lock(directory: Path) -> Iterator[Path]:
+    if directory.is_symlink() or not directory.is_dir():
+        raise RuntimeError("metrics 必须是仓库内的普通目录")
+    directory = directory.resolve()
+    lock_path = directory / MONITOR_LOCK_NAME
+    flags = os.O_CREAT | os.O_RDWR
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(lock_path, flags, 0o600)
+    with os.fdopen(descriptor, "r+", encoding="utf-8") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise RuntimeError("增长监控锁必须是普通文件")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError("已有增长监控进程正在运行") from exc
+        owner = threading.get_ident()
+        with _LOCK_STATE_GUARD:
+            if directory in _LOCK_OWNERS:
+                raise RuntimeError("已有增长监控线程正在运行")
+            _LOCK_OWNERS[directory] = owner
+        try:
+            yield directory
+        finally:
+            with _LOCK_STATE_GUARD:
+                if _LOCK_OWNERS.get(directory) == owner:
+                    del _LOCK_OWNERS[directory]
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def commit_output_bundle(
     outputs: list[tuple[Path, bytes]],
     replace_file: ReplaceFile = replace_path,
 ) -> None:
+    if not outputs:
+        raise ValueError("监控输出集合不能为空")
     resolved_targets = [target.resolve() for target, _ in outputs]
     if len(set(resolved_targets)) != len(resolved_targets):
         raise ValueError("监控输出目标路径不能重复")
+    directories = {target.parent.resolve() for target, _ in outputs}
+    if len(directories) != 1:
+        raise ValueError("监控输出目标必须位于同一目录")
+    directory = require_monitor_lock(directories.pop())
+    recover_output_bundle(directory, replace_file)
+    journal_path = directory / TRANSACTION_JOURNAL_NAME
+    transaction_id = uuid.uuid4().hex
+    transaction_root = directory / TRANSACTION_ROOT_NAME
+    if transaction_root.is_symlink():
+        raise RuntimeError("监控事务根目录不能是 symlink")
+    transaction_root.mkdir(mode=0o700, exist_ok=True)
+    sync_directory(directory)
+    transaction_directory = transaction_root / transaction_id
+    transaction_directory.mkdir(mode=0o700)
 
-    prepared: list[tuple[Path, Path]] = []
-    backups: list[tuple[Path, Path | None, bool]] = []
+    entries: list[dict[str, Any]] = []
+    journal_active = False
+    cleanup_allowed = True
+    commit_complete = False
     try:
         for target, content in outputs:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                dir=target.parent,
-                prefix=f".{target.name}.new.",
-                suffix=".tmp",
-                delete=False,
-            ) as handle:
-                handle.write(content)
-                prepared.append((Path(handle.name), target))
+            if target.name not in MONITOR_OUTPUT_NAMES:
+                raise ValueError(f"监控输出目标不受支持：{target.name}")
+            canonical_target = directory / target.name
+            if target.resolve() != canonical_target.resolve():
+                raise ValueError("监控输出目标必须是事务目录中的直接子文件")
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise ValueError(f"{target.name} 必须是普通文件")
 
-        for prepared_path, target in prepared:
+            prepared_path = transaction_directory / f"new--{target.name}"
+            write_fsynced_file(prepared_path, content)
             existed = target.exists()
             backup_path: Path | None = None
+            backup_sha256: str | None = None
             if existed:
-                with tempfile.NamedTemporaryFile(
-                    dir=target.parent,
-                    prefix=f".{target.name}.backup.",
-                    suffix=".tmp",
-                    delete=False,
-                ) as handle:
-                    backup_path = Path(handle.name)
-                replace_file(target, backup_path)
-            backups.append((target, backup_path, existed))
-            replace_file(prepared_path, target)
+                backup_path = transaction_directory / f"old--{target.name}"
+                write_fsynced_file(backup_path, target.read_bytes())
+                backup_sha256 = sha256_file(backup_path)
+            entries.append(
+                {
+                    "targetPath": target,
+                    "preparedPath": prepared_path,
+                    "backupPath": backup_path,
+                    "backupSha256": backup_sha256,
+                    "existed": existed,
+                }
+            )
+        sync_directory(transaction_directory)
+        sync_directory(transaction_root)
+
+        journal_payload = {
+            "schemaVersion": 1,
+            "phase": "prepared",
+            "transactionId": transaction_id,
+            "entries": [
+                {
+                    "target": entry["targetPath"].name,
+                    "prepared": entry["preparedPath"].name,
+                    "backup": (
+                        entry["backupPath"].name
+                        if entry["backupPath"] is not None
+                        else None
+                    ),
+                    "backupSha256": entry["backupSha256"],
+                    "existed": entry["existed"],
+                }
+                for entry in entries
+            ],
+        }
+        try:
+            write_transaction_journal(
+                journal_path,
+                journal_payload,
+            )
+        finally:
+            journal_active = journal_path.exists()
+
+        for entry in entries:
+            replace_file(entry["preparedPath"], entry["targetPath"])
+        sync_directory(directory)
+        committed_payload = dict(journal_payload)
+        committed_payload["phase"] = "committed"
+        try:
+            write_transaction_journal(
+                journal_path,
+                committed_payload,
+            )
+        finally:
+            journal_active = journal_path.exists()
+        commit_complete = True
+        try:
+            journal_path.unlink()
+            journal_active = False
+            sync_directory(directory)
+        except OSError as exc:
+            if journal_path.exists():
+                raise
+            cleanup_allowed = False
+            print(
+                "警告：监控输出已通过 committed journal 确认，"
+                f"但清理持久化失败；下次启动将安全完成清理：{exc}",
+                file=sys.stderr,
+            )
     except Exception as exc:
-        rollback_errors: list[str] = []
-        for target, backup_path, existed in reversed(backups):
+        if journal_active:
             try:
-                if target.exists():
-                    target.unlink()
-                if existed and backup_path is not None and backup_path.exists():
-                    replace_file(backup_path, target)
-            except OSError as rollback_exc:
-                rollback_errors.append(f"{target}: {rollback_exc}")
-        if rollback_errors:
-            details = "; ".join(rollback_errors)
-            raise RuntimeError(f"监控输出提交失败且回滚不完整：{details}") from exc
+                recovery_outcome = recover_output_bundle(
+                    directory,
+                    replace_file,
+                )
+                journal_active = False
+                if recovery_outcome == "committed":
+                    commit_complete = True
+                    return
+            except (OSError, ValueError, RuntimeError) as recovery_exc:
+                raise RuntimeError(
+                    f"监控输出提交失败且回滚不完整：{recovery_exc}"
+                ) from exc
         raise
     finally:
-        for prepared_path, _ in prepared:
-            prepared_path.unlink(missing_ok=True)
-        for _, backup_path, _ in backups:
-            if backup_path is not None:
-                backup_path.unlink(missing_ok=True)
+        if not journal_active and cleanup_allowed:
+            try:
+                remove_transaction_directory(directory, transaction_directory)
+            except OSError as exc:
+                if not commit_complete:
+                    raise
+                print(
+                    "警告：监控输出已完整提交，但事务备份清理失败；"
+                    f"下次启动将重试：{exc}",
+                    file=sys.stderr,
+                )
 
 
 def load_existing_snapshot(path: Path) -> dict[str, Any] | None:
@@ -608,7 +1016,7 @@ def render_combined_decision(decision: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run_monitor(
+def _run_monitor_locked(
     root: Path,
     python_bin: str,
     clawhub_bin: str,
@@ -617,10 +1025,11 @@ def run_monitor(
     force: bool = False,
     now: datetime | None = None,
     runner: RunCommand = subprocess.run,
+    metrics_dir: Path | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
     scripts = root / "scripts"
-    metrics_dir = root / "metrics"
+    metrics_dir = metrics_dir or root / "metrics"
     catalog = root / ".clawhub" / "skill-catalog.json"
     queries = metrics_dir / "search-queries.json"
     observation_policy = load_observation_policy(
@@ -630,9 +1039,11 @@ def run_monitor(
     metrics_latest = metrics_dir / "clawhub-latest.json"
     metrics_previous = metrics_dir / "clawhub-previous.json"
     metrics_report = metrics_dir / "clawhub-change-report.md"
+    metrics_report_json = metrics_dir / "clawhub-change-report.json"
     search_latest = metrics_dir / "clawhub-search-latest.json"
     search_previous = metrics_dir / "clawhub-search-previous.json"
     search_report = metrics_dir / "clawhub-search-change-report.md"
+    search_report_json = metrics_dir / "clawhub-search-change-report.json"
     decision_json = metrics_dir / "clawhub-growth-decision.json"
     decision_report = metrics_dir / "clawhub-growth-decision.md"
 
@@ -644,8 +1055,10 @@ def run_monitor(
             for path in (
                 metrics_previous,
                 metrics_report,
+                metrics_report_json,
                 search_previous,
                 search_report,
+                search_report_json,
                 decision_json,
                 decision_report,
             )
@@ -788,26 +1201,29 @@ def run_monitor(
                 runner,
             )
 
-        metrics_report_text = (
-            staged_metrics_report.read_text(encoding="utf-8")
-            if staged_metrics_report.exists()
-            else None
-        )
-        search_report_text = (
-            staged_search_report.read_text(encoding="utf-8")
-            if staged_search_report.exists()
-            else None
-        )
-        metrics_comparison = (
-            read_json_object(staged_metrics_comparison)
-            if staged_metrics_comparison.exists()
-            else None
-        )
-        search_comparison = (
-            read_json_object(staged_search_comparison)
-            if staged_search_comparison.exists()
-            else None
-        )
+        metrics_report_text = None
+        metrics_comparison = None
+        if old_metrics is not None:
+            metrics_report_text = read_required_report(
+                staged_metrics_report,
+                "指标比较器",
+            )
+            metrics_comparison = read_required_comparison(
+                staged_metrics_comparison,
+                "指标比较器",
+            )
+
+        search_report_text = None
+        search_comparison = None
+        if old_search is not None:
+            search_report_text = read_required_report(
+                staged_search_report,
+                "搜索比较器",
+            )
+            search_comparison = read_required_comparison(
+                staged_search_comparison,
+                "搜索比较器",
+            )
         combined_decision = apply_observation_gate(
             combine_decisions(
                 metrics_comparison,
@@ -830,9 +1246,17 @@ def run_monitor(
             outputs.append(
                 (metrics_report, metrics_report_text.encode("utf-8"))
             )
+        if metrics_comparison is not None:
+            outputs.append(
+                (metrics_report_json, json_bytes(metrics_comparison))
+            )
         if search_report_text is not None:
             outputs.append(
                 (search_report, search_report_text.encode("utf-8"))
+            )
+        if search_comparison is not None:
+            outputs.append(
+                (search_report_json, json_bytes(search_comparison))
             )
         outputs.extend(
             [
@@ -855,6 +1279,41 @@ def run_monitor(
         "decisionStatus": combined_decision["status"],
         "recommendedAction": combined_decision["recommendedAction"],
     }
+
+
+def run_monitor(
+    root: Path,
+    python_bin: str,
+    clawhub_bin: str,
+    timeout: int,
+    min_interval_hours: float = DEFAULT_MIN_INTERVAL_HOURS,
+    force: bool = False,
+    now: datetime | None = None,
+    runner: RunCommand = subprocess.run,
+) -> dict[str, Any]:
+    root = root.resolve()
+    requested_metrics_dir = root / "metrics"
+    if requested_metrics_dir.is_symlink():
+        raise RuntimeError("metrics 目录不能是 symlink")
+    requested_metrics_dir.mkdir(parents=True, exist_ok=True)
+    metrics_dir = requested_metrics_dir.resolve()
+    try:
+        metrics_dir.relative_to(root)
+    except ValueError as exc:
+        raise RuntimeError("metrics 目录必须位于仓库根目录内") from exc
+    with monitor_lock(metrics_dir) as locked_metrics_dir:
+        recover_output_bundle(locked_metrics_dir)
+        return _run_monitor_locked(
+            root,
+            python_bin,
+            clawhub_bin,
+            timeout,
+            min_interval_hours,
+            force,
+            now,
+            runner,
+            metrics_dir=locked_metrics_dir,
+        )
 
 
 def parse_args() -> argparse.Namespace:

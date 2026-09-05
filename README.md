@@ -227,7 +227,7 @@ python3 scripts/compare_clawhub_metrics.py \
 
 同一个离线对比器会自动识别搜索快照，输出 `up`、`down`、`gained`、`lost` 或 `unchanged`；查询配置发生变化时拒绝把两轮排名当作可比证据。
 
-它会先在临时目录完成两类采集，并在轮换前校验 schema、采集方法、`activeInstall: false`、catalog slug 全覆盖、query/limit 一致性以及本轮 15 分钟时间配对；生产 CLI 固定调用 `clawhub`，不接受替代可执行文件。随后才生成 Markdown 差异报告和机器可读 JSON 对比结果，并将 latest、previous、差异报告和组合闸门作为一个可回滚输出集合提交。任一采集、校验、对比或正式文件替换失败时，现有完整基线都会恢复。
+它会先获取单实例文件锁，再恢复上次被强制终止时留下的事务日志，确保读取基线前不存在半套输出。随后在临时目录完成两类采集，并在轮换前校验 schema、采集方法、`activeInstall: false`、catalog slug 全覆盖、query/limit 一致性以及本轮 15 分钟时间配对；生产 CLI 固定调用 `clawhub`，不接受替代可执行文件。Markdown、机器可读 JSON sidecar 和组合闸门全部完成后，多文件轮换会先持久化 `prepared` journal，再替换并同步全部输出，最后持久化 `committed` journal；崩溃恢复只回滚 `prepared` 事务，`committed` 事务保留新基线并完成清理。
 
 统一入口还会生成 `metrics/clawhub-growth-decision.json` 和 `metrics/clawhub-growth-decision.md`。只有指标与搜索两侧的 `evidenceQuality.decisionReady` 同时为 `true`，且前后两组指标/搜索快照的采集时间分别相差不超过 15 分钟，组合闸门才会返回 `decisionReady: true`；单侧合格只能继续观察，跨轮次误拼、污染、口径不一致或证据格式错误会优先要求修复数据质量。
 

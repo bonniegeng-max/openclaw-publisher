@@ -43,10 +43,16 @@ environment，届时使用该 environment 自己的 secret：
 3. 将 checker 与 validator 封装为同一受信任执行单元，并验证 control commit
    的 Git 对象类型、文件模式和摘要；只单独运行一遍 validator 不能阻止 checker
    随后重新加载候选副本。
-4. 受信任控制面显式接收候选仓库根目录，不能依赖导出路径推断 repo root。
-5. 验证 base、candidate commit、唯一授权提交、单 Skill 版本递增、完整摘要和
+4. 由 workflow 固定可信 Python 与 Git 可执行文件及 `PATH`，使用 `python -I`
+   启动 checker，并清除候选可控的 Python/Git 环境变量；checker 内部的路径自检
+   只能证明路径匹配，不能替代 launcher 的启动前信任。
+5. 在运行测试、编译或任何可能生成缓存的步骤之前，创建独立、干净、不可并发写入
+   的 candidate checkout；checker 会逐文件验证工作树与 HEAD 的 blob、类型和
+   执行位，但不把同主机恶意并发改写纳入 CLI 自证范围。
+6. 受信任控制面显式接收候选仓库根目录，不能依赖导出路径推断 repo root。
+7. 验证 base、candidate commit、唯一授权提交、单 Skill 版本递增、完整摘要和
    `authorized: true`。
-6. 输出允许发布的 slug、version、candidate commit 和最终 head。
+8. 输出允许发布的 slug、version、candidate commit 和最终 head。
 
 只要 preflight 失败，后续 job 不创建 deployment，也不接触任何 ClawHub secret。
 
@@ -129,6 +135,10 @@ reviewer 审核：
 - 发起者不能自批。
 - 非 `main` ref 不能进入 production environment。
 - 修改 checker、validator、policy 或 workflow 的同批 Skill release 会失败。
+- checker 必须由固定 SHA 的 launcher 以 `python -I` 启动，候选 `PYTHONPATH`、
+  Git config 注入、replace refs、fsmonitor 与仓库重定向变量均不能生效。
+- candidate checkout 在 preflight 前保持无 ignored/untracked 文件，且执行期间
+  不与其他 job 或进程共享可写工作区。
 - publish 只处理授权的一个 slug，不会扫描并发布全部目录。
 - 真实发布成功仍只代表 E2；E3 moderation 与 E4 隔离安装必须单独完成。
 

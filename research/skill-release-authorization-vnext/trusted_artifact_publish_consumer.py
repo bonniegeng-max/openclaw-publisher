@@ -11,6 +11,7 @@ import re
 import selectors
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import time
@@ -90,6 +91,25 @@ STAGING_OBSERVATION_FIELDS = {
 ARTIFACT_VERIFICATION_FIELDS = {
     "manifestMatched", "artifactDigestVerified", "fileCount", "contentBytes",
 }
+ATTESTED_FRAME_MAGIC = b"trusted-unified-consumer-v1\0"
+ATTESTED_FRAME_PARTS = 4
+ATTESTED_NONCE_BYTES = 32
+MAX_ATTESTED_FRAME_PART_BYTES = 2 * 1024 * 1024
+ATTESTED_INVOCATION_FIELDS = {
+    "schemaVersion", "researchStatus", "operation", "candidateRoot",
+    "controlRoot", "artifactParent", "controlCommit", "baseCommit",
+    "headCommit", "catalog", "event",
+}
+ATTESTED_CATALOG_FIELDS = {"path", "mode", "blobOid", "sha256"}
+ATTESTED_EVENT_FIELDS = {
+    "name", "ref", "changedOnly", "headArgument", "skillPath",
+    "before", "sha", "eventRef",
+}
+ATTESTED_ENVELOPE_FIELDS = {
+    "schemaVersion", "phase", "nonce", "invocationDigest", "resultDigest",
+    "result",
+}
+_CONSUMED_ATTESTATION_NONCES: set[bytes] = set()
 
 
 SIMULATOR = r"""
@@ -226,6 +246,158 @@ def parse_strict_json(raw: bytes, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a JSON object")
     return value
+
+
+def frame_parts(*parts: bytes) -> bytes:
+    if len(parts) != ATTESTED_FRAME_PARTS:
+        raise ValueError("attested consumer frame must contain exactly four parts")
+    if any(
+        not part or len(part) > MAX_ATTESTED_FRAME_PART_BYTES
+        for part in parts
+    ):
+        raise ValueError("attested consumer frame part is empty or too large")
+    return ATTESTED_FRAME_MAGIC + b"".join(
+        struct.pack(">Q", len(part)) + part for part in parts
+    )
+
+
+def parse_frame_parts(raw: bytes) -> list[bytes]:
+    if not raw.startswith(ATTESTED_FRAME_MAGIC):
+        raise ValueError("attested consumer frame magic is invalid")
+    offset = len(ATTESTED_FRAME_MAGIC)
+    parts: list[bytes] = []
+    for _ in range(ATTESTED_FRAME_PARTS):
+        if len(raw) < offset + 8:
+            raise ValueError("attested consumer frame is truncated")
+        length = struct.unpack(">Q", raw[offset:offset + 8])[0]
+        offset += 8
+        if (
+            length == 0
+            or length > MAX_ATTESTED_FRAME_PART_BYTES
+            or len(raw) < offset + length
+        ):
+            raise ValueError("attested consumer frame length is invalid")
+        parts.append(raw[offset:offset + length])
+        offset += length
+    if offset != len(raw):
+        raise ValueError("attested consumer frame has trailing bytes")
+    return parts
+
+
+def result_envelope(
+    phase: str,
+    nonce: bytes,
+    invocation: dict[str, Any],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    if phase not in {"preflight", "staging"}:
+        raise ValueError("attested result phase is invalid")
+    if type(nonce) is not bytes or len(nonce) != ATTESTED_NONCE_BYTES:
+        raise ValueError("attested run nonce must contain exactly 32 bytes")
+    invocation_bytes = canonical_json_bytes(invocation)
+    result_bytes = canonical_json_bytes(result)
+    return {
+        "schemaVersion": 1,
+        "phase": phase,
+        "nonce": nonce.hex(),
+        "invocationDigest":
+            "sha256:" + hashlib.sha256(invocation_bytes).hexdigest(),
+        "resultDigest": "sha256:" + hashlib.sha256(result_bytes).hexdigest(),
+        "result": result,
+    }
+
+
+def encode_attested_frame(
+    invocation: dict[str, Any],
+    preflight_result: dict[str, Any],
+    staging_result: dict[str, Any],
+    catalog_blob: bytes,
+    nonce: bytes,
+) -> bytes:
+    return frame_parts(
+        canonical_json_bytes(invocation),
+        canonical_json_bytes(
+            result_envelope("preflight", nonce, invocation, preflight_result)
+        ),
+        canonical_json_bytes(
+            result_envelope("staging", nonce, invocation, staging_result)
+        ),
+        catalog_blob,
+    )
+
+
+def validate_attested_invocation(
+    value: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    if set(value) != ATTESTED_INVOCATION_FIELDS or value != expected:
+        raise ValueError("attested invocation is incomplete, unexpected, or mismatched")
+    if (
+        value["schemaVersion"] != 1
+        or value["researchStatus"] != RESEARCH_STATUS
+        or value["operation"] != "dry-run-simulation"
+    ):
+        raise ValueError("attested invocation operation is invalid")
+    for field in ("candidateRoot", "controlRoot", "artifactParent"):
+        path = Path(value[field])
+        if (
+            not isinstance(value[field], str)
+            or not path.is_absolute()
+            or os.path.normpath(value[field]) != value[field]
+        ):
+            raise ValueError(f"attested invocation {field} is not canonical")
+    for field in ("controlCommit", "baseCommit", "headCommit"):
+        if (
+            not isinstance(value[field], str)
+            or COMMIT_PATTERN.fullmatch(value[field]) is None
+        ):
+            raise ValueError(f"attested invocation {field} is invalid")
+    catalog = value["catalog"]
+    if not isinstance(catalog, dict) or set(catalog) != ATTESTED_CATALOG_FIELDS:
+        raise ValueError("attested invocation catalog evidence is invalid")
+    if (
+        catalog["path"] != ".clawhub/" + "skill-" + "catalog.json"
+        or catalog["mode"] != "100644"
+        or not isinstance(catalog["blobOid"], str)
+        or OID_PATTERN.fullmatch(catalog["blobOid"]) is None
+    ):
+        raise ValueError("attested invocation catalog blob is invalid")
+    validate_digest(catalog["sha256"], "attested invocation catalog sha256")
+    event = value["event"]
+    if not isinstance(event, dict) or set(event) != ATTESTED_EVENT_FIELDS:
+        raise ValueError("attested invocation event is invalid")
+    if (
+        event["name"] != "workflow_dispatch"
+        or event["changedOnly"] is not True
+        or event["headArgument"] != "HEAD"
+        or not all(
+            isinstance(event[field], str)
+            for field in ("ref", "skillPath", "before", "sha", "eventRef")
+        )
+    ):
+        raise ValueError("attested invocation event policy is invalid")
+
+
+def validate_attested_envelope(
+    value: dict[str, Any],
+    phase: str,
+    nonce: bytes,
+    invocation_digest: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != ATTESTED_ENVELOPE_FIELDS:
+        raise ValueError(f"attested {phase} envelope fields are invalid")
+    if (
+        value["schemaVersion"] != 1
+        or value["phase"] != phase
+        or value["nonce"] != nonce.hex()
+        or value["invocationDigest"] != invocation_digest
+        or not isinstance(value["result"], dict)
+        or value["resultDigest"]
+        != "sha256:"
+        + hashlib.sha256(canonical_json_bytes(value["result"])).hexdigest()
+    ):
+        raise ValueError(f"attested {phase} envelope is not bound to this run")
+    return value["result"]
 
 
 def open_absolute_directory(path: Path, label: str) -> int:
@@ -1674,6 +1846,101 @@ def consume(
         "artifactDigest": manifest["artifactDigest"],
         "allFileDescriptorsRevalidated": True,
         "errors": [],
+    }
+
+
+def consume_attested_frame(
+    frame: bytes,
+    expected_nonce: bytes,
+    expected_invocation: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    if (
+        type(expected_nonce) is not bytes
+        or len(expected_nonce) != ATTESTED_NONCE_BYTES
+    ):
+        raise ValueError("expected run nonce must contain exactly 32 bytes")
+    parts = parse_frame_parts(frame)
+    invocation = parse_strict_json(parts[0], "attested invocation")
+    if parts[0] != canonical_json_bytes(invocation):
+        raise ValueError("attested invocation is not canonical JSON")
+    validate_attested_invocation(invocation, expected_invocation)
+    invocation_digest = (
+        "sha256:" + hashlib.sha256(parts[0]).hexdigest()
+    )
+    preflight_envelope = parse_strict_json(
+        parts[1], "attested preflight envelope"
+    )
+    staging_envelope = parse_strict_json(
+        parts[2], "attested staging envelope"
+    )
+    if parts[1] != canonical_json_bytes(preflight_envelope):
+        raise ValueError("attested preflight envelope is not canonical JSON")
+    if parts[2] != canonical_json_bytes(staging_envelope):
+        raise ValueError("attested staging envelope is not canonical JSON")
+    authorization = validate_attested_envelope(
+        preflight_envelope,
+        "preflight",
+        expected_nonce,
+        invocation_digest,
+    )
+    staging = validate_attested_envelope(
+        staging_envelope,
+        "staging",
+        expected_nonce,
+        invocation_digest,
+    )
+    catalog_evidence = invocation["catalog"]
+    if (
+        "sha256:" + hashlib.sha256(parts[3]).hexdigest()
+        != catalog_evidence["sha256"]
+    ):
+        raise ValueError("candidate HEAD catalog blob digest does not match invocation")
+    catalog = parse_strict_json(parts[3], "candidate HEAD catalog blob")
+    if authorization.get("baseCommit") != invocation["baseCommit"]:
+        raise ValueError("attested preflight base commit does not match invocation")
+    if authorization.get("headCommit") != invocation["headCommit"]:
+        raise ValueError("attested preflight head commit does not match invocation")
+    manifest = staging.get("manifest")
+    if (
+        not isinstance(manifest, dict)
+        or not isinstance(manifest.get("source"), dict)
+        or manifest["source"].get("commit") != invocation["headCommit"]
+    ):
+        raise ValueError("attested staging head commit does not match invocation")
+    if expected_nonce in _CONSUMED_ATTESTATION_NONCES:
+        raise ValueError("attested run nonce has already been consumed")
+    _CONSUMED_ATTESTATION_NONCES.add(expected_nonce)
+    result = consume(
+        authorization,
+        staging,
+        catalog,
+        Path(invocation["artifactParent"]),
+        Path(invocation["candidateRoot"]),
+        Path(invocation["controlRoot"]),
+        invocation["controlCommit"],
+        invocation["headCommit"],
+        now=now,
+    )
+    result.pop("networkUsed", None)
+    return {
+        **result,
+        "authorizationProvenanceVerified": False,
+        "authorizationProvenance":
+            "process-local-length-framed-control-blobs-not-externally-authenticated",
+        "controlCommitExternallyAuthenticated": False,
+        "processLocalFrameBinding": True,
+        "persistentReplayProtection": False,
+        "oneTimeRunReplayProtection": False,
+        "noNetworkCallsRequested": True,
+        "networkIsolationEnforced": False,
+        "attestedInvocationDigest": invocation_digest,
+        "attestedCatalogBlobOid": catalog_evidence["blobOid"],
+        "envelopedPhases": ["preflight", "staging"],
+        "consumerExecutionCompleted": True,
+        "trustUpgradeRequired":
+            "external-control-commit-authentication-and-persistent-replay-store",
     }
 
 

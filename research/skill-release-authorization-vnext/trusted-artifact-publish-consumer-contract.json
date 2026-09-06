@@ -4,37 +4,25 @@
   "consumer": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
   "auditor": "research/skill-release-authorization-vnext/check_trusted_artifact_publish_consumer_contract.py",
   "consumerEvidence": {
-    "baseline": {
-      "path": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
-      "commit": "28529cba16d2258f493d639d686c5b06e47e6583",
-      "mode": "100644",
-      "blobOid": "69b1383bc9016a3ff84033643f00cf9eb7c13b51",
-      "sha256": "sha256:300b0e474782c8186e9b0dfd3df293fc7dfb4c216a442804052398c2fdf321a6"
-    },
+    "baseline": null,
     "draft": {
       "path": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
       "mode": "100644",
-      "sha256": "sha256:300b0e474782c8186e9b0dfd3df293fc7dfb4c216a442804052398c2fdf321a6"
+      "sha256": "sha256:79ec076837df003ba9c5b0ec2d47ae549e28fa24ded36e6a8dbedcaca81a33af"
     }
   },
   "auditorEvidence": {
-    "baseline": {
-      "path": "research/skill-release-authorization-vnext/check_trusted_artifact_publish_consumer_contract.py",
-      "commit": "28529cba16d2258f493d639d686c5b06e47e6583",
-      "mode": "100644",
-      "blobOid": "dbe697ef8f6b46c2e5abf9a89e2b438f36afe071",
-      "sha256": "sha256:9db289dcefdf47ee73e992c3a18b67e2ac2126cd7e704bdc28c12e5635574da7"
-    },
+    "baseline": null,
     "draft": {
       "path": "research/skill-release-authorization-vnext/check_trusted_artifact_publish_consumer_contract.py",
       "mode": "100644",
-      "sha256": "sha256:9db289dcefdf47ee73e992c3a18b67e2ac2126cd7e704bdc28c12e5635574da7"
+      "sha256": "sha256:9384e4c784587384af9a59163fed247411a2f1a423a51c815bbeba83084bf915"
     }
   },
   "twoStageAnchoring": {
     "stageOne": "worktree-draft-sha256-audited",
     "stageTwo": "post-commit-baseline-commit-mode-blobOid-sha256-required",
-    "localIntegrityPinned": true,
+    "localIntegrityPinned": false,
     "deploymentBlockedUntilStageTwo": true,
     "deploymentRemainsBlockedAfterStageTwo": true,
     "remoteCommitVerified": false
@@ -82,6 +70,31 @@
     "oneTimeRunReplayProtection": false,
     "realMutationAllowed": false,
     "trustUpgradeRequired": "external-launcher-pinned-to-verified-control-blob"
+  },
+  "attestedMemoryFrame": {
+    "entryPoint": "consume_attested_frame",
+    "requiredNonceBytes": 32,
+    "expectedNonceOutOfBand": true,
+    "crossProcessReplayAccepted": true,
+    "sameProcessReuseAccepted": false,
+    "processLocalFrameBinding": true,
+    "persistentReplayProtection": false,
+    "canonicalInvocationRequired": true,
+    "lengthPrefix": "unsigned-big-endian-64-bit",
+    "envelopedPhases": [
+      "preflight",
+      "staging"
+    ],
+    "consumerExecutionCompleted": true,
+    "phaseResultDigestRequired": true,
+    "candidateHeadCatalogDigestRequired": true,
+    "baseHeadAndEventBound": true,
+    "authorizationProvenanceVerified": false,
+    "controlCommitExternallyAuthenticated": false,
+    "provenance": "process-local-length-framed-control-blobs-not-externally-authenticated",
+    "noNetworkCallsRequested": true,
+    "networkIsolationEnforced": false,
+    "realMutationAllowed": false
   },
   "artifactBoundary": {
     "artifactParentMode": "0700",
@@ -157,8 +170,8 @@
     "currentLevel": "E0",
     "deploymentReady": false,
     "consumerDeploymentAllowed": false,
-    "consumerBaselinePinned": true,
-    "auditorBaselinePinned": true,
+    "consumerBaselinePinned": false,
+    "auditorBaselinePinned": false,
     "formalWorkflowWired": false,
     "downloadableClaimAllowed": false,
     "oneTimeRunReplayProtection": false,

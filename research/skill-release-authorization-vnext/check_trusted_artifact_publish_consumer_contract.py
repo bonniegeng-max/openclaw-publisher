@@ -33,7 +33,7 @@ TOP_LEVEL_FIELDS = {
     "schemaVersion", "status", "consumer", "auditor", "formalWorkflowModified",
     "inputBinding", "artifactBoundary", "cliBoundary", "failurePolicy",
     "repositoryBoundary", "evidenceBoundary", "consumerEvidence",
-    "auditorEvidence", "twoStageAnchoring",
+    "auditorEvidence", "twoStageAnchoring", "attestedMemoryFrame",
 }
 DRAFT_FIELDS = {"path", "mode", "sha256"}
 BASELINE_FIELDS = {"path", "commit", "mode", "blobOid", "sha256"}
@@ -111,6 +111,29 @@ EXPECTED_ARTIFACT = {
     "pathReopenForConsumption": False,
     "symlinks": "reject",
     "hardlinks": "reject",
+}
+EXPECTED_ATTESTED_FRAME = {
+    "entryPoint": "consume_attested_frame",
+    "requiredNonceBytes": 32,
+    "expectedNonceOutOfBand": True,
+    "crossProcessReplayAccepted": True,
+    "sameProcessReuseAccepted": False,
+    "processLocalFrameBinding": True,
+    "persistentReplayProtection": False,
+    "canonicalInvocationRequired": True,
+    "lengthPrefix": "unsigned-big-endian-64-bit",
+    "envelopedPhases": ["preflight", "staging"],
+    "consumerExecutionCompleted": True,
+    "phaseResultDigestRequired": True,
+    "candidateHeadCatalogDigestRequired": True,
+    "baseHeadAndEventBound": True,
+    "authorizationProvenanceVerified": False,
+    "controlCommitExternallyAuthenticated": False,
+    "provenance":
+        "process-local-length-framed-control-blobs-not-externally-authenticated",
+    "noNetworkCallsRequested": True,
+    "networkIsolationEnforced": False,
+    "realMutationAllowed": False,
 }
 EXPECTED_CLI = {
     "default": "simulation-only",
@@ -460,6 +483,7 @@ def evaluate(root: Path, contract_path: Path) -> dict[str, Any]:
     }
     for name, key, expected in (
         ("input-binding", "inputBinding", EXPECTED_INPUT),
+        ("attested-memory-frame", "attestedMemoryFrame", EXPECTED_ATTESTED_FRAME),
         ("artifact-boundary", "artifactBoundary", EXPECTED_ARTIFACT),
         ("cli-boundary", "cliBoundary", EXPECTED_CLI),
         ("failure-policy", "failurePolicy", EXPECTED_FAILURE),
@@ -499,6 +523,16 @@ def evaluate(root: Path, contract_path: Path) -> dict[str, Any]:
         "selectors.DefaultSelector", "O_NOFOLLOW", "dir_fd=",
         '"publicationAttempted": False', '"networkUsed": False',
         '"credentialsAccepted": False', '"cliMode": "simulation-only"',
+        "consume_attested_frame", "encode_attested_frame",
+        "ATTESTED_NONCE_BYTES = 32", "validate_attested_envelope",
+        "_CONSUMED_ATTESTATION_NONCES",
+        '"processLocalFrameBinding": True',
+        '"persistentReplayProtection": False',
+        '"controlCommitExternallyAuthenticated": False',
+        '"noNetworkCallsRequested": True',
+        '"networkIsolationEnforced": False',
+        '"envelopedPhases": ["preflight", "staging"]',
+        '"consumerExecutionCompleted": True',
     )
     forbidden = (
         "requests", "urllib", "socket.", "http://", "https://",

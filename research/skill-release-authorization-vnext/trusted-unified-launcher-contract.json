@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "status": "research-only-not-wired",
+  "launcher": "research/skill-release-authorization-vnext/trusted_unified_launcher.py",
+  "consumer": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
+  "auditor": "research/skill-release-authorization-vnext/check_trusted_unified_launcher_contract.py",
+  "test": "tests/test_trusted_unified_launcher.py",
+  "execution": {
+    "operation": "dry-run-simulation",
+    "formalWorkflowWired": false,
+    "noNetworkCallsRequested": true,
+    "networkIsolationEnforced": false,
+    "credentialsAccepted": false,
+    "publicationAttempted": false,
+    "intermediateResultFiles": false,
+    "fixedGitExecutable": "/usr/bin/git",
+    "pythonIsolatedMode": true,
+    "childEnvironment": "allowlist-only"
+  },
+  "controlPlane": {
+    "singleControlCommit": true,
+    "childExecutedBlobComponents": [
+      "preflight",
+      "staging",
+      "consumer"
+    ],
+    "parentExecutedControlBlob": false,
+    "independentIsolatedPhaseProcesses": true,
+    "worktreeControlSourceExecution": false,
+    "controlBlobMaximumBytes": 2097152,
+    "candidateAndControlIndependent": true
+  },
+  "attestation": {
+    "nonceBytes": 32,
+    "nonceStorage": "memory-only",
+    "nonceReuseAllowed": false,
+    "canonicalInvocation": true,
+    "phaseOrder": [
+      "preflight",
+      "staging",
+      "consumer"
+    ],
+    "envelopedPhaseOrder": [
+      "preflight",
+      "staging"
+    ],
+    "consumerExecutionCompleted": true,
+    "phaseResultDigests": true,
+    "invocationDigest": "sha256",
+    "pipeFrame": "unsigned-big-endian-64-bit-length-prefix",
+    "frameMagic": "trusted-unified-phase-v1",
+    "processLocalFrameBinding": true,
+    "persistentReplayProtection": false,
+    "crossProcessReplayAccepted": true,
+    "authorizationProvenanceVerified": false,
+    "controlCommitExternallyAuthenticated": false
+  },
+  "bindings": {
+    "base": "invocation=preflight-result",
+    "head": "candidate-HEAD=invocation=preflight-result=staging-manifest",
+    "catalog": "candidate-HEAD-mode-100644-blobOid-sha256",
+    "event": "workflow_dispatch-changed-only-canonical-fields",
+    "artifact": "staging-result=consumer-verified-package-fd"
+  },
+  "limits": {
+    "gitTimeoutSeconds": 30,
+    "gitCombinedOutputBytes": 8388608,
+    "phaseTimeoutSeconds": 240,
+    "phaseCombinedOutputBytes": 2097152,
+    "timeoutPolicy": "terminate-process-group-and-reap",
+    "overflowPolicy": "terminate-process-group-and-reap"
+  },
+  "repositoryBoundary": {
+    "formalWorkflows": "unchanged",
+    "skillsDirectory": "unchanged",
+    "catalogWorktree": "unchanged",
+    "researchOnlyFiles": [
+      "research/skill-release-authorization-vnext/trusted_unified_launcher.py",
+      "research/skill-release-authorization-vnext/trusted-unified-launcher-contract.json",
+      "research/skill-release-authorization-vnext/check_trusted_unified_launcher_contract.py",
+      "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
+      "research/skill-release-authorization-vnext/trusted-artifact-publish-consumer-contract.json",
+      "tests/test_trusted_unified_launcher.py",
+      "tests/test_trusted_artifact_publish_consumer.py"
+    ]
+  },
+  "evidenceBoundary": {
+    "currentLevel": "E0",
+    "deploymentReady": false,
+    "realMutationAllowed": false,
+    "downloadableClaimAllowed": false,
+    "launcherBaselinePinned": false,
+    "auditorBaselinePinned": false,
+    "consumerBaselinePinned": false
+  },
+  "launcherEvidence": {
+    "baseline": null,
+    "draft": {
+      "path": "research/skill-release-authorization-vnext/trusted_unified_launcher.py",
+      "mode": "100644",
+      "sha256": "sha256:d6ff84f6fa381fa336d51d430f28038aafbf2b8a31bc26d2d85746d7d68976ee"
+    }
+  },
+  "auditorEvidence": {
+    "baseline": null,
+    "draft": {
+      "path": "research/skill-release-authorization-vnext/check_trusted_unified_launcher_contract.py",
+      "mode": "100644",
+      "sha256": "sha256:e734742fba341918b0fa30e1305ccc8ffe0788ccde89a7ea2051220f639581e4"
+    }
+  },
+  "consumerEvidence": {
+    "baseline": null,
+    "draft": {
+      "path": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
+      "mode": "100644",
+      "sha256": "sha256:79ec076837df003ba9c5b0ec2d47ae549e28fa24ded36e6a8dbedcaca81a33af"
+    }
+  },
+  "twoStageAnchoring": {
+    "stageOne": "worktree-draft-sha256-audited",
+    "stageTwo": "post-commit-baseline-commit-mode-blobOid-sha256-required",
+    "localIntegrityPinned": false,
+    "deploymentBlockedUntilStageTwo": true,
+    "deploymentRemainsBlockedAfterStageTwo": true,
+    "remoteCommitVerified": false
+  }
+}

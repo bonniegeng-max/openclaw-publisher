@@ -39,10 +39,10 @@
     "evidence": null,
     "launcherDraft": {
       "path": "research/skill-release-authorization-vnext/trusted_preflight_launcher.py",
-      "commit": "c1607f241575765b0f7629112593b907d6130ad4",
+      "commit": "2fe0f95f917b05a900c12447b08d28828c120525",
       "mode": "100644",
-      "blobOid": "331229d3673b5c578337dbc423e6b15474058c87",
-      "sha256": "sha256:fc75ce8c4c74e82a66e58c6efcec33d052a86c25a309430be414e2673fb511b5"
+      "blobOid": "d63eea2cdebb33385ff5aeb7150a37147d47650b",
+      "sha256": "sha256:8d50a702bbe21c2e42d662f351f514e03ab52bbc7dc9bfb12361e2c494a52b2a"
     }
   },
   "trustedReusableWorkflow": {

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "offline-contract-ready-not-wired",
   "targetRepository": "bonniegeng-max/openclaw-publisher",
   "formalWorkflows": {

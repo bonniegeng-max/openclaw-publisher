@@ -138,8 +138,13 @@ def bind_control_files(root, contract, commit):
 class WorkflowIntegrationContractTests(unittest.TestCase):
     def test_repository_contract_is_honest_and_blocked(self):
         result = MODULE.evaluate(ROOT, CONTRACT)
+        contract = load_contract()
 
         self.assertTrue(result["valid"], result["errors"])
+        self.assertEqual(
+            contract["schemaVersion"],
+            MODULE.SUPPORTED_SCHEMA_VERSION,
+        )
         self.assertFalse(result["deploymentReady"])
         self.assertEqual(
             result["contractStatus"],
@@ -173,6 +178,24 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         ):
             with self.subTest(gate=gate):
                 self.assertIn(gate, result["blockingGates"])
+
+    def test_only_schema_version_two_is_accepted(self):
+        for version in (1, 3, True, None, "2"):
+            with self.subTest(version=version):
+                contract = load_contract()
+                contract["schemaVersion"] = version
+                with tempfile.TemporaryDirectory() as directory:
+                    result = MODULE.evaluate(
+                        ROOT,
+                        write_contract(directory, contract),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["checks"]["schema-version"])
+                self.assertIn(
+                    "schemaVersion must equal 2",
+                    result["errors"],
+                )
 
     def test_contract_uses_local_control_commit_and_no_future_fake_sha(self):
         contract = load_contract()
@@ -771,6 +794,7 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             )
 
         self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["environment-contract"])
         self.assertTrue(
             any(
                 "clawhub-production must remain unverified" in error
@@ -782,7 +806,7 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             duplicate = Path(directory) / "duplicate.json"
             duplicate.write_text(
-                '{"schemaVersion": 1, "schemaVersion": 1}\n',
+                '{"schemaVersion": 2, "schemaVersion": 2}\n',
                 encoding="utf-8",
             )
             duplicate_result = MODULE.evaluate(ROOT, duplicate)

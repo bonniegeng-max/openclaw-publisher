@@ -145,6 +145,10 @@ reviewer 审核：
   Git config 注入、replace refs、fsmonitor 与仓库重定向变量均不能生效。
 - candidate checkout 在 preflight 前保持无 ignored/untracked 文件，且执行期间
   不与其他 job 或进程共享可写工作区。
+- `workflow_dispatch` 不得直接进入真实 publish；手动运行必须限定为 dry-run，
+  或显式绑定单一目标、base 和独立批准。
+- `changed_only: true` 且缺少有效 base 与显式 `skill_path` 时必须立即失败，不能
+  退化为扫描并发布全部 Skill。
 - publish 只处理授权的一个 slug，不会扫描并发布全部目录。
 - 真实发布成功仍只代表 E2；E3 moderation 与 E4 隔离安装必须单独完成。
 
@@ -152,7 +156,8 @@ reviewer 审核：
 才能把本目录状态从 `offline-contract-ready-not-wired` 改为
 `wired-and-protected`。
 
-仓内 `workflow-integration-contract.json` 只记录可复核事实和未完成 gate。其
+仓内 `workflow-integration-contract.json` 当前使用 schema v2，只记录可复核
+事实和未完成 gate。其
 离线 checker 不解析 YAML，也不能证明 environment 的真实配置或 reviewer 身份；
 这些结论必须来自 GitHub API/受保护环境产生的外部证据，并在接线提交之外完成
 复核。缺少外部证据时，`deploymentReady` 必须保持 `false`。

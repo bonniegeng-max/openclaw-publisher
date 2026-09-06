@@ -20,6 +20,10 @@ GitHub environment、受信任 workflow SHA 和 secret 迁移方案见
 python3 research/skill-release-authorization-vnext/check_workflow_integration_contract.py
 ```
 
+当前合同使用 schema v2。相较初始 v1，它强制要求 caller Git blob 基线、
+trusted control 文件的 mode/blob 证据，以及 launcher draft 的固定提交证据；
+旧 v1 或未知未来版本均 fail-closed。
+
 当前预期退出码为 `1`：合同本身有效，但 `deploymentReady` 必须保持
 `false`。该检查器只核验独立本地 Git 数据库、提交、mode、blob OID 与摘要的一致
 性，不解析 YAML，也不把本地 `origin`、remote-tracking ref、environment 名称、

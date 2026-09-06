@@ -16,6 +16,7 @@ from typing import Any
 
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+SUPPORTED_SCHEMA_VERSION = 2
 EXPECTED_STATUS = "offline-contract-ready-not-wired"
 EXPECTED_REPOSITORY = "bonniegeng-max/openclaw-publisher"
 EXPECTED_CALLER = ".github/workflows/clawhub-skill-publish.yml"
@@ -408,8 +409,8 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         errors,
         "schema-version",
         type(contract.get("schemaVersion")) is int
-        and contract.get("schemaVersion") == 1,
-        "schemaVersion must equal 1",
+        and contract.get("schemaVersion") == SUPPORTED_SCHEMA_VERSION,
+        f"schemaVersion must equal {SUPPORTED_SCHEMA_VERSION}",
     )
     add_check(
         checks,
@@ -718,6 +719,7 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         and set(environments) == {"validation", "production"}
     )
     if environments_valid:
+        environment_items_valid = True
         for key, expected_name in (
             ("validation", "clawhub-validation"),
             ("production", "clawhub-production"),
@@ -737,12 +739,14 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
                 and value["evidence"] is None
                 and value["requirements"] == REQUIRED_ENVIRONMENT_RULES
             )
+            environment_items_valid = environment_items_valid and valid
             checks[f"{key}-environment-not-claimed"] = valid
             if not valid:
                 errors.append(
                     f"{expected_name} must remain unverified until external evidence exists"
                 )
             blockers.append(f"{key}-environment")
+        environments_valid = environment_items_valid
     else:
         errors.append("environments must define validation and production")
     checks["environment-contract"] = environments_valid

@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "status": "research-only-not-wired",
+  "realMutation": false,
+  "runIdentity": {
+    "requiredFields": [
+      "repository_id",
+      "workflow_ref",
+      "workflow_sha",
+      "run_id",
+      "run_attempt",
+      "job",
+      "environment"
+    ],
+    "rerunRule": "same-run-id-different-run-attempt-is-distinct-execution"
+  },
+  "workflowTrust": {
+    "fullCommitShaRequired": true,
+    "workflowRefMustEndWithWorkflowSha": true
+  },
+  "environmentAuthentication": {
+    "requiredReviewers": true,
+    "preventSelfReview": true,
+    "purpose": "secret-release-only",
+    "authenticates": [
+      "secret-release"
+    ],
+    "doesNotAuthorize": [
+      "release-mutation",
+      "replay-prevention",
+      "ledger-reservation"
+    ]
+  },
+  "concurrency": {
+    "purpose": "serialization-only",
+    "persistentReplayProtection": false,
+    "authorizationEvidence": false
+  },
+  "replayProtection": {
+    "requiredForRealMutation": true,
+    "reservationKeyFields": [
+      "repository_id",
+      "environment",
+      "release_id",
+      "artifact_digest"
+    ],
+    "ledgerRequirements": {
+      "independent": true,
+      "durable": true,
+      "atomicCheckAndReserve": true,
+      "beforeSecretRelease": true,
+      "beforeMutation": true
+    }
+  },
+  "currentImplementation": {
+    "ledgerImplemented": false,
+    "ledgerEvidence": null,
+    "realMutationBlocker": "independent-atomic-ledger-reservation-not-implemented"
+  },
+  "auditorEvidence": {
+    "baseline": null,
+    "draft": {
+      "path": "research/skill-release-authorization-vnext/check_protected_release_runtime_contract.py",
+      "commit": null,
+      "mode": "100644",
+      "blobOid": null,
+      "sha256": "sha256:ec6f8ab2316cd7d1514b2418762848013d03037af2e33c5770f031e5e6b5b98e"
+    }
+  },
+  "twoStageAnchoring": {
+    "local": false,
+    "remote": false,
+    "deployment": "blocked"
+  },
+  "evidenceBoundary": {
+    "level": "E0",
+    "deployment": false,
+    "mutation": false
+  }
+}

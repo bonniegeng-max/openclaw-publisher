@@ -205,6 +205,9 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 base=head,
                 head=head,
                 skill_path="skills/demo-skill",
+                event_before=head,
+                event_sha=head,
+                event_ref="refs/heads/main",
             )
             changed = MODULE.evaluate(
                 root,
@@ -215,6 +218,9 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 base=base,
                 head=head,
                 skill_path="skills/demo-skill",
+                event_before=base,
+                event_sha=head,
+                event_ref="refs/heads/main",
             )
 
         self.assertFalse(missing_base["valid"])
@@ -228,7 +234,85 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
             unchanged["blockingReasons"][0],
         )
         self.assertTrue(changed["valid"], changed["blockingReasons"])
-        self.assertTrue(changed["mutationAllowed"])
+        self.assertTrue(changed["authorizationEligible"])
+        self.assertFalse(changed["authorized"])
+        self.assertFalse(changed["mutationAllowed"])
+
+    def test_real_publish_boundaries_match_trusted_event_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, event_before = make_repo(directory)
+            add_skill(root, "first-skill")
+            middle = commit_all(root, "first skill")
+            add_skill(root, "second-skill")
+            event_sha = commit_all(root, "second skill")
+            cases = (
+                (
+                    "truncated-base",
+                    {
+                        "base": middle,
+                        "head": event_sha,
+                        "event_before": event_before,
+                        "event_sha": event_sha,
+                        "event_ref": "refs/heads/main",
+                    },
+                    "must match trusted push event evidence",
+                ),
+                (
+                    "symbolic-head",
+                    {
+                        "base": event_before,
+                        "head": "HEAD",
+                        "event_before": event_before,
+                        "event_sha": event_sha,
+                        "event_ref": "refs/heads/main",
+                    },
+                    "head must be a full lowercase commit",
+                ),
+                (
+                    "missing-event-evidence",
+                    {
+                        "base": event_before,
+                        "head": event_sha,
+                    },
+                    "complete trusted push event evidence",
+                ),
+            )
+            for label, boundaries, expected in cases:
+                with self.subTest(label=label):
+                    result = MODULE.evaluate(
+                        root,
+                        event_name="push",
+                        ref="refs/heads/main",
+                        dry_run=False,
+                        changed_only=True,
+                        skill_path="skills/second-skill",
+                        **boundaries,
+                    )
+                    self.assertFalse(result["valid"])
+                    self.assertFalse(result["authorizationEligible"])
+                    self.assertFalse(result["authorized"])
+                    self.assertFalse(result["mutationAllowed"])
+                    self.assertIn(expected, result["blockingReasons"][0])
+
+            unbounded = MODULE.evaluate(
+                root,
+                event_name="push",
+                ref="refs/heads/main",
+                dry_run=False,
+                changed_only=False,
+                base=event_before,
+                head=event_sha,
+                skill_path="skills/second-skill",
+                event_before=event_before,
+                event_sha=event_sha,
+                event_ref="refs/heads/main",
+            )
+
+        self.assertFalse(unbounded["valid"])
+        self.assertIn(
+            "requires changed_only true",
+            unbounded["blockingReasons"][0],
+        )
 
     def test_inherited_path_cannot_select_git(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -319,11 +403,15 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 ref="refs/heads/main",
                 base=base,
                 head=head,
+                event_before=base,
+                event_sha=head,
+                event_ref="refs/heads/main",
             )
 
         self.assertTrue(result["valid"], result["blockingReasons"])
         self.assertEqual(result["decision"], "no-op")
         self.assertFalse(result["mutationAllowed"])
+        self.assertFalse(result["authorizationEligible"])
         self.assertEqual(result["targetCount"], 0)
         self.assertIsNone(result["skillPath"])
 
@@ -340,11 +428,16 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 ref="refs/heads/main",
                 base=base,
                 head=head,
+                event_before=base,
+                event_sha=head,
+                event_ref="refs/heads/main",
             )
 
         self.assertTrue(result["valid"], result["blockingReasons"])
         self.assertEqual(result["decision"], "single-target")
-        self.assertTrue(result["mutationAllowed"])
+        self.assertTrue(result["authorizationEligible"])
+        self.assertFalse(result["authorized"])
+        self.assertFalse(result["mutationAllowed"])
         self.assertEqual(result["targetCount"], 1)
         self.assertEqual(result["skillPath"], "skills/demo-skill")
         self.assertEqual(result["slug"], "demo-skill")
@@ -634,12 +727,17 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 "ref",
                 "dryRun",
                 "changedOnly",
+                "authorizationEligible",
+                "authorized",
                 "mutationAllowed",
                 "targetCount",
                 "skillPath",
                 "slug",
                 "baseCommit",
                 "headCommit",
+                "eventBefore",
+                "eventSha",
+                "eventRef",
                 "blockingReasons",
             },
         )

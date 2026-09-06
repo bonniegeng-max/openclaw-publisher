@@ -14,6 +14,8 @@ ClawHub 或改变 registry 状态。机器可读约束见
   `push` 且 ref 精确等于 `refs/heads/main`。
 - 真实 mutation 必须提供完整 base，并证明显式目标是该区间内唯一变化的 Skill；
   不允许重复发布未变化目标。
+- 真实 push 的 base、完整 head 与 ref 必须分别等于可信调用层提供的事件 before、
+  SHA 与 ref；guard 只比较这些值，不能自行认证字符串确实来自 GitHub。
 - `changed_only: true` 且既无有效 `base` 又无显式 `skill_path` 时 fail-closed。
 - 不允许无边界扫描整个 `skills/`；每次最多选择一个 Skill。
 - Git diff 中没有现存 Skill 时返回成功的 no-op，不把零目标解释为错误。
@@ -56,7 +58,8 @@ python3 research/skill-release-authorization-vnext/safe_publish_target_guard.py 
 ```
 
 退出码 `0` 表示选择成功或安全 no-op，退出码 `2` 表示输入、Git 边界或目标合同
-无效。只有 `mutationAllowed: true` 才表示事件、ref 与单目标边界允许后续进入
-授权层；它不表示发布获批，也不构成 E1-E4 证据。任何正式接线必须在观察窗口
-结束后另行评审，并原子地让所有联网、凭据和发布步骤依赖受信任门禁；本草案自身
-不能提供该保证。
+无效。`authorizationEligible: true` 只表示事件、ref 与单目标边界允许进入后续
+授权层，不构成 E1-E4；研究阶段 `authorized` 与 `mutationAllowed` 永远为
+`false`。任何正式
+接线必须在观察窗口结束后另行评审，并由固定 SHA launcher 绑定可信 GitHub 事件，
+再原子地让所有联网、凭据和发布步骤依赖授权成功；本草案自身不能提供该保证。

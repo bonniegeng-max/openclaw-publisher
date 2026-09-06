@@ -48,7 +48,17 @@
     "pullRequestRealPublish": "reject",
     "realPublishRef": "refs/heads/main",
     "realPublishRequiresBase": true,
+    "realPublishRequiresFullHead": true,
     "realPublishRequiresChangedTarget": true,
+    "realPublishRequiresChangedOnly": true,
+    "trustedEventFields": [
+      "eventBefore",
+      "eventSha",
+      "eventRef"
+    ],
+    "authorizationEligibleIsNotAuthorization": true,
+    "authorizedAlwaysFalse": true,
+    "mutationAllowedAlwaysFalse": true,
     "changedOnlyWithoutBaseOrSkillPath": "reject",
     "unboundedDirectoryScan": "reject",
     "cleanWorktreeRequired": true,

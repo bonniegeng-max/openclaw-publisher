@@ -142,8 +142,8 @@ workflow 还必须保证 control 与 candidate checkout 在整个 preflight 期�
 `safe-publish-target-contract.json` 与 `safe-publish-target-guard.md`。
 
 该 guard 未接入 `.github/workflows`，也不读取凭据、安装 Bun、调用 ClawHub 或
-访问 registry。其 `mutationAllowed: true` 只表示目标选择边界满足，不等于发布
-授权，更不构成 E1-E4 证据。
+访问 registry。其 `authorizationEligible: true` 只表示目标选择边界满足；研究
+阶段 `authorized` 与 `mutationAllowed` 永远为 `false`，不构成 E1-E4 证据。
 
 退出码：
 

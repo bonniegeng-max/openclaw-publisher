@@ -87,14 +87,21 @@ def decision_result(
     target: dict[str, str] | None = None,
     base_commit: str | None = None,
     head_commit: str | None = None,
+    event_before: str | None = None,
+    event_sha: str | None = None,
+    event_ref: str | None = None,
     blocking_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
-    mutation_allowed = (
+    authorization_eligible = (
         valid
         and target is not None
         and event_name == "push"
         and ref == PRODUCTION_REF
         and dry_run is False
+        and changed_only is True
+        and base_commit == event_before
+        and head_commit == event_sha
+        and ref == event_ref
     )
     return {
         "schemaVersion": SCHEMA_VERSION,
@@ -104,12 +111,17 @@ def decision_result(
         "ref": ref,
         "dryRun": dry_run,
         "changedOnly": changed_only,
-        "mutationAllowed": mutation_allowed,
+        "authorizationEligible": authorization_eligible,
+        "authorized": False,
+        "mutationAllowed": False,
         "targetCount": 1 if target is not None else 0,
         "skillPath": target["path"] if target is not None else None,
         "slug": target["slug"] if target is not None else None,
         "baseCommit": base_commit,
         "headCommit": head_commit,
+        "eventBefore": event_before,
+        "eventSha": event_sha,
+        "eventRef": event_ref,
         "blockingReasons": blocking_reasons or [],
     }
 
@@ -341,6 +353,9 @@ def evaluate(
     base: str = "",
     head: str = "HEAD",
     skill_path: str = "",
+    event_before: str = "",
+    event_sha: str = "",
+    event_ref: str = "",
 ) -> dict[str, Any]:
     base_commit: str | None = None
     head_commit: str | None = None
@@ -350,13 +365,31 @@ def evaluate(
     output_changed_only = (
         changed_only if type(changed_only) is bool else False
     )
+    output_event_before = (
+        event_before if isinstance(event_before, str) and event_before else None
+    )
+    output_event_sha = (
+        event_sha if isinstance(event_sha, str) and event_sha else None
+    )
+    output_event_ref = (
+        event_ref if isinstance(event_ref, str) and event_ref else None
+    )
     try:
         root = require_repository_root(repo_root)
         if not all(
             isinstance(value, str)
-            for value in (event_name, ref, base, head, skill_path)
+            for value in (
+                event_name,
+                ref,
+                base,
+                head,
+                skill_path,
+                event_before,
+                event_sha,
+                event_ref,
+            )
         ):
-            raise ValueError("event, ref, base, head, and skill_path must be strings")
+            raise ValueError("event, Git boundary, and skill_path inputs must be strings")
         if event_name not in SUPPORTED_EVENTS:
             raise ValueError("event_name is not supported")
         if type(dry_run) is not bool or type(changed_only) is not bool:
@@ -369,6 +402,23 @@ def evaluate(
             raise ValueError("real publish requires a push to refs/heads/main")
         if event_name == "push" and not dry_run and not base:
             raise ValueError("real publish requires a full base commit")
+        if event_name == "push" and not dry_run:
+            if changed_only is not True:
+                raise ValueError("real publish requires changed_only true")
+            if head == "HEAD" or COMMIT_PATTERN.fullmatch(head) is None:
+                raise ValueError("real publish head must be a full lowercase commit")
+            if (
+                COMMIT_PATTERN.fullmatch(event_before) is None
+                or COMMIT_PATTERN.fullmatch(event_sha) is None
+                or event_ref != PRODUCTION_REF
+            ):
+                raise ValueError(
+                    "real publish requires complete trusted push event evidence"
+                )
+            if base != event_before or head != event_sha or ref != event_ref:
+                raise ValueError(
+                    "base, head, and ref must match trusted push event evidence"
+                )
         if not changed_only and not skill_path:
             raise ValueError("unbounded Skill directory scans are forbidden")
         if changed_only and not base and not skill_path:
@@ -419,6 +469,9 @@ def evaluate(
             target=target,
             base_commit=base_commit,
             head_commit=head_commit,
+            event_before=output_event_before,
+            event_sha=output_event_sha,
+            event_ref=output_event_ref,
         )
     except (OSError, ValueError) as error:
         return decision_result(
@@ -430,6 +483,9 @@ def evaluate(
             changed_only=output_changed_only,
             base_commit=base_commit,
             head_commit=head_commit,
+            event_before=output_event_before,
+            event_sha=output_event_sha,
+            event_ref=output_event_ref,
             blocking_reasons=[str(error)],
         )
 
@@ -452,6 +508,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base", default="")
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--skill-path", default="")
+    parser.add_argument("--event-before", default="")
+    parser.add_argument("--event-sha", default="")
+    parser.add_argument("--event-ref", default="")
     try:
         args = parser.parse_args(argv)
         result = evaluate(
@@ -463,6 +522,9 @@ def main(argv: list[str] | None = None) -> int:
             base=args.base,
             head=args.head,
             skill_path=args.skill_path,
+            event_before=args.event_before,
+            event_sha=args.event_sha,
+            event_ref=args.event_ref,
         )
     except ValueError as error:
         result = decision_result(

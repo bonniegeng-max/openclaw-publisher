@@ -12,13 +12,13 @@
   },
   "trustedControl": {
     "repository": "bonniegeng-max/openclaw-publisher",
-    "commit": "ab3efecd9b22a0b64be38732482689c3ada7e927",
+    "commit": "ca9a1fa88e8fc17c25a74b0ec31d5b7916832ace",
     "files": [
       {
         "path": "scripts/check_skill_release_authorization.py",
         "mode": "100644",
-        "blobOid": "eba2cd2bf84f3513694d2572862ad2870315b17e",
-        "sha256": "sha256:b12f77bda7fe3b96c4bdaf213cb5448b9c7d4578fc668a34942ae68f29469af5"
+        "blobOid": "5367fb14f456a2d03bb17251f62111615a9e32f4",
+        "sha256": "sha256:cfa7c33d52dbddf0abd70677e9ef8949790162293ddf4127c6b797e3e9e2a2cd"
       },
       {
         "path": "scripts/validate_skill_catalog.py",

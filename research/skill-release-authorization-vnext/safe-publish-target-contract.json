@@ -4,10 +4,10 @@
   "guard": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
   "guardBaseline": {
     "path": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
-    "commit": "01740a5ba82a17e5104f77c44344c4744372cf2e",
+    "commit": "20f743f23dd9629328ace0f9f57b19a46b46a8f9",
     "mode": "100644",
-    "blobOid": "fed36f10888bff6d08a35e57975260677aa9a052",
-    "sha256": "sha256:dcc4a312c2a450ee765c9b270669411217c3a39ed38fca75fbe214fe326c34cb"
+    "blobOid": "91387586ddd0523a62937977cbdb0f159a1e7001",
+    "sha256": "sha256:2b45cbbc9f79765775027a77d4123691899cf0e44e2bdd55d583c83df2e4d3f9"
   },
   "guardDraft": {
     "path": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",

@@ -85,18 +85,35 @@ def run_git(
 
     def terminate_and_reap() -> None:
         try:
+            process.wait(timeout=0)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        group_error: OSError | None = None
+        try:
             os.killpg(process.pid, signal.SIGKILL)
-        except (OSError, ProcessLookupError):
+        except ProcessLookupError:
+            pass
+        except OSError as error:
             try:
-                process.kill()
-            except OSError:
-                pass
+                process.wait(timeout=0.05)
+                return
+            except subprocess.TimeoutExpired:
+                group_error = error
+                try:
+                    process.kill()
+                except OSError:
+                    pass
         try:
             process.wait(timeout=GIT_REAP_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as error:
             raise ValueError(
                 "Git process termination could not be confirmed"
             ) from error
+        if group_error is not None:
+            raise ValueError(
+                "Git process group termination failed"
+            ) from group_error
 
     assert process.stdout is not None
     assert process.stderr is not None
@@ -223,6 +240,14 @@ def decision_result(
 
 def lexical_absolute(path: Path) -> Path:
     return Path(os.path.abspath(os.fspath(path)))
+
+
+def git_single_line(value: str, label: str) -> str:
+    if value.endswith("\n"):
+        value = value[:-1]
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"{label} contains an unsupported line break")
+    return value
 
 
 def path_uses_symlink(path: Path) -> bool:
@@ -435,7 +460,9 @@ def require_repository_root(repo_root: Path) -> Path:
     top = run_git(root, "rev-parse", "--show-toplevel")
     if top.returncode != 0:
         raise ValueError("repo root must be a Git work tree")
-    observed = lexical_absolute(Path(top.stdout.strip()))
+    observed = lexical_absolute(
+        Path(git_single_line(top.stdout, "repository top-level path"))
+    )
     if observed != root:
         raise ValueError("repo root must be the Git top-level directory")
     git_entry = root / ".git"

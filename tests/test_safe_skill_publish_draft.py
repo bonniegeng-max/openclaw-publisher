@@ -520,6 +520,47 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
             os.close(stdout_write)
             os.close(stderr_write)
 
+    def test_git_process_group_signal_failure_is_rejected(self):
+        stdout_read, stdout_write = os.pipe()
+        stderr_read, stderr_write = os.pipe()
+
+        class LeaderOnlyProcess:
+            pid = 99999999
+            stdout = os.fdopen(stdout_read, "rb")
+            stderr = os.fdopen(stderr_read, "rb")
+            wait_calls = 0
+
+            def poll(self):
+                return None
+
+            def kill(self):
+                return None
+
+            def wait(self, timeout=None):
+                self.wait_calls += 1
+                if self.wait_calls <= 2:
+                    raise subprocess.TimeoutExpired("git", timeout)
+                return 0
+
+        try:
+            with mock.patch.object(
+                MODULE.subprocess,
+                "Popen",
+                return_value=LeaderOnlyProcess(),
+            ), mock.patch.object(
+                MODULE.os,
+                "killpg",
+                side_effect=PermissionError("denied"),
+            ), mock.patch.object(MODULE, "GIT_TIMEOUT_SECONDS", 0):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "process group termination failed",
+                ):
+                    MODULE.run_git(Path("/"), "--version")
+        finally:
+            os.close(stdout_write)
+            os.close(stderr_write)
+
     def test_repository_object_store_hardlinks_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root, _ = make_repo(directory)
@@ -559,6 +600,24 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
 
         self.assertFalse(result["valid"])
         self.assertIn("untrusted writable entry", result["blockingReasons"][0])
+
+    def test_repository_root_with_trailing_space_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repository "
+            root.mkdir()
+            _, _ = make_repo(root)
+            add_skill(root, "demo-skill")
+            commit_all(root, "add skill")
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertTrue(result["valid"], result["blockingReasons"])
+        self.assertEqual(result["skillPath"], "skills/demo-skill")
 
     def test_changed_only_without_base_or_explicit_path_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:

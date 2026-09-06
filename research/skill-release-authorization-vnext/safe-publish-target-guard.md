@@ -54,8 +54,9 @@ python3 research/skill-release-authorization-vnext/check_safe_publish_target_con
 - 包最多包含 1024 个文件，单文件最多 10 MiB，总内容最多 50 MiB；超限时在读取
   blob 内容前 fail-closed。所有 Git 命令从启动起限时 30 秒，stdout 与 stderr
   合计最多 12 MiB，使用非阻塞增量读取；该上限高于允许的 10 MiB 单文件，避免
-  合法 blob 被内部传输层提前拒绝。超时或超限时终止整个进程组，并以最长
-  5 秒的二级等待确认回收。
+  合法 blob 被内部传输层提前拒绝。超时或超限时请求终止整个进程组，并以最长
+  5 秒的二级等待确认 Git leader 已回收；进程组信号失败或 leader 无法回收都
+  结构化拒绝，不宣称所有后代进程已被独立枚举确认。
 - Git 固定使用 `/usr/bin/git`，不从继承的 `PATH` 发现可执行文件。
 - `.git/objects` 及其完整目录树必须由当前用户所有的本地真实目录和普通文件
   构成，group/world 不可写；不能在 `pack`、`info` 或 loose-object fan-out 等

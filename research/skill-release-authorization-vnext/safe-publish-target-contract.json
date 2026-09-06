@@ -12,7 +12,7 @@
   "guardDraft": {
     "path": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
     "mode": "100644",
-    "sha256": "sha256:2b45cbbc9f79765775027a77d4123691899cf0e44e2bdd55d583c83df2e4d3f9"
+    "sha256": "sha256:1b61369f80abce1dac9af3a6d172f8247e20d80aea891e28a04199d990ff0f3b"
   },
   "formalWorkflowModified": false,
   "knownFormalRisks": [
@@ -42,7 +42,18 @@
       "/usr/bin/git"
     ],
     "gitTimeoutSeconds": 30,
-    "networkAllowed": false,
+    "gitTerminationConfirmationTimeoutSeconds": 5,
+    "maximumCombinedGitOutputBytes": 12582912,
+    "gitOutputLimitEnforcement": "incremental-before-process-exit",
+    "gitProcessGroupTermination": true,
+    "objectStoreOwner": "current-user",
+    "objectStoreGroupOrWorldWritable": false,
+    "objectStoreSymlinksAllowed": false,
+    "objectStoreHardlinksAllowed": false,
+    "objectDirectoryEntryIdentityRevalidation": true,
+    "objectFileFdIdentityRevalidation": true,
+    "networkCallsPresent": false,
+    "osNetworkSandboxPresent": false,
     "credentialsAccepted": false,
     "packageRuntimeAllowed": false,
     "registryMutationAllowed": false

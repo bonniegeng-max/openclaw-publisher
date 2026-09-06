@@ -151,7 +151,8 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 "multiple-targets-can-be-published",
             },
         )
-        self.assertFalse(contract["executionBoundary"]["networkAllowed"])
+        self.assertFalse(contract["executionBoundary"]["networkCallsPresent"])
+        self.assertFalse(contract["executionBoundary"]["osNetworkSandboxPresent"])
         self.assertFalse(contract["executionBoundary"]["credentialsAccepted"])
         self.assertFalse(contract["executionBoundary"]["registryMutationAllowed"])
         self.assertEqual(
@@ -162,6 +163,11 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
             contract["executionBoundary"]["gitTimeoutSeconds"],
             MODULE.GIT_TIMEOUT_SECONDS,
         )
+        self.assertEqual(
+            contract["executionBoundary"]["maximumCombinedGitOutputBytes"],
+            MODULE.MAX_GIT_OUTPUT_BYTES,
+        )
+        self.assertGreater(MODULE.MAX_GIT_OUTPUT_BYTES, MODULE.MAX_FILE_BYTES)
         self.assertEqual(
             contract["selectionRules"]["packageSnapshotSource"],
             "HEAD-tree",
@@ -177,7 +183,7 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
         self.assertEqual(contract["selectionRules"]["maximumTargets"], 1)
         self.assertFalse(contract["evidenceBoundary"]["deploymentReady"])
         self.assertIn("research-only-not-wired", guide)
-        self.assertIn("不会访问网络", guide)
+        self.assertIn("源码不发起网络调用", guide)
         self.assertIn("不构成 E1-E4", guide)
 
     def test_guard_draft_and_formal_baselines_match_evidence(self):
@@ -422,30 +428,23 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 clear=False,
             ), mock.patch.object(
                 MODULE.subprocess,
-                "run",
-                return_value=subprocess.CompletedProcess(
-                    args=[],
-                    returncode=0,
-                    stdout="",
-                    stderr="",
-                ),
-            ) as run:
-                MODULE.run_git(Path(directory), "status")
+                "Popen",
+                wraps=subprocess.Popen,
+            ) as popen:
+                completed = MODULE.run_git(Path(directory), "--version")
 
-        self.assertEqual(run.call_args.args[0][0], "/usr/bin/git")
-        self.assertEqual(run.call_args.kwargs["env"]["PATH"], "/usr/bin")
-        self.assertEqual(
-            run.call_args.kwargs["timeout"],
-            MODULE.GIT_TIMEOUT_SECONDS,
-        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(popen.call_args.args[0][0], "/usr/bin/git")
+        self.assertEqual(popen.call_args.kwargs["env"]["PATH"], "/usr/bin")
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
 
     def test_git_timeout_is_a_structured_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             root, _ = make_repo(directory)
             with mock.patch.object(
-                MODULE.subprocess,
-                "run",
-                side_effect=subprocess.TimeoutExpired("git", 30),
+                MODULE,
+                "run_git",
+                side_effect=ValueError("Git command timed out"),
             ):
                 result = MODULE.evaluate(
                     root,
@@ -457,6 +456,109 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
 
         self.assertFalse(result["valid"])
         self.assertIn("timed out", result["blockingReasons"][0])
+
+    def test_git_output_is_incrementally_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            for index in range(100):
+                (root / f"untracked-{index:03d}-with-long-name.txt").write_text(
+                    "x\n",
+                    encoding="utf-8",
+                )
+            with mock.patch.object(MODULE, "MAX_GIT_OUTPUT_BYTES", 1024):
+                with self.assertRaisesRegex(ValueError, "output exceeds"):
+                    MODULE.run_git(
+                        root,
+                        "status",
+                        "--porcelain=v1",
+                        "-z",
+                        text=False,
+                    )
+
+    def test_git_wall_clock_timeout_is_enforced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            with mock.patch.object(MODULE, "GIT_TIMEOUT_SECONDS", 0.05):
+                with self.assertRaisesRegex(ValueError, "timed out"):
+                    MODULE.run_git(
+                        root,
+                        "-c",
+                        "alias.stall=!/bin/sleep 10",
+                        "stall",
+                    )
+
+    def test_unconfirmed_git_reap_is_a_value_error(self):
+        stdout_read, stdout_write = os.pipe()
+        stderr_read, stderr_write = os.pipe()
+
+        class UnreapableProcess:
+            pid = 99999999
+            stdout = os.fdopen(stdout_read, "rb")
+            stderr = os.fdopen(stderr_read, "rb")
+
+            def poll(self):
+                return None
+
+            def kill(self):
+                return None
+
+            def wait(self, timeout=None):
+                raise subprocess.TimeoutExpired("git", timeout)
+
+        try:
+            with mock.patch.object(
+                MODULE.subprocess,
+                "Popen",
+                return_value=UnreapableProcess(),
+            ), mock.patch.object(MODULE, "GIT_TIMEOUT_SECONDS", 0):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "termination could not be confirmed",
+                ):
+                    MODULE.run_git(Path("/"), "--version")
+        finally:
+            os.close(stdout_write)
+            os.close(stderr_write)
+
+    def test_repository_object_store_hardlinks_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            object_file = next(
+                path
+                for path in (root / ".git" / "objects").rglob("*")
+                if path.is_file()
+            )
+            os.link(object_file, object_file.with_name(object_file.name + ".linked"))
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn("hardlinked", result["blockingReasons"][0])
+
+    def test_repository_object_store_writable_files_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            object_file = next(
+                path
+                for path in (root / ".git" / "objects").rglob("*")
+                if path.is_file()
+            )
+            object_file.chmod(0o666)
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn("untrusted writable entry", result["blockingReasons"][0])
 
     def test_changed_only_without_base_or_explicit_path_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -8,8 +8,11 @@ import hashlib
 import json
 import os
 import re
+import selectors
+import signal
 import stat
 import subprocess
+import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -27,6 +30,8 @@ SUPPORTED_EVENTS = {"pull_request", "push", "workflow_dispatch"}
 TRUSTED_GIT_ENTRY = Path("/usr/bin/git")
 PRODUCTION_REF = "refs/heads/main"
 GIT_TIMEOUT_SECONDS = 30
+GIT_REAP_TIMEOUT_SECONDS = 5
+MAX_GIT_OUTPUT_BYTES = 12 * 1024 * 1024
 
 
 class StructuredArgumentParser(argparse.ArgumentParser):
@@ -67,18 +72,100 @@ def run_git(
         "diff.external=",
         *args,
     ]
+    process = subprocess.Popen(
+        command,
+        cwd=repo_root,
+        env=clean_git_environment(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + GIT_TIMEOUT_SECONDS
+
+    def terminate_and_reap() -> None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            try:
+                process.kill()
+            except OSError:
+                pass
+        try:
+            process.wait(timeout=GIT_REAP_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            raise ValueError(
+                "Git process termination could not be confirmed"
+            ) from error
+
+    assert process.stdout is not None
+    assert process.stderr is not None
+    stdout_fd = process.stdout.fileno()
+    stderr_fd = process.stderr.fileno()
+    streams = {
+        stdout_fd: bytearray(),
+        stderr_fd: bytearray(),
+    }
+    total_output = 0
+    selector = selectors.DefaultSelector()
     try:
-        return subprocess.run(
-            command,
-            cwd=repo_root,
-            env=clean_git_environment(),
-            check=False,
-            capture_output=True,
-            text=text,
-            timeout=GIT_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise ValueError("Git command timed out") from error
+        for descriptor in streams:
+            os.set_blocking(descriptor, False)
+            selector.register(descriptor, selectors.EVENT_READ)
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                terminate_and_reap()
+                raise ValueError("Git command timed out")
+            events = selector.select(timeout=min(remaining, 0.25))
+            if not events and process.poll() is not None:
+                events = [
+                    (selector.get_key(descriptor), selectors.EVENT_READ)
+                    for descriptor in list(selector.get_map())
+                ]
+            for key, _ in events:
+                try:
+                    chunk = os.read(key.fd, 65536)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    selector.unregister(key.fd)
+                    continue
+                streams[key.fd].extend(chunk)
+                total_output += len(chunk)
+                if total_output > MAX_GIT_OUTPUT_BYTES:
+                    terminate_and_reap()
+                    raise ValueError("Git command output exceeds limit")
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            returncode = process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired as error:
+            terminate_and_reap()
+            raise ValueError("Git command timed out") from error
+    except BaseException:
+        if process.poll() is None:
+            try:
+                terminate_and_reap()
+            except ValueError:
+                pass
+        raise
+    finally:
+        selector.close()
+        process.stdout.close()
+        process.stderr.close()
+    stdout = bytes(streams[stdout_fd])
+    stderr = bytes(streams[stderr_fd])
+    if text:
+        try:
+            return subprocess.CompletedProcess(
+                command,
+                returncode,
+                stdout.decode("utf-8", errors="strict"),
+                stderr.decode("utf-8", errors="strict"),
+            )
+        except UnicodeError as error:
+            raise ValueError("Git command output is not valid UTF-8") from error
+    return subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
 
 def decision_result(
@@ -169,34 +256,72 @@ def require_local_directory_tree(path: Path, label: str) -> None:
         root_fd = os.open(path, flags)
     except OSError as error:
         raise ValueError(f"{label} cannot be opened safely") from error
+    path_metadata = os.lstat(path)
+    opened_root = os.fstat(root_fd)
+    if (
+        opened_root.st_dev,
+        opened_root.st_ino,
+    ) != (
+        path_metadata.st_dev,
+        path_metadata.st_ino,
+    ):
+        os.close(root_fd)
+        raise ValueError(f"{label} changed while being opened")
 
     def visit(directory_fd: int, prefix: str) -> None:
         before = os.fstat(directory_fd)
         try:
-            entries = sorted(
-                os.scandir(directory_fd),
-                key=lambda entry: entry.name.encode("utf-8"),
-            )
+            with os.scandir(directory_fd) as iterator:
+                entries = sorted(
+                    (entry.name for entry in iterator),
+                    key=lambda name: name.encode("utf-8"),
+                )
         except (OSError, UnicodeEncodeError) as error:
             raise ValueError(f"{label} cannot be traversed safely") from error
-        for entry in entries:
-            relative = f"{prefix}/{entry.name}" if prefix else entry.name
+        for entry_name in entries:
+            relative = f"{prefix}/{entry_name}" if prefix else entry_name
             try:
-                metadata = entry.stat(follow_symlinks=False)
+                metadata = os.stat(
+                    entry_name,
+                    dir_fd=directory_fd,
+                    follow_symlinks=False,
+                )
             except OSError as error:
                 raise ValueError(
                     f"{label} entry cannot be inspected: {relative}"
                 ) from error
             if stat.S_ISLNK(metadata.st_mode):
                 raise ValueError(f"{label} must not contain symlinks: {relative}")
+            if (
+                metadata.st_uid != os.geteuid()
+                or stat.S_IMODE(metadata.st_mode) & 0o022
+            ):
+                raise ValueError(
+                    f"{label} contains an untrusted writable entry: {relative}"
+                )
             if stat.S_ISDIR(metadata.st_mode):
                 try:
-                    child_fd = os.open(entry.name, flags, dir_fd=directory_fd)
+                    child_fd = os.open(
+                        entry_name,
+                        flags,
+                        dir_fd=directory_fd,
+                    )
                 except OSError as error:
                     raise ValueError(
                         f"{label} directory cannot be opened safely: {relative}"
                     ) from error
                 try:
+                    opened = os.fstat(child_fd)
+                    if (
+                        opened.st_dev,
+                        opened.st_ino,
+                    ) != (
+                        metadata.st_dev,
+                        metadata.st_ino,
+                    ):
+                        raise ValueError(
+                            f"{label} entry changed while opening: {relative}"
+                        )
                     visit(child_fd, relative)
                 finally:
                     os.close(child_fd)
@@ -205,6 +330,75 @@ def require_local_directory_tree(path: Path, label: str) -> None:
                     f"{label} may contain only directories and regular files: "
                     f"{relative}"
                 )
+            else:
+                try:
+                    file_fd = os.open(
+                        entry_name,
+                        os.O_RDONLY | nofollow,
+                        dir_fd=directory_fd,
+                    )
+                except OSError as error:
+                    raise ValueError(
+                        f"{label} file cannot be opened safely: {relative}"
+                    ) from error
+                try:
+                    opened = os.fstat(file_fd)
+                    observed = (
+                        metadata.st_dev,
+                        metadata.st_ino,
+                        metadata.st_mode,
+                        metadata.st_uid,
+                        metadata.st_gid,
+                        metadata.st_nlink,
+                        metadata.st_size,
+                        metadata.st_mtime_ns,
+                        metadata.st_ctime_ns,
+                    )
+                    repeated = (
+                        opened.st_dev,
+                        opened.st_ino,
+                        opened.st_mode,
+                        opened.st_uid,
+                        opened.st_gid,
+                        opened.st_nlink,
+                        opened.st_size,
+                        opened.st_mtime_ns,
+                        opened.st_ctime_ns,
+                    )
+                    if observed != repeated:
+                        raise ValueError(
+                            f"{label} file changed while opening: {relative}"
+                        )
+                    if opened.st_nlink != 1:
+                        raise ValueError(
+                            f"{label} must not contain hardlinked files: {relative}; "
+                            "use git clone --no-hardlinks for isolated checkouts"
+                        )
+                    if (
+                        not stat.S_ISREG(opened.st_mode)
+                        or opened.st_uid != os.geteuid()
+                        or stat.S_IMODE(opened.st_mode) & 0o022
+                    ):
+                        raise ValueError(
+                            f"{label} contains an untrusted file: {relative}"
+                        )
+                    after_open = os.fstat(file_fd)
+                    if repeated != (
+                        after_open.st_dev,
+                        after_open.st_ino,
+                        after_open.st_mode,
+                        after_open.st_uid,
+                        after_open.st_gid,
+                        after_open.st_nlink,
+                        after_open.st_size,
+                        after_open.st_mtime_ns,
+                        after_open.st_ctime_ns,
+                    ):
+                        raise ValueError(
+                            f"{label} file changed while inspecting: {relative}"
+                        )
+                finally:
+                    os.close(file_fd)
         after = os.fstat(directory_fd)
         if _stable_metadata(before) != _stable_metadata(after):
             raise ValueError(f"{label} changed while being inspected")
@@ -249,7 +443,11 @@ def require_repository_root(repo_root: Path) -> Path:
         git_metadata = os.lstat(git_entry)
     except OSError as error:
         raise ValueError(f"repository .git cannot be inspected: {error}") from error
-    if not stat.S_ISDIR(git_metadata.st_mode):
+    if (
+        not stat.S_ISDIR(git_metadata.st_mode)
+        or git_metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(git_metadata.st_mode) & 0o022
+    ):
         raise ValueError("repository .git must be a local directory")
     for args, label in (
         (("rev-parse", "--absolute-git-dir"), "git-dir"),
@@ -270,7 +468,11 @@ def require_repository_root(repo_root: Path) -> Path:
         raise ValueError(
             f"repository object store cannot be inspected: {error}"
         ) from error
-    if not stat.S_ISDIR(objects_metadata.st_mode):
+    if (
+        not stat.S_ISDIR(objects_metadata.st_mode)
+        or objects_metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(objects_metadata.st_mode) & 0o022
+    ):
         raise ValueError("repository object store must be a local directory")
     require_local_directory_tree(objects, "repository object store")
     alternates = objects / "info" / "alternates"

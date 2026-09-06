@@ -3,8 +3,9 @@
 状态：`research-only-not-wired`
 
 `safe_publish_target_guard.py` 只在本地读取 Git 历史和工作树，输出结构化的目标选择
-结果。它未接入 `.github/workflows`，不会访问网络、读取凭据、安装包运行时、调用
-ClawHub 或改变 registry 状态。机器可读约束见
+结果。它未接入 `.github/workflows`，源码不发起网络调用、不读取凭据、不安装包
+运行时、不调用 ClawHub，也不改变 registry 状态；但当前没有 OS 级断网沙箱，
+正式调用环境仍须提供 egress 隔离。机器可读约束见
 `safe-publish-target-contract.json`。
 
 当前输出为 schema v2。只有有效的 `single-target` 结果携带
@@ -51,11 +52,16 @@ python3 research/skill-release-authorization-vnext/check_safe_publish_target_con
   `O_DIRECTORY` 时不降级，直接拒绝。仓库根、`skills` 与 slug 目录均从已打开
   的父目录 FD 逐级 no-follow 打开，不在检查后重新解析完整包路径。
 - 包最多包含 1024 个文件，单文件最多 10 MiB，总内容最多 50 MiB；超限时在读取
-  blob 内容前 fail-closed，避免无界内存与进程开销。
+  blob 内容前 fail-closed。所有 Git 命令从启动起限时 30 秒，stdout 与 stderr
+  合计最多 12 MiB，使用非阻塞增量读取；该上限高于允许的 10 MiB 单文件，避免
+  合法 blob 被内部传输层提前拒绝。超时或超限时终止整个进程组，并以最长
+  5 秒的二级等待确认回收。
 - Git 固定使用 `/usr/bin/git`，不从继承的 `PATH` 发现可执行文件。
-- `.git/objects` 及其完整目录树必须由本地真实目录和普通文件构成，不能在
-  `pack`、`info` 或 loose-object fan-out 等子路径使用 symlink；alternates、
-  外部或共享 Git 目录同样拒绝。
+- `.git/objects` 及其完整目录树必须由当前用户所有的本地真实目录和普通文件
+  构成，group/world 不可写；不能在 `pack`、`info` 或 loose-object fan-out 等
+  子路径使用 symlink 或 hardlink。目录和普通文件的 `stat` identity 必须与实际
+  打开 FD 一致，普通文件还会在检查后再次 `fstat`。alternates、外部或共享 Git
+  目录同样拒绝；本地克隆必须使用 `git clone --no-hardlinks` 创建隔离对象库。
 - `head` 必须等于当前 checkout 的真实 HEAD，且工作树不得有 tracked 或
   untracked 变化；每次 clean 检查还会确认 `git status` 前后的 HEAD 未变化。
 - 返回成功前再次验证 HEAD、全仓 clean 状态，并再次无跟随遍历和比对目标工作

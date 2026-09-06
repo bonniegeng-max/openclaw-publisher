@@ -4,7 +4,13 @@
   "consumer": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
   "auditor": "research/skill-release-authorization-vnext/check_trusted_artifact_publish_consumer_contract.py",
   "consumerEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
+      "commit": "78d8752548de217acaa94d12718f185d1fcc1898",
+      "mode": "100644",
+      "blobOid": "8761f565033d83410e971460a03e05c8c5658065",
+      "sha256": "sha256:79ec076837df003ba9c5b0ec2d47ae549e28fa24ded36e6a8dbedcaca81a33af"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
       "mode": "100644",
@@ -12,7 +18,13 @@
     }
   },
   "auditorEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/check_trusted_artifact_publish_consumer_contract.py",
+      "commit": "78d8752548de217acaa94d12718f185d1fcc1898",
+      "mode": "100644",
+      "blobOid": "edc016eb96f83b206f6364846052651eac92be96",
+      "sha256": "sha256:9384e4c784587384af9a59163fed247411a2f1a423a51c815bbeba83084bf915"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/check_trusted_artifact_publish_consumer_contract.py",
       "mode": "100644",
@@ -22,7 +34,7 @@
   "twoStageAnchoring": {
     "stageOne": "worktree-draft-sha256-audited",
     "stageTwo": "post-commit-baseline-commit-mode-blobOid-sha256-required",
-    "localIntegrityPinned": false,
+    "localIntegrityPinned": true,
     "deploymentBlockedUntilStageTwo": true,
     "deploymentRemainsBlockedAfterStageTwo": true,
     "remoteCommitVerified": false
@@ -170,8 +182,8 @@
     "currentLevel": "E0",
     "deploymentReady": false,
     "consumerDeploymentAllowed": false,
-    "consumerBaselinePinned": false,
-    "auditorBaselinePinned": false,
+    "consumerBaselinePinned": true,
+    "auditorBaselinePinned": true,
     "formalWorkflowWired": false,
     "downloadableClaimAllowed": false,
     "oneTimeRunReplayProtection": false,

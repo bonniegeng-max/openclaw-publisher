@@ -89,12 +89,18 @@
     "deploymentReady": false,
     "realMutationAllowed": false,
     "downloadableClaimAllowed": false,
-    "launcherBaselinePinned": false,
-    "auditorBaselinePinned": false,
-    "consumerBaselinePinned": false
+    "launcherBaselinePinned": true,
+    "auditorBaselinePinned": true,
+    "consumerBaselinePinned": true
   },
   "launcherEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/trusted_unified_launcher.py",
+      "commit": "78d8752548de217acaa94d12718f185d1fcc1898",
+      "mode": "100644",
+      "blobOid": "85a042606290820dc54fa75b56afaaee35b83693",
+      "sha256": "sha256:d6ff84f6fa381fa336d51d430f28038aafbf2b8a31bc26d2d85746d7d68976ee"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/trusted_unified_launcher.py",
       "mode": "100644",
@@ -102,7 +108,13 @@
     }
   },
   "auditorEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/check_trusted_unified_launcher_contract.py",
+      "commit": "78d8752548de217acaa94d12718f185d1fcc1898",
+      "mode": "100644",
+      "blobOid": "9801cae550c4173488e697b407d1c6dc2ce725bd",
+      "sha256": "sha256:e734742fba341918b0fa30e1305ccc8ffe0788ccde89a7ea2051220f639581e4"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/check_trusted_unified_launcher_contract.py",
       "mode": "100644",
@@ -110,7 +122,13 @@
     }
   },
   "consumerEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
+      "commit": "78d8752548de217acaa94d12718f185d1fcc1898",
+      "mode": "100644",
+      "blobOid": "8761f565033d83410e971460a03e05c8c5658065",
+      "sha256": "sha256:79ec076837df003ba9c5b0ec2d47ae549e28fa24ded36e6a8dbedcaca81a33af"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/trusted_artifact_publish_consumer.py",
       "mode": "100644",
@@ -120,7 +138,7 @@
   "twoStageAnchoring": {
     "stageOne": "worktree-draft-sha256-audited",
     "stageTwo": "post-commit-baseline-commit-mode-blobOid-sha256-required",
-    "localIntegrityPinned": false,
+    "localIntegrityPinned": true,
     "deploymentBlockedUntilStageTwo": true,
     "deploymentRemainsBlockedAfterStageTwo": true,
     "remoteCommitVerified": false

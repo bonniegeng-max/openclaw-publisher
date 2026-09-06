@@ -1,6 +1,6 @@
 # Skill 发布授权门禁草案
 
-状态：`offline-ready-not-wired`
+状态：`offline-contract-ready-not-wired`
 
 本目录记录正式 Skill 发布链路的 fail-closed 授权设计。实现位于：
 
@@ -21,8 +21,10 @@ python3 research/skill-release-authorization-vnext/check_workflow_integration_co
 ```
 
 当前预期退出码为 `1`：合同本身有效，但 `deploymentReady` 必须保持
-`false`。该检查器只核验仓内事实、真实 Git 对象及摘要，不解析 YAML，也不把
-environment 名称、仓内布尔值或示例文本解释为 GitHub 审批证据。正式 reusable
+`false`。该检查器只核验独立本地 Git 数据库、提交、mode、blob OID 与摘要的一致
+性，不解析 YAML，也不把本地 `origin`、remote-tracking ref、environment 名称、
+仓内布尔值或示例文本解释为 GitHub 远端或审批证据。Git 调用禁用 replace refs、
+lazy fetch 和候选环境注入，因此不会为补齐缺失对象访问远端。正式 reusable
 workflow SHA、ClawHub CLI commit、两个 environment 配置和受控演练证据缺少
 任一项时，都不能切换为可发布状态。
 
@@ -91,11 +93,19 @@ catalog 状态、候选提交、Skill 内容摘要、完整变更集摘要和证
 完成仓外 fresh review 后，填写审批字段并提交授权文件，再执行：
 
 ```bash
-python3 scripts/check_skill_release_authorization.py \
+python3 -I <control-root>/scripts/check_skill_release_authorization.py \
+  --repo-root <candidate-root> \
   --base <变更前完整提交> \
   --head HEAD \
-  --mode dry-run
+  --mode dry-run \
+  --control-root <control-root> \
+  --control-commit <受信任完整提交>
 ```
+
+`control-root` 与 candidate 必须是独立 clone；control checkout 的 HEAD、origin、
+Git common directory、checker/validator mode、blob OID 和磁盘字节都会校验。
+`python -I`、固定解释器/Git 路径以及 `control-commit` 的仓外可信来源仍必须由
+受保护 launcher 提供，checker 自身不能用路径自检证明自己最初就是可信代码。
 
 退出码：
 
@@ -125,10 +135,10 @@ review evidence 只提供与候选提交绑定的支持材料，不能证明 rev
 7. 增加 workflow 合同测试，证明授权失败时所有联网和发布步骤不可达。
 8. 发布后按 E0-E4 验证；每个变化版本最多执行一次隔离安装。
 
-当前 checker 仍会从候选工作区加载
-`scripts/validate_skill_catalog.py`。正式接线前必须把 checker 与 validator
-重构为同一受信任 control commit 内的封闭执行单元，并同时校验 Git 对象类型、
-文件模式和摘要；在该能力落地前，`trusted-control-execution` 必须保持阻塞。
+checker 与 validator 已绑定到同一 control commit，并从已验证 validator blob
+快照加载，不再执行 candidate 中的 validator 副本。该能力目前只证明本地封闭
+执行机制可用；正式 workflow 尚未用固定完整 SHA、`python -I` 和受保护 launcher
+调用它，因此 `trusted-control-execution` 仍必须保持阻塞。
 
 在完成上述原子接入前，不能声称正式发布链路已经具备 fail-closed 授权能力。
 即使接入后，仓内合同也不能提供真正的一次性消费记录；同一 head 的重复运行

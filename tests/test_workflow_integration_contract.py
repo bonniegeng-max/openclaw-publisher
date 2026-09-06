@@ -1,11 +1,13 @@
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).parents[1]
@@ -92,6 +94,13 @@ def make_contract_repo(directory):
 def bind_control_files(root, contract, commit):
     contract["trustedControl"]["commit"] = commit
     for item in contract["trustedControl"]["files"]:
+        entry = subprocess.check_output(
+            ["git", "ls-tree", commit, "--", item["path"]],
+            cwd=root,
+            text=True,
+        ).strip().split(maxsplit=3)
+        item["mode"] = entry[0]
+        item["blobOid"] = entry[2]
         content = subprocess.check_output(
             ["git", "show", f"{commit}:{item['path']}"],
             cwd=root,
@@ -115,7 +124,11 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             result["localEvidence"]["environmentConfigurationVerified"]
         )
         self.assertTrue(
-            result["localEvidence"]["trustedControlAnchorVerified"]
+            result["localEvidence"]["controlAnchorLocallyConsistent"]
+        )
+        self.assertNotIn(
+            "trustedControlAnchorVerified",
+            result["localEvidence"],
         )
         for gate in (
             "trusted-control-execution",
@@ -129,7 +142,7 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             with self.subTest(gate=gate):
                 self.assertIn(gate, result["blockingGates"])
 
-    def test_contract_uses_verified_control_commit_and_no_future_fake_sha(self):
+    def test_contract_uses_local_control_commit_and_no_future_fake_sha(self):
         contract = load_contract()
 
         self.assertEqual(
@@ -146,7 +159,11 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                isinstance(item["sha256"], str)
+                isinstance(item["mode"], str)
+                and item["mode"] in {"100644", "100755"}
+                and isinstance(item["blobOid"], str)
+                and len(item["blobOid"]) == 40
+                and isinstance(item["sha256"], str)
                 and item["sha256"].startswith("sha256:")
                 for item in contract["trustedControl"]["files"]
             )
@@ -262,7 +279,7 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertFalse(result["valid"])
         self.assertIn(
-            "trusted control file digests do not match the pinned commit",
+            "trusted control file evidence does not match the pinned commit",
             result["errors"],
         )
 
@@ -327,6 +344,184 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             "trusted control commit must be reachable from origin/main",
             result["errors"],
         )
+
+    def test_replace_ref_cannot_change_trusted_control_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, contract, head = make_contract_repo(directory)
+            bind_control_files(root, contract, head)
+            checker = root / "scripts" / "check_skill_release_authorization.py"
+            checker.write_text(
+                "raise RuntimeError('replacement checker')\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "malicious replacement"],
+                cwd=root,
+                check=True,
+            )
+            replacement = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                text=True,
+            ).strip()
+            subprocess.run(
+                ["git", "--no-replace-objects", "reset", "--hard", "-q", head],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "update-ref",
+                    f"refs/replace/{head}",
+                    replacement,
+                ],
+                cwd=root,
+                check=True,
+            )
+
+            result = MODULE.evaluate(
+                root,
+                write_contract(directory, contract),
+            )
+
+        self.assertTrue(result["valid"], result["errors"])
+        self.assertTrue(result["checks"]["local-control-anchor"])
+
+    def test_git_environment_filters_untrusted_git_variables(self):
+        injected = {
+            "GIT_DIR": "/attacker/git-dir",
+            "GIT_WORK_TREE": "/attacker/work-tree",
+            "GIT_COMMON_DIR": "/attacker/common-dir",
+            "GIT_INDEX_FILE": "/attacker/index",
+            "GIT_OBJECT_DIRECTORY": "/attacker/objects",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": "/attacker/alternate",
+            "GIT_NAMESPACE": "attacker",
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "core.fsmonitor",
+            "GIT_CONFIG_VALUE_0": "/attacker/fsmonitor",
+            "GIT_CONFIG_PARAMETERS": "'core.fsmonitor=/attacker/fsmonitor'",
+            "GIT_REPLACE_REF_BASE": "refs/attacker/",
+            "GIT_NO_LAZY_FETCH": "0",
+            "GIT_NO_REPLACE_OBJECTS": "0",
+            "GIT_EXTERNAL_DIFF": "/attacker/diff",
+        }
+
+        with mock.patch.dict(os.environ, injected, clear=False):
+            environment = MODULE.git_environment()
+
+        for key in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_COMMON_DIR",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_NAMESPACE",
+            "GIT_CONFIG_COUNT",
+            "GIT_CONFIG_KEY_0",
+            "GIT_CONFIG_VALUE_0",
+            "GIT_CONFIG_PARAMETERS",
+            "GIT_REPLACE_REF_BASE",
+        ):
+            with self.subTest(key=key):
+                self.assertNotIn(key, environment)
+        self.assertEqual(environment["GIT_NO_LAZY_FETCH"], "1")
+        self.assertEqual(environment["GIT_NO_REPLACE_OBJECTS"], "1")
+        self.assertEqual(environment["GIT_EXTERNAL_DIFF"], "")
+
+    def test_git_injections_cannot_redirect_contract_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            root, contract, head = make_contract_repo(workspace / "trusted")
+            (root / "trusted-marker.txt").write_text(
+                "unique trusted commit\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "unique trusted control"],
+                cwd=root,
+                check=True,
+            )
+            head = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                text=True,
+            ).strip()
+            subprocess.run(
+                ["git", "update-ref", "refs/remotes/origin/main", head],
+                cwd=root,
+                check=True,
+            )
+            bind_control_files(root, contract, head)
+            attacker, _, _ = make_contract_repo(workspace / "attacker")
+            attacker_checker = (
+                attacker / "scripts" / "check_skill_release_authorization.py"
+            )
+            attacker_checker.write_text(
+                "raise RuntimeError('attacker repository')\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=attacker, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "attacker control"],
+                cwd=attacker,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://github.com/attacker/example.git",
+                ],
+                cwd=attacker,
+                check=True,
+            )
+            cases = (
+                ("git-dir", {"GIT_DIR": str(attacker / ".git")}),
+                (
+                    "object-directory",
+                    {
+                        "GIT_OBJECT_DIRECTORY": str(
+                            attacker / ".git" / "objects"
+                        )
+                    },
+                ),
+                (
+                    "common-directory",
+                    {"GIT_COMMON_DIR": str(attacker / ".git")},
+                ),
+                (
+                    "config-injection",
+                    {
+                        "GIT_CONFIG_COUNT": "1",
+                        "GIT_CONFIG_KEY_0": "remote.origin.url",
+                        "GIT_CONFIG_VALUE_0": (
+                            "https://github.com/attacker/example.git"
+                        ),
+                    },
+                ),
+            )
+
+            for label, injected in cases:
+                with self.subTest(injection=label):
+                    with mock.patch.dict(os.environ, injected, clear=False):
+                        result = MODULE.evaluate(
+                            root,
+                            write_contract(directory, contract),
+                        )
+                    self.assertTrue(result["valid"], result["errors"])
+                    self.assertEqual(
+                        result["localEvidence"]["originRepository"],
+                        "bonniegeng-max/openclaw-publisher",
+                    )
+                    self.assertTrue(
+                        result["checks"]["local-control-anchor"]
+                    )
 
     def test_symlink_git_entry_cannot_be_trusted_control(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -473,6 +668,136 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertFalse(result["valid"])
         self.assertFalse(result["checks"]["target-repository"])
+
+    def test_origin_identity_uses_raw_local_url_without_rewrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, contract, head = make_contract_repo(directory)
+            bind_control_files(root, contract, head)
+            subprocess.run(
+                [
+                    "git",
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://github.com/attacker/example.git",
+                ],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "config",
+                    "--local",
+                    "url.https://github.com/bonniegeng-max/"
+                    "openclaw-publisher.git.insteadOf",
+                    "https://github.com/attacker/example.git",
+                ],
+                cwd=root,
+                check=True,
+            )
+
+            result = MODULE.evaluate(
+                root,
+                write_contract(directory, contract),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["target-repository"])
+        self.assertEqual(
+            result["localEvidence"]["originRepository"],
+            "attacker/example",
+        )
+
+    def test_repository_layout_rejects_subdirectory_and_linked_worktree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, contract, head = make_contract_repo(directory)
+            bind_control_files(root, contract, head)
+            subdirectory = root / "nested"
+            subdirectory.mkdir()
+            result = MODULE.evaluate(
+                subdirectory,
+                write_contract(directory, contract),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["repository-layout"])
+        self.assertTrue(
+            any(
+                "repository Git layout cannot be inspected" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            primary, contract, head = make_contract_repo(workspace / "primary")
+            bind_control_files(primary, contract, head)
+            linked = workspace / "linked"
+            subprocess.run(
+                ["git", "worktree", "add", "-q", "--detach", str(linked), head],
+                cwd=primary,
+                check=True,
+            )
+            result = MODULE.evaluate(
+                linked,
+                write_contract(directory, contract),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["repository-layout"])
+        self.assertIn(
+            "repository .git must be a local directory",
+            result["errors"],
+        )
+
+    def test_repository_layout_rejects_object_alternates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            root, contract, head = make_contract_repo(workspace / "trusted")
+            bind_control_files(root, contract, head)
+            alternate, _, _ = make_contract_repo(workspace / "alternate")
+            alternates = root / ".git" / "objects" / "info" / "alternates"
+            alternates.parent.mkdir(parents=True, exist_ok=True)
+            alternates.write_text(
+                str(alternate / ".git" / "objects") + "\n",
+                encoding="utf-8",
+            )
+
+            result = MODULE.evaluate(
+                root,
+                write_contract(directory, contract),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["repository-layout"])
+        self.assertIn(
+            "repository object store must not use alternates",
+            result["errors"],
+        )
+
+    def test_control_mode_and_blob_oid_are_bound(self):
+        for field, value in (
+            ("mode", "100755"),
+            ("blobOid", "0" * 40),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root, contract, head = make_contract_repo(directory)
+                bind_control_files(root, contract, head)
+                contract["trustedControl"]["files"][0][field] = value
+
+                result = MODULE.evaluate(
+                    root,
+                    write_contract(directory, contract),
+                )
+
+            self.assertFalse(result["valid"])
+            self.assertFalse(result["checks"]["local-control-anchor"])
+            self.assertIn(
+                "trusted control file evidence does not match the pinned commit",
+                result["errors"],
+            )
 
     def test_cli_reports_valid_but_blocked_contract(self):
         completed = subprocess.run(

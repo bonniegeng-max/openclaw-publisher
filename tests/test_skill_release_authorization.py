@@ -2063,12 +2063,16 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(
                     candidate / ".git" / "objects"
                 ),
+                "GIT_COMMON_DIR": str(other / ".git"),
                 "GIT_CONFIG_COUNT": "1",
                 "GIT_CONFIG_KEY_0": "core.fsmonitor",
                 "GIT_CONFIG_VALUE_0": "/definitely/not/trusted",
+                "GIT_NO_LAZY_FETCH": "0",
+                "GIT_NO_REPLACE_OBJECTS": "0",
             }
 
             with mock.patch.dict(os.environ, injected, clear=False):
+                environment = CHECK_MODULE.git_environment()
                 observed_head = CHECK_MODULE.run_git(
                     candidate,
                     "rev-parse",
@@ -2076,6 +2080,11 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 ).strip()
 
         self.assertEqual(observed_head, candidate_head)
+        self.assertNotIn("GIT_DIR", environment)
+        self.assertNotIn("GIT_COMMON_DIR", environment)
+        self.assertNotIn("GIT_CONFIG_COUNT", environment)
+        self.assertEqual(environment["GIT_NO_LAZY_FETCH"], "1")
+        self.assertEqual(environment["GIT_NO_REPLACE_OBJECTS"], "1")
 
     def test_worktree_scan_errors_fail_closed(self):
         root = Path("/candidate")

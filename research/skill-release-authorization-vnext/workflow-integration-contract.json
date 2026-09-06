@@ -16,10 +16,14 @@
     "files": [
       {
         "path": "scripts/check_skill_release_authorization.py",
+        "mode": "100644",
+        "blobOid": "eba2cd2bf84f3513694d2572862ad2870315b17e",
         "sha256": "sha256:b12f77bda7fe3b96c4bdaf213cb5448b9c7d4578fc668a34942ae68f29469af5"
       },
       {
         "path": "scripts/validate_skill_catalog.py",
+        "mode": "100644",
+        "blobOid": "546fb6afa43668a17af8565db944f556f3149a30",
         "sha256": "sha256:d7deffd7f4bac8f0430ca8c4f3aeaa4c9eedc688a2a37718489ee5b04182e51d"
       }
     ]

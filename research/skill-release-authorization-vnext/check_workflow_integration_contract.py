@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -103,35 +105,135 @@ def digest_bytes(content: bytes) -> str:
     return "sha256:" + hashlib.sha256(content).hexdigest()
 
 
-def git_bytes(root: Path, commit: str, relative: str) -> bytes:
+def git_environment() -> dict[str, str]:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_")
+    }
+    environment.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_EXTERNAL_DIFF": "",
+            "GIT_NO_LAZY_FETCH": "1",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    return environment
+
+
+def git_command(*args: str) -> list[str]:
+    return [
+        "git",
+        "--no-replace-objects",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        f"core.hooksPath={os.devnull}",
+        "-c",
+        "diff.external=",
+        *args,
+    ]
+
+
+def run_git(
+    root: Path,
+    *args: str,
+    text: bool = False,
+) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        git_command(*args),
+        cwd=root,
+        env=git_environment(),
+        check=False,
+        capture_output=True,
+        text=text,
+    )
+
+
+def verify_repository_layout(root: Path) -> None:
+    git_entry = root / ".git"
+    objects = git_entry / "objects"
     try:
-        object_type = subprocess.run(
-            ["git", "cat-file", "-t", commit],
-            cwd=root,
-            check=False,
-            capture_output=True,
+        git_entry_mode = os.lstat(git_entry).st_mode
+    except OSError as error:
+        raise ValueError(f"repository Git layout cannot be inspected: {error}") from error
+    if not stat.S_ISDIR(git_entry_mode) or git_entry.is_symlink():
+        raise ValueError("repository .git must be a local directory")
+    try:
+        objects_mode = os.lstat(objects).st_mode
+    except OSError as error:
+        raise ValueError(f"repository object store cannot be inspected: {error}") from error
+    if not stat.S_ISDIR(objects_mode) or objects.is_symlink():
+        raise ValueError("repository object store must be a local directory")
+
+    try:
+        top_level_result = run_git(
+            root,
+            "rev-parse",
+            "--show-toplevel",
             text=True,
         )
-        ancestor = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", commit, "origin/main"],
-            cwd=root,
-            check=False,
-            capture_output=True,
+        git_dir_result = run_git(
+            root,
+            "rev-parse",
+            "--absolute-git-dir",
             text=True,
         )
-        entry = subprocess.run(
-            ["git", "ls-tree", commit, "--", relative],
-            cwd=root,
-            check=False,
-            capture_output=True,
+        common_dir_result = run_git(
+            root,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
             text=True,
         )
-        completed = subprocess.run(
-            ["git", "show", f"{commit}:{relative}"],
-            cwd=root,
-            check=False,
-            capture_output=True,
+    except OSError as error:
+        raise ValueError(f"repository Git layout cannot be verified: {error}") from error
+    for label, completed in (
+        ("top-level", top_level_result),
+        ("git-dir", git_dir_result),
+        ("common-dir", common_dir_result),
+    ):
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip()
+            raise ValueError(
+                f"repository Git {label} cannot be verified: {message}"
+            )
+    if Path(top_level_result.stdout.strip()).resolve() != root:
+        raise ValueError("repo-root must equal the Git top-level directory")
+    expected_git_dir = git_entry.resolve()
+    observed_git_dir = Path(git_dir_result.stdout.strip()).resolve()
+    observed_common_dir = Path(common_dir_result.stdout.strip()).resolve()
+    if observed_git_dir != expected_git_dir:
+        raise ValueError("repository must use its own .git directory")
+    if observed_common_dir != observed_git_dir:
+        raise ValueError("repository must not use a shared Git common directory")
+
+    alternates = objects / "info" / "alternates"
+    if alternates.exists() or alternates.is_symlink():
+        raise ValueError("repository object store must not use alternates")
+
+
+def git_blob_evidence(
+    root: Path,
+    commit: str,
+    relative: str,
+) -> dict[str, str]:
+    try:
+        object_type = run_git(root, "cat-file", "-t", commit, text=True)
+        ancestor = run_git(
+            root,
+            "merge-base",
+            "--is-ancestor",
+            commit,
+            "origin/main",
+            text=True,
         )
+        entry = run_git(root, "ls-tree", "-z", commit, "--", relative)
     except OSError as error:
         raise ValueError(f"trusted control Git verification failed: {error}") from error
     if object_type.returncode != 0 or object_type.stdout.strip() != "commit":
@@ -140,40 +242,67 @@ def git_bytes(root: Path, commit: str, relative: str) -> bytes:
         raise ValueError(
             "trusted control commit must be reachable from origin/main"
         )
-    entry_parts = entry.stdout.strip().split(maxsplit=3)
+    records = [record for record in entry.stdout.split(b"\0") if record]
+    if entry.returncode != 0 or len(records) != 1:
+        raise ValueError(
+            f"trusted control path must be a regular Git blob: {relative}"
+        )
+    try:
+        metadata, observed_path = records[0].split(b"\t", 1)
+        mode, entry_type, object_id = metadata.split(b" ", 2)
+        observed_relative = observed_path.decode("utf-8", errors="strict")
+        mode_text = mode.decode("ascii")
+        object_id_text = object_id.decode("ascii")
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ValueError(
+            f"trusted control path has malformed Git metadata: {relative}"
+        ) from error
     if (
-        entry.returncode != 0
-        or len(entry_parts) != 4
-        or entry_parts[0] not in {"100644", "100755"}
-        or entry_parts[1] != "blob"
-        or entry_parts[3] != relative
+        mode_text not in {"100644", "100755"}
+        or entry_type != b"blob"
+        or observed_relative != relative
+        or COMMIT_PATTERN.fullmatch(object_id_text) is None
     ):
         raise ValueError(
             f"trusted control path must be a regular Git blob: {relative}"
         )
+    try:
+        completed = run_git(root, "cat-file", "blob", object_id_text)
+    except OSError as error:
+        raise ValueError(f"trusted control Git verification failed: {error}") from error
     if completed.returncode != 0:
         message = completed.stderr.decode("utf-8", errors="replace").strip()
         raise ValueError(
-            f"trusted control file is unavailable at {commit}:{relative}: "
+            f"trusted control blob is unavailable at {commit}:{relative}: "
             f"{message}"
         )
-    return completed.stdout
+    return {
+        "path": relative,
+        "mode": mode_text,
+        "blobOid": object_id_text,
+        "sha256": digest_bytes(completed.stdout),
+    }
 
 
 def origin_repository(root: Path) -> str:
     try:
-        completed = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=root,
-            check=False,
-            capture_output=True,
+        completed = run_git(
+            root,
+            "config",
+            "--local",
+            "--no-includes",
+            "--get-all",
+            "remote.origin.url",
             text=True,
         )
     except OSError as error:
         raise ValueError(f"origin repository cannot be verified: {error}") from error
     if completed.returncode != 0:
         raise ValueError("origin repository cannot be verified")
-    value = completed.stdout.strip()
+    values = [value for value in completed.stdout.splitlines() if value]
+    if len(values) != 1:
+        raise ValueError("origin must define exactly one fetch URL")
+    value = values[0]
     match = re.fullmatch(
         r"(?:https://github\.com/|git@github\.com:)"
         r"([^/]+/[^/]+?)(?:\.git)?",
@@ -214,6 +343,19 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
             "blockingGates": [],
             "errors": [str(error)],
         }
+    try:
+        verify_repository_layout(root)
+    except ValueError as error:
+        return {
+            "valid": False,
+            "deploymentReady": False,
+            "contractStatus": contract.get("status", "invalid"),
+            "checks": {"repository-layout": False},
+            "localEvidence": {},
+            "blockingGates": [],
+            "errors": [str(error)],
+        }
+    checks["repository-layout"] = True
 
     add_check(
         checks,
@@ -314,7 +456,7 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         "commit",
         "files",
     }
-    control_anchor_verified = False
+    control_anchor_consistent = False
     if control_shape:
         files = control["files"]
         control_shape = (
@@ -323,11 +465,25 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
             and len(files) == len(EXPECTED_CONTROL_FILES)
             and all(
                 isinstance(item, dict)
-                and set(item) == {"path", "sha256"}
+                and set(item) == {"path", "mode", "blobOid", "sha256"}
                 for item in files
             )
             and all(
                 isinstance(item["path"], str)
+                and (
+                    item["mode"] is None
+                    or (
+                        isinstance(item["mode"], str)
+                        and re.fullmatch(r"[0-9]{6}", item["mode"]) is not None
+                    )
+                )
+                and (
+                    item["blobOid"] is None
+                    or (
+                        isinstance(item["blobOid"], str)
+                        and COMMIT_PATTERN.fullmatch(item["blobOid"]) is not None
+                    )
+                )
                 and (
                     item["sha256"] is None
                     or isinstance(item["sha256"], str)
@@ -346,44 +502,55 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
     if control_shape:
         commit = control["commit"]
         if commit is None:
-            if any(item["sha256"] is not None for item in control["files"]):
+            if any(
+                item["sha256"] is not None
+                or item["blobOid"] is not None
+                or item["mode"] is not None
+                for item in control["files"]
+            ):
                 errors.append(
-                    "trusted control digests must remain null until commit is pinned"
+                    "trusted control file evidence must remain null until commit is pinned"
                 )
         elif not isinstance(commit, str) or COMMIT_PATTERN.fullmatch(commit) is None:
             errors.append("trusted control commit must be a full lowercase SHA-1")
         else:
             try:
                 observed = {
-                    item["path"]: digest_bytes(
-                        git_bytes(root, commit, item["path"])
+                    item["path"]: git_blob_evidence(
+                        root,
+                        commit,
+                        item["path"],
                     )
                     for item in control["files"]
                 }
                 declared = {
-                    item["path"]: item["sha256"]
+                    item["path"]: item
                     for item in control["files"]
                 }
                 if any(
                     not isinstance(value, str)
                     or DIGEST_PATTERN.fullmatch(value) is None
-                    for value in declared.values()
+                    for value in (
+                        item["sha256"] for item in declared.values()
+                    )
                 ):
                     errors.append(
                         "trusted control file digests must be lowercase sha256 values"
                     )
                 elif observed != declared:
                     errors.append(
-                        "trusted control file digests do not match the pinned commit"
+                        "trusted control file evidence does not match the pinned commit"
                     )
                 else:
-                    control_anchor_verified = True
+                    control_anchor_consistent = True
             except ValueError as error:
                 errors.append(str(error))
-    checks["trusted-control-anchor"] = control_anchor_verified
-    local_evidence["trustedControlAnchorVerified"] = control_anchor_verified
-    if not control_anchor_verified:
-        blockers.append("trusted-control-anchor")
+    checks["local-control-anchor"] = control_anchor_consistent
+    local_evidence["controlAnchorLocallyConsistent"] = (
+        control_anchor_consistent
+    )
+    if not control_anchor_consistent:
+        blockers.append("local-control-anchor")
 
     control_execution = contract.get("trustedControlExecution")
     control_execution_hold = control_execution == {

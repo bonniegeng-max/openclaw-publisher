@@ -152,6 +152,38 @@ staging，不能在返回后按普通路径重新打包。研究合同和完整�
 访问 registry。其 `authorizationEligible: true` 只表示目标选择边界满足；研究
 阶段 `authorized` 与 `mutationAllowed` 永远为 `false`，不构成 E1-E4 证据。
 
+## Immutable staging 草案
+
+`immutable_staging_builder.py` 严格消费 safe guard 的完整 schema v2 JSON，而不
+接受拆散的 commit、Skill 路径或 package digest。它先用规范 JSON
+`guardResultDigest` 锚定完整 guard 结果，再以 `artifactDigest` 锚定除摘要自身外
+的全部 manifest 安全声明和文件。output parent 的逐组件打开、随机 `mkdirat`、创建、复核、
+清理和 rename 全部基于 FD 与 no-follow；实现不使用 `shutil`、`tempfile` 或
+`os.walk`。普通文件与 manifest 为 `0444`，可执行文件和封存目录为 `0555`。
+guard JSON 文件必须为当前用户所有且无 group/world 权限；提交前会再次确认
+checkout HEAD 与仓库布局未漂移。结果只返回内容寻址 `outputName`，不暴露绝对
+输出路径。
+
+最终交接仅用同一 parent FD 调用 macOS `renameatx_np(RENAME_EXCL)` 或 Linux
+`renameat2(RENAME_NOREPLACE)`。rename 前失败清理临时树；rename 后 parent
+`fsync` 失败返回 `commit-uncertain` 并保留目标。所有结果固定
+`authorizationGranted: false`，不提供普通 rename fallback。staging FD 跨越
+rename 保持打开并在提交后复核；清理不完整时显式返回
+`failed-with-residue`。
+
+严格合同、审计器和边界说明分别位于：
+
+```text
+immutable-staging-contract.json
+check_immutable_staging_contract.py
+immutable-staging-builder.md
+```
+
+该实现保持 `research-only-not-wired`，未修改正式 workflow、`skills/` 或
+`.clawhub/skill-catalog.json`；其 manifest 不是发布授权，也不构成 E1-E4。
+当前正式 publisher 仍从工作树打包，所以不得只把 builder 作为前置检查接入；
+后续必须让发布端只消费并重新验证 staging artifact。
+
 退出码：
 
 - `0`：合同有效，且当前模式已获本次变更授权。

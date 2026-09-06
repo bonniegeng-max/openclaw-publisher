@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 2,
+  "status": "research-only-not-wired",
+  "builder": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
+  "auditor": "research/skill-release-authorization-vnext/check_immutable_staging_contract.py",
+  "builderEvidence": {
+    "baseline": null,
+    "draft": {
+      "path": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
+      "mode": "100644",
+      "sha256": "sha256:9abc65607b5a6c93ee6738c5819f715372bef56c0d15881bfd0fbba5b5af735a"
+    }
+  },
+  "formalWorkflowModified": false,
+  "guardInput": {
+    "module": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
+    "contract": "research/skill-release-authorization-vnext/safe-publish-target-contract.json",
+    "schemaVersion": 2,
+    "input": "complete-guard-result-json",
+    "inputFileOwner": "current-user",
+    "inputFileMode": "owner-only-no-group-or-world-bits",
+    "inputFileSymlinks": "reject",
+    "unknownOrMissingFields": "reject",
+    "duplicateJsonKeys": "reject",
+    "requiredDecision": "single-target",
+    "requiredValid": true,
+    "requiredTargetCount": 1,
+    "authorizedMustRemainFalse": true,
+    "mutationAllowedMustRemainFalse": true,
+    "packageSnapshotExactRevalidation": true
+  },
+  "twoStageAnchoring": {
+    "stageOne": {
+      "name": "guard-result",
+      "digest": "guardResultDigest",
+      "canonicalization": "utf8-sorted-compact-json-without-newline",
+      "bindsCompleteGuardJson": true
+    },
+    "stageTwo": {
+      "name": "immutable-artifact",
+      "digest": "artifactDigest",
+      "format": "immutable-skill-staging-v2",
+      "canonicalization": "utf8-sorted-compact-json-without-newline",
+      "binds": [
+        "schemaVersion",
+        "researchStatus",
+        "format",
+        "guardResultDigest",
+        "commit",
+        "skillPath",
+        "treeOid",
+        "packageDigest",
+        "packageDirectory",
+        "path",
+        "sourceMode",
+        "artifactMode",
+        "blobOid",
+        "sha256",
+        "worktreeRead",
+        "authorizationGranted"
+      ]
+    }
+  },
+  "filesystemBoundary": {
+    "parentMustExist": true,
+    "parentMustBeAbsoluteCanonical": true,
+    "parentMustBeOwnedByCurrentUser": true,
+    "parentMode": "0700",
+    "parentInsideRepository": "reject-by-open-fd-identity",
+    "pathTraversal": "component-openat-O_NOFOLLOW",
+    "allStagingOperations": "dir-fd-relative",
+    "temporaryCreation": "random-mkdirat",
+    "temporaryDirectoryMode": "0700",
+    "sealedDirectoryMode": "0555",
+    "regularFileMode": "0444",
+    "executableFileMode": "0555",
+    "manifestMode": "0444",
+    "symlinks": "reject",
+    "hardlinks": "reject",
+    "shutilAllowed": false,
+    "osWalkAllowed": false
+  },
+  "sourceAndVerification": {
+    "contentSource": "pinned-git-tree-and-blobs-only",
+    "worktreeContentReadsAllowed": false,
+    "lazyFetchAllowed": false,
+    "replaceObjectsAllowed": false,
+    "blobDigestBeforeWrite": true,
+    "perFileFdReopenAndReview": true,
+    "exactFileSetRequired": true,
+    "secondTreeSnapshotRequired": true,
+    "manifestByteReviewRequired": true,
+    "manifestStrictValidationRequired": true,
+    "headMustMatchCheckout": true,
+    "finalRepositoryLayoutRevalidation": true,
+    "finalHeadRevalidation": true,
+    "stagingFdRetainedAcrossRename": true,
+    "postRenameSameFdReview": true,
+    "outputParentPathIdentityRevalidation": true
+  },
+  "durabilityAndHandoff": {
+    "fileFsyncRequired": true,
+    "directoryFsyncRequired": true,
+    "parentFsyncBeforeRename": true,
+    "operation": "native-no-replace-rename",
+    "darwinPrimitive": "renameatx_np(RENAME_EXCL)",
+    "linuxPrimitive": "renameat2(RENAME_NOREPLACE)",
+    "sourceAndDestinationUseSameParentFd": true,
+    "precheckThenRenameFallbackAllowed": false,
+    "existingDestination": "reject",
+    "parentFsyncAfterRename": true
+  },
+  "outcomes": {
+    "success": "committed",
+    "preRenameFailure": "failed",
+    "postRenameParentFsyncFailure": "commit-uncertain",
+    "commitUncertainRetainsTarget": true,
+    "temporaryTreeCleanupRequired": true,
+    "cleanupFailure": "failed-with-residue",
+    "cleanupFailureReturnsResidueName": true,
+    "authorizationGrantedAlwaysFalse": true,
+    "outputIdentifier": "content-addressed-name-only",
+    "absoluteOutputPathReturned": false,
+    "structuredResultRequired": true
+  },
+  "consumerBoundary": {
+    "currentFormalPublisherConsumesWorktree": true,
+    "formalWiringBlocked": true,
+    "futurePublisherMustConsumeVerifiedArtifact": true,
+    "futurePublisherMustRevalidateManifest": true,
+    "worktreePublishAfterStaging": "reject"
+  },
+  "executionBoundary": {
+    "networkAllowed": false,
+    "credentialsAccepted": false,
+    "packageRuntimeAllowed": false,
+    "registryMutationAllowed": false,
+    "formalWorkflowWiringAllowed": false
+  },
+  "evidenceBoundary": {
+    "currentLevel": "E0",
+    "deploymentReady": false,
+    "workflowSuccessCeiling": "E2",
+    "downloadableClaimRequires": "E4"
+  }
+}

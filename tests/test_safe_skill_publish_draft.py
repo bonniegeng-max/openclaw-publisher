@@ -1,0 +1,669 @@
+import importlib.util
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+
+ROOT = Path(__file__).parents[1]
+RESEARCH = ROOT / "research" / "skill-release-authorization-vnext"
+GUARD = RESEARCH / "safe_publish_target_guard.py"
+CONTRACT = RESEARCH / "safe-publish-target-contract.json"
+GUIDE = RESEARCH / "safe-publish-target-guard.md"
+SPEC = importlib.util.spec_from_file_location("safe_publish_target_guard", GUARD)
+MODULE = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+SPEC.loader.exec_module(MODULE)
+
+
+def git(root, *args):
+    return subprocess.check_output(
+        ["git", *args],
+        cwd=root,
+        text=True,
+    ).strip()
+
+
+def commit_all(root, message):
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", message], cwd=root, check=True)
+    return git(root, "rev-parse", "HEAD")
+
+
+def add_skill(root, slug, body="body\n"):
+    skill = root / "skills" / slug
+    skill.mkdir(parents=True, exist_ok=True)
+    (skill / "SKILL.md").write_text(body, encoding="utf-8")
+    (skill / "CHANGELOG.md").write_text("# Changes\n", encoding="utf-8")
+    (skill / ".clawhubignore").write_text(".DS_Store\n", encoding="utf-8")
+    return skill
+
+
+def make_repo(directory):
+    root = Path(directory)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=root,
+        check=True,
+    )
+    (root / "README.md").write_text("fixture\n", encoding="utf-8")
+    base = commit_all(root, "baseline")
+    return root, base
+
+
+class SafeSkillPublishDraftTests(unittest.TestCase):
+    def test_research_contract_and_guide_are_explicitly_not_wired(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        guide = GUIDE.read_text(encoding="utf-8")
+
+        self.assertEqual(contract["schemaVersion"], MODULE.SCHEMA_VERSION)
+        self.assertEqual(contract["status"], "research-only-not-wired")
+        self.assertFalse(contract["formalWorkflowModified"])
+        self.assertEqual(
+            set(contract["knownFormalRisks"]),
+            {
+                "workflow-dispatch-can-request-real-publish",
+                "changed-only-can-fall-back-to-root-scan",
+                "multiple-targets-can-be-published",
+            },
+        )
+        self.assertFalse(contract["executionBoundary"]["networkAllowed"])
+        self.assertFalse(contract["executionBoundary"]["credentialsAccepted"])
+        self.assertFalse(contract["executionBoundary"]["registryMutationAllowed"])
+        self.assertEqual(
+            contract["executionBoundary"]["allowedExecutables"],
+            ["python3", "/usr/bin/git"],
+        )
+        self.assertEqual(
+            contract["executionBoundary"]["gitTimeoutSeconds"],
+            MODULE.GIT_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(contract["selectionRules"]["maximumTargets"], 1)
+        self.assertFalse(contract["evidenceBoundary"]["deploymentReady"])
+        self.assertIn("research-only-not-wired", guide)
+        self.assertIn("不会访问网络", guide)
+        self.assertIn("不构成 E1-E4", guide)
+
+    def test_formal_workflow_baselines_match_git_and_worktree(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        self.assertEqual(
+            set(contract["formalBaselines"]),
+            {"caller", "local"},
+        )
+        for label, baseline in contract["formalBaselines"].items():
+            with self.subTest(label=label):
+                entry = subprocess.check_output(
+                    [
+                        "git",
+                        "ls-tree",
+                        baseline["commit"],
+                        "--",
+                        baseline["path"],
+                    ],
+                    cwd=ROOT,
+                    text=True,
+                ).strip().split(maxsplit=3)
+                content = subprocess.check_output(
+                    [
+                        "git",
+                        "show",
+                        f"{baseline['commit']}:{baseline['path']}",
+                    ],
+                    cwd=ROOT,
+                )
+                current = ROOT / baseline["path"]
+                current_mode = (
+                    "100755"
+                    if os.stat(current).st_mode & 0o111
+                    else "100644"
+                )
+                self.assertEqual(entry[0], baseline["mode"])
+                self.assertEqual(entry[1], "blob")
+                self.assertEqual(entry[2], baseline["blobOid"])
+                self.assertEqual(
+                    "sha256:" + hashlib.sha256(content).hexdigest(),
+                    baseline["sha256"],
+                )
+                self.assertEqual(current.read_bytes(), content)
+                self.assertEqual(current_mode, baseline["mode"])
+
+    def test_workflow_dispatch_cannot_request_real_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            add_skill(root, "demo-skill")
+            commit_all(root, "add skill")
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=False,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["mutationAllowed"])
+        self.assertIn(
+            "restricted to dry-run",
+            result["blockingReasons"][0],
+        )
+
+    def test_only_push_main_can_request_mutation(self):
+        cases = (
+            ("pull_request", "refs/pull/1/merge", "restricted to dry-run"),
+            ("schedule", "refs/heads/main", "not supported"),
+            ("push", "refs/heads/topic", "requires a push"),
+        )
+        for event_name, ref, expected in cases:
+            with self.subTest(event_name=event_name, ref=ref):
+                with tempfile.TemporaryDirectory() as directory:
+                    root, _ = make_repo(directory)
+                    add_skill(root, "demo-skill")
+                    commit_all(root, "add skill")
+                    result = MODULE.evaluate(
+                        root,
+                        event_name=event_name,
+                        ref=ref,
+                        dry_run=False,
+                        changed_only=True,
+                        skill_path="skills/demo-skill",
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["mutationAllowed"])
+                self.assertIn(expected, result["blockingReasons"][0])
+
+    def test_real_publish_requires_base_and_changed_explicit_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base = make_repo(directory)
+            add_skill(root, "demo-skill")
+            head = commit_all(root, "add skill")
+            missing_base = MODULE.evaluate(
+                root,
+                event_name="push",
+                ref="refs/heads/main",
+                dry_run=False,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+            unchanged = MODULE.evaluate(
+                root,
+                event_name="push",
+                ref="refs/heads/main",
+                dry_run=False,
+                changed_only=True,
+                base=head,
+                head=head,
+                skill_path="skills/demo-skill",
+            )
+            changed = MODULE.evaluate(
+                root,
+                event_name="push",
+                ref="refs/heads/main",
+                dry_run=False,
+                changed_only=True,
+                base=base,
+                head=head,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(missing_base["valid"])
+        self.assertIn(
+            "requires a full base commit",
+            missing_base["blockingReasons"][0],
+        )
+        self.assertFalse(unchanged["valid"])
+        self.assertIn(
+            "is not changed",
+            unchanged["blockingReasons"][0],
+        )
+        self.assertTrue(changed["valid"], changed["blockingReasons"])
+        self.assertTrue(changed["mutationAllowed"])
+
+    def test_inherited_path_cannot_select_git(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake_git = Path(directory) / "git"
+            fake_git.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_git.chmod(0o755)
+            with mock.patch.dict(
+                "os.environ",
+                {"PATH": str(fake_git.parent)},
+                clear=False,
+            ), mock.patch.object(
+                MODULE.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                ),
+            ) as run:
+                MODULE.run_git(Path(directory), "status")
+
+        self.assertEqual(run.call_args.args[0][0], "/usr/bin/git")
+        self.assertEqual(run.call_args.kwargs["env"]["PATH"], "/usr/bin")
+        self.assertEqual(
+            run.call_args.kwargs["timeout"],
+            MODULE.GIT_TIMEOUT_SECONDS,
+        )
+
+    def test_git_timeout_is_a_structured_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            with mock.patch.object(
+                MODULE.subprocess,
+                "run",
+                side_effect=subprocess.TimeoutExpired("git", 30),
+            ):
+                result = MODULE.evaluate(
+                    root,
+                    event_name="push",
+                    dry_run=True,
+                    changed_only=True,
+                    skill_path="skills/demo-skill",
+                )
+
+        self.assertFalse(result["valid"])
+        self.assertIn("timed out", result["blockingReasons"][0])
+
+    def test_changed_only_without_base_or_explicit_path_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "requires a valid base or explicit skill_path",
+            result["blockingReasons"][0],
+        )
+
+    def test_unbounded_scan_is_rejected_even_when_changed_only_is_false(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=False,
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn("unbounded", result["blockingReasons"][0])
+
+    def test_zero_changed_skills_is_a_successful_no_op(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base = make_repo(directory)
+            (root / "README.md").write_text("changed\n", encoding="utf-8")
+            head = commit_all(root, "non-skill change")
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=False,
+                changed_only=True,
+                ref="refs/heads/main",
+                base=base,
+                head=head,
+            )
+
+        self.assertTrue(result["valid"], result["blockingReasons"])
+        self.assertEqual(result["decision"], "no-op")
+        self.assertFalse(result["mutationAllowed"])
+        self.assertEqual(result["targetCount"], 0)
+        self.assertIsNone(result["skillPath"])
+
+    def test_exactly_one_changed_skill_is_selected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base = make_repo(directory)
+            add_skill(root, "demo-skill")
+            head = commit_all(root, "add one skill")
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=False,
+                changed_only=True,
+                ref="refs/heads/main",
+                base=base,
+                head=head,
+            )
+
+        self.assertTrue(result["valid"], result["blockingReasons"])
+        self.assertEqual(result["decision"], "single-target")
+        self.assertTrue(result["mutationAllowed"])
+        self.assertEqual(result["targetCount"], 1)
+        self.assertEqual(result["skillPath"], "skills/demo-skill")
+        self.assertEqual(result["slug"], "demo-skill")
+
+    def test_multiple_changed_skills_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base = make_repo(directory)
+            add_skill(root, "first-skill")
+            add_skill(root, "second-skill")
+            head = commit_all(root, "add two skills")
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base=base,
+                head=head,
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["mutationAllowed"])
+        self.assertIn("more than one", result["blockingReasons"][0])
+
+    def test_deleted_and_added_skills_are_still_multiple_targets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            first = add_skill(root, "first-skill")
+            base = commit_all(root, "add first skill")
+            for child in first.iterdir():
+                child.unlink()
+            first.rmdir()
+            add_skill(root, "second-skill")
+            head = commit_all(root, "replace skill")
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base=base,
+                head=head,
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn("more than one", result["blockingReasons"][0])
+
+    def test_explicit_target_cannot_hide_another_changed_skill(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base = make_repo(directory)
+            add_skill(root, "first-skill")
+            add_skill(root, "second-skill")
+            head = commit_all(root, "add two skills")
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base=base,
+                head=head,
+                skill_path="skills/first-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "does not cover all changed Skills",
+            result["blockingReasons"][0],
+        )
+
+    def test_explicit_path_is_strictly_validated(self):
+        invalid_paths = (
+            "",
+            "/skills/demo-skill",
+            "skills//demo-skill",
+            "skills/../demo-skill",
+            "skills/demo-skill/",
+            "skills\\demo-skill",
+            "other/demo-skill",
+            "skills/Demo-Skill",
+            "skills/clawhub-demo",
+            "skills/demo-clawhub",
+            "skills/demo-skill/nested",
+        )
+        for value in invalid_paths:
+            with self.subTest(skill_path=value):
+                with tempfile.TemporaryDirectory() as directory:
+                    root, _ = make_repo(directory)
+                    add_skill(root, "demo-skill")
+                    commit_all(root, "add valid fixture")
+                    result = MODULE.evaluate(
+                        root,
+                        event_name="push",
+                        dry_run=True,
+                        changed_only=True,
+                        skill_path=value,
+                    )
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["mutationAllowed"])
+
+    def test_explicit_path_requires_complete_regular_skill_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            skill = add_skill(root, "demo-skill")
+            (skill / "CHANGELOG.md").unlink()
+            commit_all(root, "add incomplete skill")
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "missing required file CHANGELOG.md",
+            result["blockingReasons"][0],
+        )
+
+    def test_explicit_path_rejects_symlinked_skill(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            real = add_skill(root, "real-skill")
+            alias = root / "skills" / "alias-skill"
+            alias.symlink_to(real.name, target_is_directory=True)
+            commit_all(root, "add symlinked skill")
+            result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/alias-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "must not contain symlinks",
+            result["blockingReasons"][0],
+        )
+
+    def test_invalid_or_non_ancestor_base_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base = make_repo(directory)
+            add_skill(root, "demo-skill")
+            head = commit_all(root, "add skill")
+            malformed = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base="HEAD~1",
+                head=head,
+            )
+            symbolic = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base="HEAD",
+                head=head,
+            )
+            subprocess.run(
+                ["git", "checkout", "-q", "-b", "sibling", base],
+                cwd=root,
+                check=True,
+            )
+            (root / "sibling.txt").write_text("sibling\n", encoding="utf-8")
+            sibling = commit_all(root, "sibling commit")
+            subprocess.run(
+                ["git", "checkout", "-q", "--detach", head],
+                cwd=root,
+                check=True,
+            )
+            reversed_range = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base=sibling,
+                head=head,
+            )
+
+        self.assertFalse(malformed["valid"])
+        self.assertIn(
+            "full lowercase commit",
+            malformed["blockingReasons"][0],
+        )
+        self.assertFalse(symbolic["valid"])
+        self.assertIn(
+            "base must be a full lowercase commit",
+            symbolic["blockingReasons"][0],
+        )
+        self.assertFalse(reversed_range["valid"])
+        self.assertIn("ancestor", reversed_range["blockingReasons"][0])
+
+    def test_non_string_and_non_boolean_inputs_fail_structurally(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            cases = (
+                {"event_name": [], "dry_run": True, "changed_only": True},
+                {"event_name": "push", "dry_run": "false", "changed_only": True},
+                {"event_name": "push", "dry_run": True, "changed_only": 1},
+            )
+            for values in cases:
+                with self.subTest(values=values):
+                    result = MODULE.evaluate(
+                        root,
+                        skill_path="skills/demo-skill",
+                        **values,
+                    )
+                    json.dumps(result)
+                    self.assertFalse(result["valid"])
+                    self.assertFalse(result["mutationAllowed"])
+                    self.assertTrue(result["blockingReasons"])
+
+    def test_dirty_worktree_and_non_head_commit_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, base = make_repo(directory)
+            add_skill(root, "demo-skill")
+            head = commit_all(root, "add skill")
+            dirty = root / "README.md"
+            dirty.write_text("dirty\n", encoding="utf-8")
+            dirty_result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base=base,
+                head=head,
+            )
+            dirty.write_text("fixture\n", encoding="utf-8")
+            stale_result = MODULE.evaluate(
+                root,
+                event_name="push",
+                dry_run=True,
+                changed_only=True,
+                base=base,
+                head=base,
+            )
+
+        self.assertFalse(dirty_result["valid"])
+        self.assertIn(
+            "worktree must be clean",
+            dirty_result["blockingReasons"][0],
+        )
+        self.assertFalse(stale_result["valid"])
+        self.assertIn(
+            "checked-out repository HEAD",
+            stale_result["blockingReasons"][0],
+        )
+
+    def test_cli_emits_json_and_uses_documented_exit_codes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            add_skill(root, "demo-skill")
+            commit_all(root, "add skill")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(GUARD),
+                    "--repo-root",
+                    str(root),
+                    "--event-name",
+                    "workflow_dispatch",
+                    "--dry-run",
+                    "true",
+                    "--changed-only",
+                    "true",
+                    "--skill-path",
+                    "skills/demo-skill",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            result = json.loads(completed.stdout)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["decision"], "single-target")
+        self.assertFalse(result["mutationAllowed"])
+        self.assertEqual(
+            set(result),
+            {
+                "schemaVersion",
+                "valid",
+                "decision",
+                "eventName",
+                "ref",
+                "dryRun",
+                "changedOnly",
+                "mutationAllowed",
+                "targetCount",
+                "skillPath",
+                "slug",
+                "baseCommit",
+                "headCommit",
+                "blockingReasons",
+            },
+        )
+        self.assertEqual(completed.stderr, "")
+
+    def test_guard_has_only_offline_standard_library_and_git_surface(self):
+        source = GUARD.read_text(encoding="utf-8")
+
+        for forbidden in (
+            "requests",
+            "urllib",
+            "socket.",
+            "curl ",
+            "wget ",
+            "clawhub ",
+            "bun ",
+            "CLAWHUB_TOKEN",
+            "GH_TOKEN",
+            "shell=True",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+        self.assertIn('Path("/usr/bin/git")', source)
+
+
+if __name__ == "__main__":
+    unittest.main()

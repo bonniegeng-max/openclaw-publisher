@@ -134,6 +134,17 @@ launcher 不从继承的 `PATH` 发现 Git，而只使用固定系统入口 `/us
 workflow 还必须保证 control 与 candidate checkout 在整个 preflight 期间不被
 其他 job 或进程写入；静态路径检查不能独立消除同主机并发替换风险。
 
+## 安全目标选择草案
+
+`safe_publish_target_guard.py` 是针对正式 workflow 当前手动触发、缺失 base
+回退全目录和多目标循环发布风险的纯离线草案。它固定系统 Git、要求干净 HEAD，
+并把事件、ref、base 与最多一个真实变化 Skill 绑定；研究合同和完整边界见
+`safe-publish-target-contract.json` 与 `safe-publish-target-guard.md`。
+
+该 guard 未接入 `.github/workflows`，也不读取凭据、安装 Bun、调用 ClawHub 或
+访问 registry。其 `mutationAllowed: true` 只表示目标选择边界满足，不等于发布
+授权，更不构成 E1-E4 证据。
+
 退出码：
 
 - `0`：合同有效，且当前模式已获本次变更授权。

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "status": "research-only-not-wired",
+  "guard": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
+  "formalWorkflowModified": false,
+  "knownFormalRisks": [
+    "workflow-dispatch-can-request-real-publish",
+    "changed-only-can-fall-back-to-root-scan",
+    "multiple-targets-can-be-published"
+  ],
+  "formalBaselines": {
+    "caller": {
+      "path": ".github/workflows/clawhub-skill-publish.yml",
+      "commit": "ac346e8ec53492a43d8d294d1fa1486b803e133b",
+      "mode": "100644",
+      "blobOid": "2eae3b48f9a379a34aaa39be299baed2c89181a2",
+      "sha256": "sha256:cb48da64fc47ffda31e3838de846e91112dac5688e508c34c23d6aa87af92f68"
+    },
+    "local": {
+      "path": ".github/workflows/clawhub-skill-publish-local.yml",
+      "commit": "ac346e8ec53492a43d8d294d1fa1486b803e133b",
+      "mode": "100644",
+      "blobOid": "e9cd2dd213ba77f49798433a6173430048cb5554",
+      "sha256": "sha256:aafe46a503b85711ddfeb6c41157ba220f6ca60e0f0404bab9e5fc785ac237e5"
+    }
+  },
+  "executionBoundary": {
+    "allowedExecutables": [
+      "python3",
+      "/usr/bin/git"
+    ],
+    "gitTimeoutSeconds": 30,
+    "networkAllowed": false,
+    "credentialsAccepted": false,
+    "packageRuntimeAllowed": false,
+    "registryMutationAllowed": false
+  },
+  "selectionRules": {
+    "maximumTargets": 1,
+    "zeroTargets": "no-op",
+    "multipleTargets": "reject",
+    "supportedEvents": [
+      "pull_request",
+      "push",
+      "workflow_dispatch"
+    ],
+    "workflowDispatchRealPublish": "reject",
+    "pullRequestRealPublish": "reject",
+    "realPublishRef": "refs/heads/main",
+    "realPublishRequiresBase": true,
+    "realPublishRequiresChangedTarget": true,
+    "changedOnlyWithoutBaseOrSkillPath": "reject",
+    "unboundedDirectoryScan": "reject",
+    "cleanWorktreeRequired": true,
+    "headMustMatchCheckout": true,
+    "explicitTargetMustCoverChangedSkillsWhenBaseProvided": true,
+    "explicitSkillPathPattern": "skills/<valid-slug>",
+    "requiredSkillFiles": [
+      "SKILL.md",
+      "CHANGELOG.md",
+      ".clawhubignore"
+    ]
+  },
+  "evidenceBoundary": {
+    "currentLevel": "E0",
+    "deploymentReady": false,
+    "workflowSuccessCeiling": "E2",
+    "downloadableClaimRequires": "E4"
+  }
+}

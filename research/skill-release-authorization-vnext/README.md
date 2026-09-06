@@ -122,6 +122,9 @@ research/skill-release-authorization-vnext/trusted_preflight_launcher.py
 Python 从该字节快照执行 checker；随后验证严格 JSON、退出码、slug、semver、
 releaseId、base/candidate/head、单目标以及 trusted-control 证据是否一致。它不
 接收 token、registry 或发布参数，也不执行 Bun、ClawHub、dry-run 或 publish。
+launcher 不从继承的 `PATH` 发现 Git，而只使用固定系统入口 `/usr/bin/git`；
+入口缺失、目标不是可执行普通文件时立即失败，防止候选环境把伪 Git 提升为证据
+信任根。可信 Python 解释器仍必须由未来 fixed-SHA workflow 在仓外固定。
 正式接线后必须从固定完整 SHA 的 reusable workflow 调用该逻辑；仅存在研究文件
 不能把 `trusted-control-execution` 改为已验证。
 workflow 还必须保证 control 与 candidate checkout 在整个 preflight 期间不被

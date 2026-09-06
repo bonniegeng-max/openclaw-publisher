@@ -46,6 +46,8 @@ environment，届时使用该 environment 自己的 secret：
 4. 由 workflow 固定可信 Python 与 Git 可执行文件及 `PATH`，使用 `python -I`
    启动 checker，并清除候选可控的 Python/Git 环境变量；checker 内部的路径自检
    只能证明路径匹配，不能替代 launcher 的启动前信任。
+   研究版 launcher 固定使用 `/usr/bin/git`，不得通过继承的 `PATH` 发现 Git；
+   workflow runner 必须提供并保护该系统入口，同时以固定绝对路径启动 Python。
    研究版启动合同位于
    `research/skill-release-authorization-vnext/trusted_preflight_launcher.py`；
    它尚未被正式 workflow 调用，因此不构成部署证据。

@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 import sys
@@ -17,6 +16,7 @@ from typing import Any
 
 
 EXPECTED_REPOSITORY = "github.com/bonniegeng-max/openclaw-publisher"
+TRUSTED_GIT_ENTRY = Path("/usr/bin/git")
 CHECKER_RELATIVE = Path("scripts/check_skill_release_authorization.py")
 ALLOWED_MODES = {"dry-run", "publish"}
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
@@ -157,17 +157,21 @@ def resolve_executables() -> tuple[Path, Path]:
         "Python executable",
         reject_hardlinks=False,
     )
-    observed_git = shutil.which("git")
-    if observed_git is None:
-        raise ValueError("Git executable is unavailable")
-    git_entry = lexical_absolute(Path(observed_git))
-    git_path = git_entry.resolve()
+    git_entry = TRUSTED_GIT_ENTRY
+    try:
+        git_path = git_entry.resolve(strict=True)
+    except OSError as error:
+        raise ValueError(
+            f"trusted Git executable cannot be resolved: {error}"
+        ) from error
     require_regular_file(
         git_path,
-        "Git executable",
+        "trusted Git executable",
         reject_hardlinks=False,
     )
-    return python_path, git_path
+    if not os.access(git_path, os.X_OK):
+        raise ValueError("trusted Git executable must be executable")
+    return python_path, git_entry
 
 
 def child_environment(git_path: Path) -> dict[str, str]:

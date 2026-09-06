@@ -114,6 +114,49 @@ class TrustedPreflightLauncherTests(unittest.TestCase):
         self.assertIn("invalid launcher arguments", result["errors"][0])
         self.assertEqual(completed.stderr, "")
 
+    def test_resolve_executables_ignores_inherited_path_for_git(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake_git = Path(directory) / "git"
+            fake_git.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_git.chmod(0o755)
+
+            with mock.patch.dict(
+                os.environ,
+                {"PATH": str(fake_git.parent)},
+                clear=False,
+            ):
+                _, git_path = MODULE.resolve_executables()
+
+        self.assertEqual(git_path, MODULE.TRUSTED_GIT_ENTRY)
+        self.assertNotEqual(git_path, fake_git)
+
+    def test_resolve_executables_rejects_unusable_fixed_git(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            for label, path, expected in (
+                (
+                    "missing",
+                    workspace / "missing-git",
+                    "cannot be resolved",
+                ),
+                (
+                    "not-executable",
+                    workspace / "non-executable-git",
+                    "must be executable",
+                ),
+            ):
+                with self.subTest(label=label):
+                    if label == "not-executable":
+                        path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                        path.chmod(0o644)
+                    with mock.patch.object(
+                        MODULE,
+                        "TRUSTED_GIT_ENTRY",
+                        path,
+                    ):
+                        with self.assertRaisesRegex(ValueError, expected):
+                            MODULE.resolve_executables()
+
     def test_child_environment_is_allowlisted(self):
         sensitive = {
             "CLAWHUB_TOKEN": "secret",

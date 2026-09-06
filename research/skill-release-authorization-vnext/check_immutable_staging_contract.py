@@ -343,22 +343,19 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         except ValueError as error:
             errors.append(str(error))
         launcher_baseline = launcher_evidence["baseline"]
-        if launcher_baseline is None:
-            launcher_baseline_valid = True
-        else:
-            try:
-                launcher_baseline_valid = (
-                    isinstance(launcher_baseline, dict)
-                    and set(launcher_baseline) == BASELINE_FIELDS
-                    and SAFE_CHECKER.check_baseline(
-                        root,
-                        launcher_baseline,
-                        LAUNCHER,
-                        require_worktree=False,
-                    )
+        try:
+            launcher_baseline_valid = (
+                isinstance(launcher_baseline, dict)
+                and set(launcher_baseline) == BASELINE_FIELDS
+                and SAFE_CHECKER.check_baseline(
+                    root,
+                    launcher_baseline,
+                    LAUNCHER,
+                    require_worktree=False,
                 )
-            except ValueError as error:
-                errors.append(str(error))
+            )
+        except ValueError as error:
+            errors.append(str(error))
     add(
         "launcher-draft",
         launcher_evidence_shape and launcher_draft_valid,

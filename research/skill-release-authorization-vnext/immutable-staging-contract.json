@@ -7,10 +7,10 @@
   "builderEvidence": {
     "baseline": {
       "path": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
-      "commit": "dfa2c9be6ac222c9b0bf7f274f3899cd6cd1002a",
+      "commit": "d059b1feb5b120debd7743d6aaf3c62c4ca4ebfe",
       "mode": "100644",
-      "blobOid": "83f259b5d47f9857b2bfac211870d0899aee7fe1",
-      "sha256": "sha256:9abc65607b5a6c93ee6738c5819f715372bef56c0d15881bfd0fbba5b5af735a"
+      "blobOid": "05893b2f7c399d24c3e8ec454a8ba9688b3b7fc4",
+      "sha256": "sha256:669e78c484bdff09dbfc02a9275e7eb574e759311c667b4d369cd904ec9574c8"
     },
     "draft": {
       "path": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
@@ -19,7 +19,13 @@
     }
   },
   "launcherEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/trusted_staging_launcher.py",
+      "commit": "d059b1feb5b120debd7743d6aaf3c62c4ca4ebfe",
+      "mode": "100644",
+      "blobOid": "955fd27c5da543634858ce4ef8cef4389e9e62b7",
+      "sha256": "sha256:a988a2ceaddd2497eeb7358625f9eba680b0e42fddfea6a7dd23e7c70d8af672"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/trusted_staging_launcher.py",
       "mode": "100644",

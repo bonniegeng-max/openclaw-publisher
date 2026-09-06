@@ -40,6 +40,7 @@ def make_contract_repo(directory):
     root = Path(directory)
     for relative in (
         ".github/workflows/clawhub-skill-publish.yml",
+        "research/skill-release-authorization-vnext/trusted_preflight_launcher.py",
         "scripts/check_skill_release_authorization.py",
         "scripts/validate_skill_catalog.py",
     ):
@@ -106,6 +107,20 @@ def bind_control_files(root, contract, commit):
             cwd=root,
         )
         item["sha256"] = MODULE.digest_bytes(content)
+    draft = contract["trustedControlExecution"]["launcherDraft"]
+    draft["commit"] = commit
+    entry = subprocess.check_output(
+        ["git", "ls-tree", commit, "--", draft["path"]],
+        cwd=root,
+        text=True,
+    ).strip().split(maxsplit=3)
+    draft["mode"] = entry[0]
+    draft["blobOid"] = entry[2]
+    content = subprocess.check_output(
+        ["git", "show", f"{commit}:{draft['path']}"],
+        cwd=root,
+    )
+    draft["sha256"] = MODULE.digest_bytes(content)
 
 
 class WorkflowIntegrationContractTests(unittest.TestCase):
@@ -125,6 +140,9 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertTrue(
             result["localEvidence"]["controlAnchorLocallyConsistent"]
+        )
+        self.assertTrue(
+            result["localEvidence"]["launcherDraftLocallyConsistent"]
         )
         self.assertNotIn(
             "trustedControlAnchorVerified",
@@ -176,6 +194,15 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIsNone(contract["trustedClawHubCli"]["commit"])
         self.assertFalse(contract["trustedClawHubCli"]["verified"])
+        launcher = contract["trustedControlExecution"]["launcherDraft"]
+        self.assertEqual(
+            launcher["path"],
+            MODULE.EXPECTED_LAUNCHER_DRAFT,
+        )
+        self.assertRegex(launcher["commit"], r"^[0-9a-f]{40}$")
+        self.assertIn(launcher["mode"], {"100644", "100755"})
+        self.assertRegex(launcher["blobOid"], r"^[0-9a-f]{40}$")
+        self.assertRegex(launcher["sha256"], r"^sha256:[0-9a-f]{64}$")
 
     def test_observation_hold_matches_formal_workflow_state(self):
         contract = load_contract()
@@ -223,6 +250,12 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         control_execution = load_contract()
         control_execution["trustedControlExecution"]["verified"] = True
         mutations.append(("trusted control execution", control_execution))
+
+        launcher_draft = load_contract()
+        launcher_draft["trustedControlExecution"]["launcherDraft"][
+            "sha256"
+        ] = "sha256:" + "0" * 64
+        mutations.append(("launcher draft", launcher_draft))
 
         for label, value in mutations:
             with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
@@ -388,6 +421,7 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertTrue(result["valid"], result["errors"])
         self.assertTrue(result["checks"]["local-control-anchor"])
+        self.assertTrue(result["checks"]["launcher-draft-anchor"])
 
     def test_git_environment_filters_untrusted_git_variables(self):
         injected = {
@@ -521,6 +555,9 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
                     )
                     self.assertTrue(
                         result["checks"]["local-control-anchor"]
+                    )
+                    self.assertTrue(
+                        result["checks"]["launcher-draft-anchor"]
                     )
 
     def test_symlink_git_entry_cannot_be_trusted_control(self):

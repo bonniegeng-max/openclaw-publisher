@@ -26,6 +26,10 @@ EXPECTED_CONTROL_FILES = {
     "scripts/check_skill_release_authorization.py",
     "scripts/validate_skill_catalog.py",
 }
+EXPECTED_LAUNCHER_DRAFT = (
+    "research/skill-release-authorization-vnext/"
+    "trusted_preflight_launcher.py"
+)
 TOP_LEVEL_FIELDS = {
     "schemaVersion",
     "status",
@@ -553,17 +557,58 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         blockers.append("local-control-anchor")
 
     control_execution = contract.get("trustedControlExecution")
-    control_execution_hold = control_execution == {
-        "verified": False,
-        "evidence": None,
-    }
+    launcher_draft_consistent = False
+    control_execution_hold = (
+        isinstance(control_execution, dict)
+        and set(control_execution) == {"verified", "evidence", "launcherDraft"}
+        and control_execution["verified"] is False
+        and control_execution["evidence"] is None
+        and isinstance(control_execution["launcherDraft"], dict)
+        and set(control_execution["launcherDraft"])
+        == {"path", "commit", "mode", "blobOid", "sha256"}
+    )
+    if control_execution_hold:
+        draft = control_execution["launcherDraft"]
+        draft_shape = (
+            draft["path"] == EXPECTED_LAUNCHER_DRAFT
+            and isinstance(draft["commit"], str)
+            and COMMIT_PATTERN.fullmatch(draft["commit"]) is not None
+            and draft["mode"] in {"100644", "100755"}
+            and isinstance(draft["blobOid"], str)
+            and COMMIT_PATTERN.fullmatch(draft["blobOid"]) is not None
+            and isinstance(draft["sha256"], str)
+            and DIGEST_PATTERN.fullmatch(draft["sha256"]) is not None
+        )
+        if draft_shape:
+            try:
+                observed_draft = {
+                    "commit": draft["commit"],
+                    **git_blob_evidence(
+                        root,
+                        draft["commit"],
+                        draft["path"],
+                    ),
+                }
+                launcher_draft_consistent = observed_draft == draft
+            except ValueError as error:
+                errors.append(str(error))
+        else:
+            errors.append("launcher draft evidence is malformed")
     add_check(
         checks,
         errors,
         "trusted-control-execution-not-claimed",
         control_execution_hold,
-        "trusted control execution must remain unverified until atomic checker and validator binding exists",
+        "trusted control execution must remain unverified until a fixed-SHA workflow invokes the launcher",
     )
+    checks["launcher-draft-anchor"] = launcher_draft_consistent
+    local_evidence["launcherDraftLocallyConsistent"] = (
+        launcher_draft_consistent
+    )
+    if not launcher_draft_consistent:
+        errors.append(
+            "launcher draft evidence does not match the pinned local Git blob"
+        )
     blockers.append("trusted-control-execution")
 
     reusable = contract.get("trustedReusableWorkflow")

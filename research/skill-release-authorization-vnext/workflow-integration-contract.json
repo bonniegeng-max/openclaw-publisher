@@ -12,13 +12,13 @@
   },
   "trustedControl": {
     "repository": "bonniegeng-max/openclaw-publisher",
-    "commit": "ca9a1fa88e8fc17c25a74b0ec31d5b7916832ace",
+    "commit": "c1607f241575765b0f7629112593b907d6130ad4",
     "files": [
       {
         "path": "scripts/check_skill_release_authorization.py",
         "mode": "100644",
-        "blobOid": "5367fb14f456a2d03bb17251f62111615a9e32f4",
-        "sha256": "sha256:cfa7c33d52dbddf0abd70677e9ef8949790162293ddf4127c6b797e3e9e2a2cd"
+        "blobOid": "ec81e1b98930790822b398e18b52a1b76f5f73af",
+        "sha256": "sha256:7136dad0f402ae4f7e3e069947ba1237407c6c6df773f3417f45ad688b9920e5"
       },
       {
         "path": "scripts/validate_skill_catalog.py",
@@ -30,7 +30,14 @@
   },
   "trustedControlExecution": {
     "verified": false,
-    "evidence": null
+    "evidence": null,
+    "launcherDraft": {
+      "path": "research/skill-release-authorization-vnext/trusted_preflight_launcher.py",
+      "commit": "c1607f241575765b0f7629112593b907d6130ad4",
+      "mode": "100644",
+      "blobOid": "331229d3673b5c578337dbc423e6b15474058c87",
+      "sha256": "sha256:fc75ce8c4c74e82a66e58c6efcec33d052a86c25a309430be414e2673fb511b5"
+    }
   },
   "trustedReusableWorkflow": {
     "repository": "bonniegeng-max/openclaw-publisher",

@@ -58,7 +58,13 @@
     "realMutationBlocker": "independent-atomic-ledger-reservation-not-implemented"
   },
   "auditorEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/check_protected_release_runtime_contract.py",
+      "commit": "85d459e3e834a49196bece20a9eac4c75e74d789",
+      "mode": "100644",
+      "blobOid": "efd7adb9003d0f08d064c1ba0ac9590df2234b3d",
+      "sha256": "sha256:ec6f8ab2316cd7d1514b2418762848013d03037af2e33c5770f031e5e6b5b98e"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/check_protected_release_runtime_contract.py",
       "commit": null,
@@ -68,7 +74,7 @@
     }
   },
   "twoStageAnchoring": {
-    "local": false,
+    "local": true,
     "remote": false,
     "deployment": "blocked"
   },

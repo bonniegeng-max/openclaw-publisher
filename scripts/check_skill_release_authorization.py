@@ -7,9 +7,12 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import re
+import stat
 import subprocess
 import sys
+import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -61,6 +64,11 @@ PROTECTED_CONTROL_PATHS = {
     "scripts/check_skill_release_authorization.py",
     "scripts/validate_skill_catalog.py",
 }
+TRUSTED_CONTROL_PATHS = {
+    "checker": "scripts/check_skill_release_authorization.py",
+    "validator": "scripts/validate_skill_catalog.py",
+}
+EXPECTED_CONTROL_ORIGIN = "github.com/bonniegeng-max/openclaw-publisher"
 
 
 def reject_nonstandard_number(value: str) -> None:
@@ -177,17 +185,15 @@ def load_base_versions(
         if catalog_key not in base_catalog:
             versions[slug] = None
             continue
-        completed = subprocess.run(
-            ["git", "show", f"{base_commit}:{catalog_key}/SKILL.md"],
-            cwd=repo_root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if completed.returncode != 0:
-            message = completed.stderr.strip() or completed.stdout.strip()
-            raise ValueError(f"{slug}: cannot read base SKILL.md: {message}")
-        match = re.match(r"\A---\n(.*?)\n---\n", completed.stdout, re.DOTALL)
+        try:
+            skill_text = run_git(
+                repo_root,
+                "show",
+                f"{base_commit}:{catalog_key}/SKILL.md",
+            )
+        except ValueError as error:
+            raise ValueError(f"{slug}: cannot read base SKILL.md: {error}") from error
+        match = re.match(r"\A---\n(.*?)\n---\n", skill_text, re.DOTALL)
         if not match:
             raise ValueError(f"{slug}: base SKILL.md frontmatter missing")
         observed = {}
@@ -234,23 +240,43 @@ def load_catalog_validator(repo_root: Path):
     return module
 
 
-def validate_catalog(repo_root: Path, catalog_path: Path) -> list[str]:
+def validate_catalog(
+    repo_root: Path,
+    catalog_path: Path,
+    validator: Any | None = None,
+) -> list[str]:
     try:
-        validator = load_catalog_validator(repo_root)
+        if validator is None:
+            validator = load_catalog_validator(repo_root)
+        if not callable(getattr(validator, "validate", None)):
+            raise ValueError("catalog validator must expose callable validate")
         result = validator.validate(repo_root, catalog_path)
-    except (OSError, TypeError, ValueError) as error:
+    except BaseException as error:
+        if isinstance(error, (KeyboardInterrupt, GeneratorExit)):
+            raise
         return [f"catalog preflight cannot run: {error}"]
     if not isinstance(result, dict) or not isinstance(result.get("valid"), bool):
         return ["catalog preflight returned an invalid result"]
+    errors = result.get("errors", [])
+    if not isinstance(errors, list):
+        return ["catalog preflight returned malformed errors"]
     if result["valid"]:
         return []
     messages = []
-    for item in result.get("errors", []):
+    for item in errors:
         if isinstance(item, dict):
             code = item.get("code", "UNKNOWN")
             path = item.get("path", "$")
             message = item.get("message", "catalog validation failed")
-            messages.append(f"catalog preflight {code} at {path}: {message}")
+            if not all(
+                isinstance(value, str)
+                for value in (code, path, message)
+            ):
+                messages.append("catalog preflight returned malformed errors")
+            else:
+                messages.append(
+                    f"catalog preflight {code} at {path}: {message}"
+                )
         else:
             messages.append("catalog preflight returned malformed errors")
     return messages or ["catalog preflight failed without an error"]
@@ -335,6 +361,37 @@ def path_uses_symlink(repo_root: Path, relative: str) -> bool:
         if current.is_symlink():
             return True
     return False
+
+
+def lexical_absolute(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def absolute_path_uses_symlink(path: Path) -> bool:
+    absolute = lexical_absolute(path)
+    current = Path(absolute.anchor)
+    try:
+        for part in absolute.parts[1:]:
+            current = current / part
+            if stat.S_ISLNK(os.lstat(current).st_mode):
+                return True
+    except OSError as error:
+        raise ValueError(f"cannot inspect path {path}: {error}") from error
+    return False
+
+
+def normalize_origin(value: str) -> str:
+    match = re.fullmatch(
+        r"(?:https://github\.com/|git@github\.com:)"
+        r"([^/]+/[^/]+?)(?:\.git)?",
+        value.strip(),
+    )
+    if match is not None:
+        return f"github.com/{match.group(1)}"
+    path = Path(value).expanduser()
+    if path.is_absolute() or value.startswith((".", "..")):
+        return f"file://{lexical_absolute(path)}"
+    raise ValueError("origin must be an explicit GitHub URL or absolute local path")
 
 
 def file_sha256(path: Path) -> str:
@@ -431,6 +488,286 @@ def invalid_result(mode: str, now: datetime, error: Exception) -> dict[str, Any]
     }
 
 
+def trusted_control_invalid_result(
+    mode: str,
+    now: datetime,
+    error: Exception,
+) -> dict[str, Any]:
+    result = invalid_result(mode, now, error)
+    result["phase"] = "trusted-control"
+    return result
+
+
+class TrustedControl:
+    """Verified control-plane files from an independent trusted checkout."""
+
+    def __init__(
+        self,
+        candidate_root: Path,
+        control_root: Path,
+        control_commit: str,
+        expected_origin_identity: str,
+    ) -> None:
+        self.candidate_root = lexical_absolute(candidate_root)
+        self.control_root = lexical_absolute(control_root)
+        self.control_commit = control_commit
+        self.expected_origin_identity = expected_origin_identity
+        self.snapshots: dict[str, bytes] = {}
+        self.file_evidence: dict[str, dict[str, str]] = {}
+        self.origin_identity = ""
+        self.executing_checker_path_matched = False
+        self.candidate_checkout_verified = False
+        self.control_git_dir: Path | None = None
+        self.control_common_dir: Path | None = None
+        self._verify_control()
+
+    def _git(self, root: Path, *args: str) -> str:
+        return run_git(root, *args).strip()
+
+    def _verify_checkout(
+        self,
+        root: Path,
+        label: str,
+    ) -> tuple[Path, Path, Path]:
+        top_level = Path(self._git(root, "rev-parse", "--show-toplevel")).resolve()
+        if top_level != root.resolve():
+            raise ValueError(f"{label} must be a Git checkout root")
+        git_dir = Path(
+            self._git(root, "rev-parse", "--absolute-git-dir")
+        ).resolve()
+        common_dir = Path(
+            self._git(
+                root,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-common-dir",
+            )
+        ).resolve()
+        return top_level, git_dir, common_dir
+
+    def _verify_blob(self, relative: str, label: str) -> bytes:
+        if path_uses_symlink(self.control_root, relative):
+            raise ValueError(f"trusted {label} path must not contain symlinks")
+        disk_path = self.control_root / relative
+        try:
+            disk_mode = os.lstat(disk_path).st_mode
+        except OSError as error:
+            raise ValueError(f"trusted {label} cannot be inspected: {error}") from error
+        if not stat.S_ISREG(disk_mode):
+            raise ValueError(f"trusted {label} must be a regular file")
+        if os.lstat(disk_path).st_nlink != 1:
+            raise ValueError(f"trusted {label} must not have multiple hard links")
+
+        entry = run_git_bytes(
+            self.control_root,
+            "ls-tree",
+            "-z",
+            self.control_commit,
+            "--",
+            relative,
+        )
+        records = [record for record in entry.split(b"\0") if record]
+        if len(records) != 1:
+            raise ValueError(f"trusted {label} must exist exactly once at control commit")
+        try:
+            metadata, observed_path = records[0].split(b"\t", 1)
+            mode, object_type, object_id = metadata.split(b" ", 2)
+        except ValueError as error:
+            raise ValueError(f"trusted {label} has malformed Git tree metadata") from error
+        try:
+            tree_path = observed_path.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as error:
+            raise ValueError(f"trusted {label} Git tree path is not UTF-8") from error
+        if tree_path != relative:
+            raise ValueError(f"trusted {label} Git tree path does not match")
+        if object_type != b"blob" or mode not in {b"100644", b"100755"}:
+            raise ValueError(f"trusted {label} must be a regular blob")
+
+        snapshot = run_git_bytes(
+            self.control_root,
+            "cat-file",
+            "blob",
+            object_id.decode("ascii"),
+        )
+        try:
+            disk_bytes = disk_path.read_bytes()
+        except OSError as error:
+            raise ValueError(f"trusted {label} cannot be read: {error}") from error
+        if disk_bytes != snapshot:
+            raise ValueError(
+                f"trusted {label} disk bytes do not match control commit"
+            )
+        self.file_evidence[label] = {
+            "path": relative,
+            "blobOid": object_id.decode("ascii"),
+            "sha256": "sha256:" + hashlib.sha256(snapshot).hexdigest(),
+        }
+        return snapshot
+
+    def _verify_control(self) -> None:
+        if (
+            not isinstance(self.control_commit, str)
+            or COMMIT_PATTERN.fullmatch(self.control_commit) is None
+        ):
+            raise ValueError("control commit must be a full lowercase SHA-1")
+        if absolute_path_uses_symlink(self.control_root):
+            raise ValueError("control root path must not contain symlinks")
+        _, self.control_git_dir, self.control_common_dir = self._verify_checkout(
+            self.control_root,
+            "control root",
+        )
+        if self.control_git_dir != self.control_common_dir:
+            raise ValueError("control root must not be a linked Git worktree")
+        control_origin = self._git(
+            self.control_root,
+            "remote",
+            "get-url",
+            "origin",
+        )
+        try:
+            control_identity = normalize_origin(control_origin)
+        except ValueError as error:
+            raise ValueError(f"cannot verify repository origin: {error}") from error
+        if control_identity != self.expected_origin_identity:
+            raise ValueError(
+                "control origin must match the expected repository"
+            )
+        self.origin_identity = control_identity
+
+        object_type = self._git(
+            self.control_root,
+            "cat-file",
+            "-t",
+            self.control_commit,
+        )
+        if object_type != "commit":
+            raise ValueError("control commit must name a commit object")
+        control_head = self._git(self.control_root, "rev-parse", "HEAD")
+        if control_head != self.control_commit:
+            raise ValueError("control checkout HEAD must equal control commit")
+        origin_main = self._git(
+            self.control_root,
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            "refs/remotes/origin/main^{commit}",
+        )
+        ancestry = run_git_process(
+            self.control_root,
+            "merge-base",
+            "--is-ancestor",
+            self.control_commit,
+            origin_main,
+            text=True,
+        )
+        if ancestry.returncode == 1:
+            raise ValueError("control commit must be reachable from origin/main")
+        if ancestry.returncode != 0:
+            message = ancestry.stderr.strip() or ancestry.stdout.strip()
+            raise ValueError(f"cannot verify control commit reachability: {message}")
+
+        for label, relative in TRUSTED_CONTROL_PATHS.items():
+            self.snapshots[label] = self._verify_blob(relative, label)
+
+    def verify_executing_checker(self, executing_path: Path) -> None:
+        if absolute_path_uses_symlink(executing_path):
+            raise ValueError("executing checker path must not contain symlinks")
+        expected = lexical_absolute(
+            self.control_root / TRUSTED_CONTROL_PATHS["checker"]
+        )
+        observed = lexical_absolute(executing_path)
+        if observed != expected:
+            raise ValueError(
+                "executing checker must use the trusted-control path"
+            )
+        try:
+            same_file = observed.samefile(expected)
+        except OSError as error:
+            raise ValueError(f"cannot verify executing checker: {error}") from error
+        if not same_file:
+            raise ValueError(
+                "executing checker must be the verified trusted-control checker"
+            )
+        self.executing_checker_path_matched = True
+
+    def verify_candidate_checkout(self) -> None:
+        if not self.executing_checker_path_matched:
+            raise ValueError(
+                "executing checker must be verified before candidate checkout"
+            )
+        if absolute_path_uses_symlink(self.candidate_root):
+            raise ValueError("candidate root path must not contain symlinks")
+        if self.candidate_root.resolve() == self.control_root.resolve():
+            raise ValueError("control root must be an independent checkout")
+        _, candidate_git_dir, candidate_common_dir = self._verify_checkout(
+            self.candidate_root,
+            "candidate root",
+        )
+        if candidate_git_dir == self.control_git_dir:
+            raise ValueError("control root must use an independent Git checkout")
+        if candidate_common_dir == self.control_common_dir:
+            raise ValueError(
+                "control root must not share a Git common directory"
+            )
+        candidate_origin = self._git(
+            self.candidate_root,
+            "remote",
+            "get-url",
+            "origin",
+        )
+        try:
+            candidate_identity = normalize_origin(candidate_origin)
+        except ValueError as error:
+            raise ValueError(f"cannot verify repository origin: {error}") from error
+        if candidate_identity != self.expected_origin_identity:
+            raise ValueError(
+                "candidate origin must match the expected repository"
+            )
+        self.candidate_checkout_verified = True
+
+    def load_validator(self):
+        if not (
+            self.executing_checker_path_matched
+            and self.candidate_checkout_verified
+        ):
+            raise ValueError(
+                "trusted control must verify checker and candidate before loading validator"
+            )
+        source = self.snapshots["validator"]
+        module = types.ModuleType("_trusted_release_authorization_catalog_validator")
+        module.__file__ = (
+            f"{self.control_commit}:{TRUSTED_CONTROL_PATHS['validator']}"
+        )
+        previous = sys.dont_write_bytecode
+        try:
+            sys.dont_write_bytecode = True
+            code = compile(source, module.__file__, "exec")
+            exec(code, module.__dict__)
+        except BaseException as error:
+            if isinstance(error, (KeyboardInterrupt, GeneratorExit)):
+                raise
+            raise ValueError(f"trusted validator cannot be loaded: {error}") from error
+        finally:
+            sys.dont_write_bytecode = previous
+        return module
+
+    def evidence(self) -> dict[str, Any]:
+        if not (
+            self.executing_checker_path_matched
+            and self.candidate_checkout_verified
+        ):
+            raise ValueError(
+                "trusted control evidence requires completed verification"
+            )
+        return {
+            "repository": self.origin_identity,
+            "commit": self.control_commit,
+            "files": dict(self.file_evidence),
+            "independentCheckout": self.candidate_checkout_verified,
+            "executingCheckerPathMatched": self.executing_checker_path_matched,
+        }
+
+
 def evaluate(
     repo_root: Path,
     authorization_path: Path,
@@ -443,6 +780,7 @@ def evaluate(
     candidate_commit: str,
     mode: str,
     now: datetime,
+    catalog_validator: Any | None = None,
 ) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     errors = []
@@ -673,7 +1011,13 @@ def evaluate(
             )
 
     if not protected_control_changes:
-        errors.extend(validate_catalog(repo_root, catalog_path))
+        errors.extend(
+            validate_catalog(
+                repo_root,
+                catalog_path,
+                validator=catalog_validator,
+            )
+        )
     try:
         observed_digest = compute_content_digest(
             repo_root,
@@ -853,14 +1197,57 @@ def evaluate(
     }
 
 
-def run_git(repo_root: Path, *args: str) -> str:
-    completed = subprocess.run(
-        ["git", *args],
+def git_environment() -> dict[str, str]:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_")
+    }
+    environment.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_EXTERNAL_DIFF": "",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    return environment
+
+
+def git_command(*args: str) -> list[str]:
+    return [
+        "git",
+        "--no-replace-objects",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        f"core.hooksPath={os.devnull}",
+        "-c",
+        "diff.external=",
+        *args,
+    ]
+
+
+def run_git_process(
+    repo_root: Path,
+    *args: str,
+    text: bool = False,
+) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        git_command(*args),
         cwd=repo_root,
+        env=git_environment(),
         check=False,
         capture_output=True,
-        text=True,
+        text=text,
     )
+
+
+def run_git(repo_root: Path, *args: str) -> str:
+    completed = run_git_process(repo_root, *args, text=True)
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip()
         raise ValueError(f"git {' '.join(args)} failed: {message}")
@@ -868,18 +1255,135 @@ def run_git(repo_root: Path, *args: str) -> str:
 
 
 def run_git_bytes(repo_root: Path, *args: str) -> bytes:
-    completed = subprocess.run(
-        ["git", *args],
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
-    )
+    completed = run_git_process(repo_root, *args)
     if completed.returncode != 0:
         message = completed.stderr.decode("utf-8", errors="replace").strip()
         if not message:
             message = completed.stdout.decode("utf-8", errors="replace").strip()
         raise ValueError(f"git {' '.join(args)} failed: {message}")
     return completed.stdout
+
+
+def git_blob_oid(payload: bytes) -> str:
+    header = f"blob {len(payload)}\0".encode("ascii")
+    return hashlib.sha1(header + payload).hexdigest()
+
+
+def worktree_entries(repo_root: Path) -> dict[str, tuple[int, bytes]]:
+    entries: dict[str, tuple[int, bytes]] = {}
+
+    def fail_on_walk_error(error: OSError) -> None:
+        raise ValueError(
+            f"candidate working tree cannot be scanned: {error}"
+        ) from error
+
+    for current_root, directory_names, file_names in os.walk(
+        repo_root,
+        topdown=True,
+        onerror=fail_on_walk_error,
+        followlinks=False,
+    ):
+        current = Path(current_root)
+        if current == repo_root:
+            directory_names[:] = [
+                name for name in directory_names if name != ".git"
+            ]
+            file_names = [name for name in file_names if name != ".git"]
+        symlink_directories = []
+        for name in directory_names:
+            path = current / name
+            if path.is_symlink():
+                symlink_directories.append(name)
+        directory_names[:] = [
+            name for name in directory_names if name not in symlink_directories
+        ]
+        for name in [*file_names, *symlink_directories]:
+            path = current / name
+            relative = path.relative_to(repo_root).as_posix()
+            try:
+                metadata = os.lstat(path)
+                if stat.S_ISLNK(metadata.st_mode):
+                    payload = os.fsencode(os.readlink(path))
+                elif stat.S_ISREG(metadata.st_mode):
+                    if metadata.st_nlink != 1:
+                        raise ValueError(
+                            f"candidate file must not have multiple hard links: {relative}"
+                        )
+                    payload = path.read_bytes()
+                else:
+                    raise ValueError(
+                        f"candidate path is not a regular file or symlink: {relative}"
+                    )
+            except OSError as error:
+                raise ValueError(
+                    f"candidate path cannot be inspected: {relative}: {error}"
+                ) from error
+            entries[relative] = (metadata.st_mode, payload)
+    return entries
+
+
+def verify_worktree_matches_commit(repo_root: Path, commit: str) -> None:
+    tree_output = run_git_bytes(
+        repo_root,
+        "ls-tree",
+        "-r",
+        "-z",
+        commit,
+        "--",
+    )
+    tree: dict[str, tuple[str, str]] = {}
+    for record in (item for item in tree_output.split(b"\0") if item):
+        try:
+            metadata, raw_path = record.split(b"\t", 1)
+            mode, object_type, object_id = metadata.split(b" ", 2)
+            relative = raw_path.decode("utf-8", errors="strict")
+            mode_text = mode.decode("ascii")
+            object_id_text = object_id.decode("ascii")
+        except (UnicodeDecodeError, ValueError) as error:
+            raise ValueError("checked-out Git tree has malformed metadata") from error
+        if (
+            object_type != b"blob"
+            or mode_text not in {"100644", "100755", "120000"}
+        ):
+            raise ValueError(
+                f"checked-out Git tree contains unsupported entry: {relative}"
+            )
+        tree[relative] = (mode_text, object_id_text)
+
+    disk = worktree_entries(repo_root)
+    missing = sorted(set(tree) - set(disk))
+    extra = sorted(set(disk) - set(tree))
+    if missing:
+        raise ValueError(
+            "working tree is missing committed paths: " + ", ".join(missing)
+        )
+    if extra:
+        raise ValueError(
+            "working tree contains uncommitted paths: " + ", ".join(extra)
+        )
+
+    for relative, (expected_mode, expected_oid) in tree.items():
+        observed_mode, payload = disk[relative]
+        if expected_mode == "120000":
+            if not stat.S_ISLNK(observed_mode):
+                raise ValueError(
+                    f"working tree type does not match HEAD: {relative}"
+                )
+        else:
+            if not stat.S_ISREG(observed_mode):
+                raise ValueError(
+                    f"working tree type does not match HEAD: {relative}"
+                )
+            expected_executable = expected_mode == "100755"
+            observed_executable = bool(observed_mode & 0o111)
+            if observed_executable != expected_executable:
+                raise ValueError(
+                    f"working tree executable mode does not match HEAD: {relative}"
+                )
+        if git_blob_oid(payload) != expected_oid:
+            raise ValueError(
+                f"working tree bytes do not match HEAD: {relative}"
+            )
 
 
 def collect_git_inputs(
@@ -914,17 +1418,12 @@ def collect_git_inputs(
             "--end-of-options",
             f"{candidate_ref}^{{commit}}",
         ).strip()
-        candidate_ancestor = subprocess.run(
-            [
-                "git",
-                "merge-base",
-                "--is-ancestor",
-                candidate_commit,
-                head_commit,
-            ],
-            cwd=repo_root,
-            check=False,
-            capture_output=True,
+        candidate_ancestor = run_git_process(
+            repo_root,
+            "merge-base",
+            "--is-ancestor",
+            candidate_commit,
+            head_commit,
             text=True,
         )
         if candidate_ancestor.returncode == 1:
@@ -970,11 +1469,12 @@ def collect_git_inputs(
                 "authorization commit must change only the authorization file"
             )
         release_head = candidate_commit
-    ancestor = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", base_commit, release_head],
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
+    ancestor = run_git_process(
+        repo_root,
+        "merge-base",
+        "--is-ancestor",
+        base_commit,
+        release_head,
         text=True,
     )
     if ancestor.returncode == 1:
@@ -982,13 +1482,7 @@ def collect_git_inputs(
     if ancestor.returncode != 0:
         message = ancestor.stderr.strip() or ancestor.stdout.strip()
         raise ValueError(f"cannot verify base ancestry: {message}")
-    if run_git(
-        repo_root,
-        "status",
-        "--porcelain",
-        "--untracked-files=all",
-    ):
-        raise ValueError("release authorization requires a clean working tree")
+    verify_worktree_matches_commit(repo_root, head_commit)
     changed_bytes = run_git_bytes(
         repo_root,
         "diff",
@@ -1027,10 +1521,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base", required=True, help="Base Git ref before this release.")
     parser.add_argument("--head", default="HEAD", help="Checked-out release head.")
     parser.add_argument("--mode", choices=sorted(ALLOWED_MODES), required=True)
+    parser.add_argument(
+        "--control-root",
+        type=Path,
+        required=True,
+        help="Independent checkout containing the trusted control plane.",
+    )
+    parser.add_argument(
+        "--control-commit",
+        required=True,
+        help="Full trusted control-plane commit checked out at control-root.",
+    )
     args = parser.parse_args(argv)
 
-    repo_root = args.repo_root.resolve()
+    repo_root = lexical_absolute(args.repo_root)
     now = datetime.now(timezone.utc)
+    try:
+        trusted_control = TrustedControl(
+            repo_root,
+            args.control_root,
+            args.control_commit,
+            EXPECTED_CONTROL_ORIGIN,
+        )
+        trusted_control.verify_executing_checker(Path(__file__))
+        trusted_control.verify_candidate_checkout()
+        catalog_validator = trusted_control.load_validator()
+    except (OSError, TypeError, ValueError) as error:
+        result = trusted_control_invalid_result(args.mode, now, error)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 2
+
     try:
         authorization_path = repo_root / DEFAULT_AUTHORIZATION_PATH
         policy_path = repo_root / "metrics" / "observation-policy.json"
@@ -1078,7 +1598,9 @@ def main(argv: list[str] | None = None) -> int:
             candidate_commit,
             args.mode,
             now,
+            catalog_validator,
         )
+        result["trustedControl"] = trusted_control.evidence()
     except (OSError, TypeError, ValueError) as error:
         result = invalid_result(args.mode, now, error)
 

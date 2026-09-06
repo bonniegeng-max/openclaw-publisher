@@ -1,6 +1,8 @@
 import copy
+import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -8,6 +10,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).parents[1]
@@ -86,7 +89,7 @@ def write_skill(root, slug="demo-skill", version="1.0.1", name="Demo Skill"):
 
 
 def make_repo(directory):
-    root = Path(directory)
+    root = Path(directory).resolve()
     (root / "scripts").mkdir(parents=True)
     shutil.copy2(CATALOG_VALIDATOR, root / "scripts" / CATALOG_VALIDATOR.name)
     write_skill(root)
@@ -224,6 +227,89 @@ def initialize_git(root):
         cwd=root,
         text=True,
     ).strip()
+
+
+def make_control_checkout(root, origin):
+    root = Path(root).resolve()
+    origin = Path(origin).resolve()
+    (root / "scripts").mkdir(parents=True)
+    shutil.copy2(CHECKER, root / "scripts" / CHECKER.name)
+    shutil.copy2(CATALOG_VALIDATOR, root / "scripts" / CATALOG_VALIDATOR.name)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "symbolic-ref", "HEAD", "refs/heads/main"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "trusted controls"],
+        cwd=root,
+        check=True,
+    )
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        text=True,
+    ).strip()
+    subprocess.run(
+        ["git", "clone", "-q", "--bare", str(root), str(origin)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(origin)],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(["git", "fetch", "-q", "origin"], cwd=root, check=True)
+    return root, commit, origin
+
+
+def add_origin(root, origin):
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(origin)],
+        cwd=root,
+        check=True,
+    )
+
+
+def load_trusted_control(candidate, control, commit, origin):
+    trusted = CHECK_MODULE.TrustedControl(
+        candidate,
+        control,
+        commit,
+        CHECK_MODULE.normalize_origin(str(origin)),
+    )
+    trusted.verify_executing_checker(
+        Path(control) / "scripts" / CHECKER.name
+    )
+    trusted.verify_candidate_checkout()
+    return trusted
+
+
+def set_production_origin(*roots):
+    for root in roots:
+        subprocess.run(
+            [
+                "git",
+                "remote",
+                "set-url",
+                "origin",
+                "https://github.com/bonniegeng-max/openclaw-publisher.git",
+            ],
+            cwd=root,
+            check=True,
+        )
 
 
 def commit_release_candidate(root, change_evidence=True):
@@ -1378,7 +1464,12 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
 
     def test_cli_uses_git_diff_and_rejects_later_replay(self):
         with tempfile.TemporaryDirectory() as directory:
-            root, base_catalog = make_repo(directory)
+            workspace = Path(directory)
+            root, base_catalog = make_repo(workspace / "candidate")
+            control_root, control_commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
             policy = {
                 "schemaVersion": 1,
                 "notBefore": "2020-01-01T00:00:00+00:00",
@@ -1399,6 +1490,7 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 cwd=root,
                 check=True,
             )
+            add_origin(root, origin)
             subprocess.run(["git", "add", "."], cwd=root, check=True)
             subprocess.run(
                 ["git", "commit", "-qm", "baseline"],
@@ -1480,24 +1572,44 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 check=True,
             )
 
+            set_production_origin(root, control_root)
             completed = subprocess.run(
                 [
                     sys.executable,
-                    str(CHECKER),
+                    str(control_root / "scripts" / CHECKER.name),
                     "--repo-root",
                     str(root),
                     "--base",
                     base_commit,
                     "--mode",
                     "publish",
+                    "--control-root",
+                    str(control_root),
+                    "--control-commit",
+                    control_commit,
                 ],
                 check=False,
                 capture_output=True,
                 text=True,
             )
             result = json.loads(completed.stdout)
-            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(completed.returncode, 0, result)
             self.assertTrue(result["authorized"], result)
+            self.assertEqual(
+                result["trustedControl"]["commit"],
+                control_commit,
+            )
+            self.assertEqual(
+                result["trustedControl"]["repository"],
+                CHECK_MODULE.EXPECTED_CONTROL_ORIGIN,
+            )
+            self.assertTrue(
+                result["trustedControl"]["independentCheckout"]
+            )
+            self.assertEqual(
+                set(result["trustedControl"]["files"]),
+                {"checker", "validator"},
+            )
 
             subprocess.run(
                 ["git", "commit", "--allow-empty", "-qm", "later empty commit"],
@@ -1507,13 +1619,17 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
             replay = subprocess.run(
                 [
                     sys.executable,
-                    str(CHECKER),
+                    str(control_root / "scripts" / CHECKER.name),
                     "--repo-root",
                     str(root),
                     "--base",
                     base_commit,
                     "--mode",
                     "publish",
+                    "--control-root",
+                    str(control_root),
+                    "--control-commit",
+                    control_commit,
                 ],
                 check=False,
                 capture_output=True,
@@ -1645,6 +1761,785 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
             ):
                 CHECK_MODULE.collect_git_inputs(root, sibling, "HEAD")
 
+    def test_trusted_control_accepts_independent_matching_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+
+            trusted = load_trusted_control(
+                candidate,
+                control,
+                commit,
+                origin,
+            )
+            validator = trusted.load_validator()
+            errors = CHECK_MODULE.validate_catalog(
+                candidate,
+                candidate / CHECK_MODULE.CATALOG_PATH,
+                validator,
+            )
+            evidence = trusted.evidence()
+            expected_oids = {
+                label: subprocess.check_output(
+                    ["git", "rev-parse", f"{commit}:{relative}"],
+                    cwd=control,
+                    text=True,
+                ).strip()
+                for label, relative in CHECK_MODULE.TRUSTED_CONTROL_PATHS.items()
+            }
+
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            set(trusted.snapshots),
+            {"checker", "validator"},
+        )
+        self.assertEqual(evidence["commit"], commit)
+        self.assertEqual(
+            evidence["repository"],
+            CHECK_MODULE.normalize_origin(str(origin)),
+        )
+        self.assertTrue(evidence["independentCheckout"])
+        self.assertTrue(evidence["executingCheckerPathMatched"])
+        for label, relative in CHECK_MODULE.TRUSTED_CONTROL_PATHS.items():
+            with self.subTest(evidence=label):
+                self.assertEqual(
+                    evidence["files"][label]["path"],
+                    relative,
+                )
+                self.assertEqual(
+                    evidence["files"][label]["blobOid"],
+                    expected_oids[label],
+                )
+                self.assertEqual(
+                    evidence["files"][label]["sha256"],
+                    "sha256:"
+                    + hashlib.sha256(trusted.snapshots[label]).hexdigest(),
+                )
+
+    def test_trusted_control_rejects_same_checkout_and_symlinked_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+
+            with self.assertRaisesRegex(ValueError, "independent checkout"):
+                load_trusted_control(control, control, commit, origin)
+
+            linked_control = workspace / "linked-control"
+            linked_control.symlink_to(control, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "must not contain symlinks"):
+                load_trusted_control(
+                    candidate,
+                    linked_control,
+                    commit,
+                    origin,
+                )
+
+    def test_trusted_control_rejects_parent_symlink_and_linked_worktree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            real_parent = workspace / "real"
+            control, commit, origin = make_control_checkout(
+                real_parent / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            alias = workspace / "alias"
+            alias.symlink_to(real_parent, target_is_directory=True)
+
+            with self.assertRaisesRegex(ValueError, "must not contain symlinks"):
+                load_trusted_control(
+                    candidate,
+                    alias / "control",
+                    commit,
+                    origin,
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            candidate = workspace / "candidate-worktree"
+            subprocess.run(
+                ["git", "worktree", "add", "-q", "--detach", str(candidate), commit],
+                cwd=control,
+                check=True,
+            )
+
+            with self.assertRaisesRegex(ValueError, "Git common directory"):
+                load_trusted_control(
+                    candidate,
+                    control,
+                    commit,
+                    origin,
+                )
+
+    def test_trusted_control_binds_origin_head_and_commit_type(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, workspace / "different-origin.git")
+            with self.assertRaisesRegex(
+                ValueError,
+                "candidate origin must match the expected repository",
+            ):
+                load_trusted_control(candidate, control, commit, origin)
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            subprocess.run(
+                ["git", "commit", "--allow-empty", "-qm", "later"],
+                cwd=control,
+                check=True,
+            )
+            with self.assertRaisesRegex(ValueError, "HEAD must equal"):
+                load_trusted_control(candidate, control, commit, origin)
+
+            blob = subprocess.check_output(
+                ["git", "rev-parse", f"{commit}:scripts/{CHECKER.name}"],
+                cwd=control,
+                text=True,
+            ).strip()
+            with self.assertRaisesRegex(ValueError, "commit object"):
+                load_trusted_control(candidate, control, blob, origin)
+
+    def test_trusted_control_requires_origin_main_reachability(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, _, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            subprocess.run(
+                ["git", "commit", "--allow-empty", "-qm", "unpublished control"],
+                cwd=control,
+                check=True,
+            )
+            unpublished = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=control,
+                text=True,
+            ).strip()
+
+            with self.assertRaisesRegex(ValueError, "reachable from origin/main"):
+                load_trusted_control(
+                    candidate,
+                    control,
+                    unpublished,
+                    origin,
+                )
+
+    def test_trusted_control_ignores_git_replace_refs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            original_checker_oid = subprocess.check_output(
+                [
+                    "git",
+                    "--no-replace-objects",
+                    "rev-parse",
+                    f"{commit}:scripts/{CHECKER.name}",
+                ],
+                cwd=control,
+                text=True,
+            ).strip()
+            checker = control / "scripts" / CHECKER.name
+            checker.write_text(
+                "raise RuntimeError('replacement checker')\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=control, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "malicious replacement"],
+                cwd=control,
+                check=True,
+            )
+            replacement_commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=control,
+                text=True,
+            ).strip()
+            subprocess.run(
+                ["git", "--no-replace-objects", "reset", "--hard", "-q", commit],
+                cwd=control,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "update-ref",
+                    f"refs/replace/{commit}",
+                    replacement_commit,
+                ],
+                cwd=control,
+                check=True,
+            )
+
+            trusted = load_trusted_control(
+                candidate,
+                control,
+                commit,
+                origin,
+            )
+
+        self.assertEqual(
+            trusted.evidence()["files"]["checker"]["blobOid"],
+            original_checker_oid,
+        )
+
+    def test_git_commands_disable_candidate_fsmonitor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            marker = workspace / "fsmonitor-executed"
+            fsmonitor = workspace / "malicious-fsmonitor.sh"
+            fsmonitor.write_text(
+                f"#!/bin/sh\n: > '{marker}'\nexit 0\n",
+                encoding="utf-8",
+            )
+            fsmonitor.chmod(0o755)
+            subprocess.run(
+                ["git", "config", "core.fsmonitor", str(fsmonitor)],
+                cwd=candidate,
+                check=True,
+            )
+
+            CHECK_MODULE.run_git(
+                candidate,
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            )
+            self.assertFalse(marker.exists())
+
+    def test_git_commands_ignore_repository_redirect_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            candidate_head = initialize_git(candidate)
+            other, _ = make_repo(workspace / "other")
+            initialize_git(other)
+            injected = {
+                "GIT_DIR": str(other / ".git"),
+                "GIT_WORK_TREE": str(other),
+                "GIT_OBJECT_DIRECTORY": str(other / ".git" / "objects"),
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(
+                    candidate / ".git" / "objects"
+                ),
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "core.fsmonitor",
+                "GIT_CONFIG_VALUE_0": "/definitely/not/trusted",
+            }
+
+            with mock.patch.dict(os.environ, injected, clear=False):
+                observed_head = CHECK_MODULE.run_git(
+                    candidate,
+                    "rev-parse",
+                    "HEAD",
+                ).strip()
+
+        self.assertEqual(observed_head, candidate_head)
+
+    def test_worktree_scan_errors_fail_closed(self):
+        root = Path("/candidate")
+
+        def failing_walk(*args, **kwargs):
+            kwargs["onerror"](PermissionError("denied"))
+            return iter(())
+
+        with mock.patch.object(
+            CHECK_MODULE.os,
+            "walk",
+            side_effect=failing_walk,
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "candidate working tree cannot be scanned: denied",
+            ):
+                CHECK_MODULE.worktree_entries(root)
+
+    def test_worktree_verification_rejects_assume_unchanged_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            candidate, _ = make_repo(Path(directory) / "candidate")
+            head = initialize_git(candidate)
+            skill = candidate / "skills" / "demo-skill" / "SKILL.md"
+            subprocess.run(
+                ["git", "update-index", "--assume-unchanged", str(skill)],
+                cwd=candidate,
+                check=True,
+            )
+            skill.write_text(
+                skill.read_text(encoding="utf-8") + "\nHidden drift.\n",
+                encoding="utf-8",
+            )
+            status = subprocess.check_output(
+                ["git", "status", "--porcelain"],
+                cwd=candidate,
+                text=True,
+            )
+
+            self.assertEqual(status, "")
+            with self.assertRaisesRegex(
+                ValueError,
+                "working tree bytes do not match HEAD",
+            ):
+                CHECK_MODULE.verify_worktree_matches_commit(candidate, head)
+
+    def test_trusted_control_requires_regular_blobs_and_matching_disk_bytes(self):
+        for label, relative in CHECK_MODULE.TRUSTED_CONTROL_PATHS.items():
+            with self.subTest(disk_mismatch=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    workspace = Path(directory)
+                    candidate, _ = make_repo(workspace / "candidate")
+                    initialize_git(candidate)
+                    control, commit, origin = make_control_checkout(
+                        workspace / "control",
+                        workspace / "origin.git",
+                    )
+                    add_origin(candidate, origin)
+                    with (control / relative).open("ab") as stream:
+                        stream.write(b"\n# uncommitted replacement\n")
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        f"trusted {label} disk bytes do not match",
+                    ):
+                        load_trusted_control(
+                            candidate,
+                            control,
+                            commit,
+                            origin,
+                        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, _, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            validator = control / CHECK_MODULE.TRUSTED_CONTROL_PATHS["validator"]
+            payload = validator.with_name("validator-payload.py")
+            validator.rename(payload)
+            validator.symlink_to(payload.name)
+            subprocess.run(["git", "add", "."], cwd=control, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "symlink validator"],
+                cwd=control,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "push", "-q", "origin", "main"],
+                cwd=control,
+                check=True,
+            )
+            subprocess.run(["git", "fetch", "-q", "origin"], cwd=control, check=True)
+            commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=control,
+                text=True,
+            ).strip()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "trusted validator path must not contain symlinks",
+            ):
+                load_trusted_control(candidate, control, commit, origin)
+
+    def test_trusted_control_rejects_control_linked_worktree_and_hardlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            primary, commit, origin = make_control_checkout(
+                workspace / "primary-control",
+                workspace / "origin.git",
+            )
+            linked = workspace / "linked-control"
+            subprocess.run(
+                ["git", "worktree", "add", "-q", "--detach", str(linked), commit],
+                cwd=primary,
+                check=True,
+            )
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            add_origin(candidate, origin)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "control root must not be a linked Git worktree",
+            ):
+                CHECK_MODULE.TrustedControl(
+                    candidate,
+                    linked,
+                    commit,
+                    CHECK_MODULE.normalize_origin(str(origin)),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            alias = workspace / "checker-hardlink.py"
+            alias.hardlink_to(control / "scripts" / CHECKER.name)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "trusted checker must not have multiple hard links",
+            ):
+                CHECK_MODULE.TrustedControl(
+                    candidate,
+                    control,
+                    commit,
+                    CHECK_MODULE.normalize_origin(str(origin)),
+                )
+
+    def test_trusted_validator_snapshot_never_executes_candidate_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            (candidate / "scripts" / CATALOG_VALIDATOR.name).write_text(
+                "raise RuntimeError('candidate validator executed')\n",
+                encoding="utf-8",
+            )
+
+            trusted = load_trusted_control(
+                candidate,
+                control,
+                commit,
+                origin,
+            )
+            errors = CHECK_MODULE.validate_catalog(
+                candidate,
+                candidate / CHECK_MODULE.CATALOG_PATH,
+                trusted.load_validator(),
+            )
+
+        self.assertEqual(errors, [])
+
+    def test_executing_checker_requires_exact_trusted_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            trusted = load_trusted_control(
+                candidate,
+                control,
+                commit,
+                origin,
+            )
+            alias = workspace / "checker-hardlink.py"
+            alias.hardlink_to(control / "scripts" / CHECKER.name)
+
+            with self.assertRaisesRegex(ValueError, "trusted-control path"):
+                trusted.verify_executing_checker(alias)
+
+    def test_trusted_control_requires_ordered_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            trusted = CHECK_MODULE.TrustedControl(
+                candidate,
+                control,
+                commit,
+                CHECK_MODULE.normalize_origin(str(origin)),
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "checker must be verified before candidate",
+            ):
+                trusted.verify_candidate_checkout()
+            with self.assertRaisesRegex(
+                ValueError,
+                "verify checker and candidate before loading validator",
+            ):
+                trusted.load_validator()
+            with self.assertRaisesRegex(
+                ValueError,
+                "evidence requires completed verification",
+            ):
+                trusted.evidence()
+
+            trusted.verify_executing_checker(
+                control / "scripts" / CHECKER.name
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "verify checker and candidate before loading validator",
+            ):
+                trusted.load_validator()
+            with self.assertRaisesRegex(
+                ValueError,
+                "evidence requires completed verification",
+            ):
+                trusted.evidence()
+
+    def test_checker_path_failure_does_not_read_candidate_git(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            trusted = CHECK_MODULE.TrustedControl(
+                candidate,
+                control,
+                commit,
+                CHECK_MODULE.normalize_origin(str(origin)),
+            )
+            wrong_checker = workspace / "wrong-checker.py"
+            wrong_checker.write_bytes(trusted.snapshots["checker"])
+
+            with mock.patch.object(
+                CHECK_MODULE,
+                "run_git",
+                side_effect=AssertionError("candidate Git was read"),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "trusted-control path",
+                ):
+                    trusted.verify_executing_checker(
+                        workspace / "wrong-checker.py"
+                    )
+
+    def test_checker_cli_rejects_candidate_parent_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            real_parent = workspace / "real-parent"
+            candidate, _ = make_repo(real_parent / "candidate")
+            base_commit = initialize_git(candidate)
+            control, control_commit, _ = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, workspace / "origin.git")
+            set_production_origin(candidate, control)
+            alias = workspace / "candidate-alias"
+            alias.symlink_to(real_parent, target_is_directory=True)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(control / "scripts" / CHECKER.name),
+                    "--repo-root",
+                    str(alias / "candidate"),
+                    "--base",
+                    base_commit,
+                    "--mode",
+                    "publish",
+                    "--control-root",
+                    str(control),
+                    "--control-commit",
+                    control_commit,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            result = json.loads(completed.stdout)
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(result["phase"], "trusted-control")
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["authorized"])
+        self.assertIn(
+            "candidate root path must not contain symlinks",
+            result["errors"],
+        )
+
+    def test_trusted_validator_failures_are_structured(self):
+        class MissingValidate:
+            pass
+
+        class RaisingValidate:
+            @staticmethod
+            def validate(repo_root, catalog_path):
+                raise RuntimeError("validator failure")
+
+        class MalformedErrors:
+            @staticmethod
+            def validate(repo_root, catalog_path):
+                return {"valid": False, "errors": None}
+
+        for validator, expected in (
+            (MissingValidate(), "must expose callable validate"),
+            (RaisingValidate(), "validator failure"),
+            (MalformedErrors(), "returned malformed errors"),
+        ):
+            with self.subTest(validator=type(validator).__name__):
+                errors = CHECK_MODULE.validate_catalog(
+                    ROOT,
+                    ROOT / CHECK_MODULE.CATALOG_PATH,
+                    validator,
+                )
+                self.assertEqual(len(errors), 1)
+                self.assertIn(expected, errors[0])
+
+    def test_trusted_validator_import_exit_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, _, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            validator = control / CHECK_MODULE.TRUSTED_CONTROL_PATHS["validator"]
+            validator.write_text(
+                "raise SystemExit('validator exit')\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=control, check=True)
+            subprocess.run(
+                ["git", "commit", "-qm", "broken validator"],
+                cwd=control,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "push", "-q", "origin", "main"],
+                cwd=control,
+                check=True,
+            )
+            subprocess.run(["git", "fetch", "-q", "origin"], cwd=control, check=True)
+            commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=control,
+                text=True,
+            ).strip()
+            trusted = load_trusted_control(
+                candidate,
+                control,
+                commit,
+                origin,
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "trusted validator cannot be loaded: validator exit",
+            ):
+                trusted.load_validator()
+
+    def test_control_failure_is_structured_as_trusted_control_phase(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            candidate, _ = make_repo(workspace / "candidate")
+            initialize_git(candidate)
+            control, commit, origin = make_control_checkout(
+                workspace / "control",
+                workspace / "origin.git",
+            )
+            add_origin(candidate, origin)
+            set_production_origin(candidate, control)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(control / "scripts" / CHECKER.name),
+                    "--repo-root",
+                    str(candidate),
+                    "--base",
+                    commit,
+                    "--mode",
+                    "publish",
+                    "--control-root",
+                    str(control),
+                    "--control-commit",
+                    "0" * 40,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            result = json.loads(completed.stdout)
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(result["phase"], "trusted-control")
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["authorized"])
+
+    def test_checker_cli_requires_trusted_control_arguments(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKER),
+                "--base",
+                BASE_COMMIT,
+                "--mode",
+                "publish",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("--control-root", completed.stderr)
+        self.assertIn("--control-commit", completed.stderr)
+
     def test_production_cli_does_not_expose_clock_override(self):
         completed = subprocess.run(
             [
@@ -1654,6 +2549,10 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 BASE_COMMIT,
                 "--mode",
                 "publish",
+                "--control-root",
+                str(ROOT),
+                "--control-commit",
+                "0" * 40,
                 "--now",
                 AUTHORIZED_NOW.isoformat(),
             ],

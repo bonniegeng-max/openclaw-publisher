@@ -7,6 +7,15 @@
 ClawHub 或改变 registry 状态。机器可读约束见
 `safe-publish-target-contract.json`。
 
+合同离线审计入口：
+
+```bash
+python3 research/skill-release-authorization-vnext/check_safe_publish_target_contract.py
+```
+
+当前预期退出码为 `1`：合同与固定 Git blob 一致，但草案未接线且不可部署。退出码
+`2` 表示合同、策略、guard 或正式 workflow 基线失配。
+
 ## 目标选择规则
 
 - `workflow_dispatch` 只允许 `dry_run: true`；手动触发真实发布一律拒绝。

@@ -15,10 +15,18 @@ RESEARCH = ROOT / "research" / "skill-release-authorization-vnext"
 GUARD = RESEARCH / "safe_publish_target_guard.py"
 CONTRACT = RESEARCH / "safe-publish-target-contract.json"
 GUIDE = RESEARCH / "safe-publish-target-guard.md"
+CONTRACT_CHECKER = RESEARCH / "check_safe_publish_target_contract.py"
 SPEC = importlib.util.spec_from_file_location("safe_publish_target_guard", GUARD)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
+CHECKER_SPEC = importlib.util.spec_from_file_location(
+    "check_safe_publish_target_contract",
+    CONTRACT_CHECKER,
+)
+CHECKER_MODULE = importlib.util.module_from_spec(CHECKER_SPEC)
+assert CHECKER_SPEC.loader is not None
+CHECKER_SPEC.loader.exec_module(CHECKER_MODULE)
 
 
 def git(root, *args):
@@ -44,6 +52,15 @@ def add_skill(root, slug, body="body\n"):
     return skill
 
 
+def write_contract(directory, value):
+    path = Path(directory) / "safe-contract.json"
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def make_repo(directory):
     root = Path(directory)
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
@@ -63,6 +80,62 @@ def make_repo(directory):
 
 
 class SafeSkillPublishDraftTests(unittest.TestCase):
+    def test_contract_checker_reports_valid_but_not_deployment_ready(self):
+        result = CHECKER_MODULE.evaluate(ROOT, CONTRACT)
+
+        self.assertTrue(result["valid"], result["errors"])
+        self.assertFalse(result["deploymentReady"])
+        self.assertEqual(result["contractStatus"], "research-only-not-wired")
+        self.assertTrue(result["checks"]["guard-baseline"])
+        self.assertTrue(result["checks"]["formal-baselines"])
+        self.assertEqual(
+            set(result["knownFormalRisks"]),
+            CHECKER_MODULE.EXPECTED_RISKS,
+        )
+
+    def test_contract_checker_rejects_policy_and_baseline_drift(self):
+        mutations = []
+        digest = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        digest["guardBaseline"]["sha256"] = "sha256:" + "0" * 64
+        mutations.append(("guard digest", digest, "guard-baseline"))
+
+        policy = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        policy["selectionRules"]["maximumTargets"] = 2
+        mutations.append(("selection policy", policy, "selection-rules"))
+
+        extra = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        extra["trusted"] = True
+        mutations.append(("extra field", extra, "top-level-fields"))
+
+        for label, contract, check in mutations:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                result = CHECKER_MODULE.evaluate(
+                    ROOT,
+                    write_contract(directory, contract),
+                )
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["checks"][check])
+
+    def test_contract_checker_rejects_duplicate_and_nonstandard_json(self):
+        for label, content, expected in (
+            (
+                "duplicate",
+                '{"schemaVersion":1,"schemaVersion":1}\n',
+                "duplicate key",
+            ),
+            (
+                "nan",
+                '{"schemaVersion":NaN}\n',
+                "invalid JSON constant",
+            ),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "invalid.json"
+                path.write_text(content, encoding="utf-8")
+                result = CHECKER_MODULE.evaluate(ROOT, path)
+                self.assertFalse(result["valid"])
+                self.assertIn(expected, result["errors"][0])
+
     def test_research_contract_and_guide_are_explicitly_not_wired(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         guide = GUIDE.read_text(encoding="utf-8")
@@ -95,13 +168,21 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
         self.assertIn("不会访问网络", guide)
         self.assertIn("不构成 E1-E4", guide)
 
-    def test_formal_workflow_baselines_match_git_and_worktree(self):
+    def test_guard_and_formal_baselines_match_git_and_worktree(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        self.assertEqual(
+            contract["guardBaseline"]["path"],
+            contract["guard"],
+        )
         self.assertEqual(
             set(contract["formalBaselines"]),
             {"caller", "local"},
         )
-        for label, baseline in contract["formalBaselines"].items():
+        baselines = {
+            "guard": contract["guardBaseline"],
+            **contract["formalBaselines"],
+        }
+        for label, baseline in baselines.items():
             with self.subTest(label=label):
                 entry = subprocess.check_output(
                     [

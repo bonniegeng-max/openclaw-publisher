@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "status": "research-only-not-wired",
   "guard": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
+  "guardBaseline": {
+    "path": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
+    "commit": "01740a5ba82a17e5104f77c44344c4744372cf2e",
+    "mode": "100644",
+    "blobOid": "fed36f10888bff6d08a35e57975260677aa9a052",
+    "sha256": "sha256:dcc4a312c2a450ee765c9b270669411217c3a39ed38fca75fbe214fe326c34cb"
+  },
   "formalWorkflowModified": false,
   "knownFormalRisks": [
     "workflow-dispatch-can-request-real-publish",

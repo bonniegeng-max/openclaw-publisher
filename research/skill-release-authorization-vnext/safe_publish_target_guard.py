@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -13,9 +14,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+PACKAGE_DIGEST_FORMAT = "safe-publish-package-v1"
 SKILL_ROOT = "skills"
 REQUIRED_FILES = ("SKILL.md", "CHANGELOG.md", ".clawhubignore")
+MAX_PACKAGE_FILES = 1024
+MAX_FILE_BYTES = 10 * 1024 * 1024
+MAX_PACKAGE_BYTES = 50 * 1024 * 1024
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SUPPORTED_EVENTS = {"pull_request", "push", "workflow_dispatch"}
@@ -84,7 +89,7 @@ def decision_result(
     ref: str,
     dry_run: bool,
     changed_only: bool,
-    target: dict[str, str] | None = None,
+    target: dict[str, Any] | None = None,
     base_commit: str | None = None,
     head_commit: str | None = None,
     event_before: str | None = None,
@@ -117,6 +122,9 @@ def decision_result(
         "targetCount": 1 if target is not None else 0,
         "skillPath": target["path"] if target is not None else None,
         "slug": target["slug"] if target is not None else None,
+        "packageSnapshot": (
+            target["packageSnapshot"] if target is not None else None
+        ),
         "baseCommit": base_commit,
         "headCommit": head_commit,
         "eventBefore": event_before,
@@ -141,6 +149,70 @@ def path_uses_symlink(path: Path) -> bool:
     except OSError as error:
         raise ValueError(f"path cannot be inspected: {error}") from error
     return False
+
+
+def require_nofollow_capabilities() -> tuple[int, int]:
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    directory = getattr(os, "O_DIRECTORY", None)
+    if type(nofollow) is not int or type(directory) is not int:
+        raise ValueError(
+            "platform lacks required O_NOFOLLOW or O_DIRECTORY support"
+        )
+    return nofollow, directory
+
+
+def require_local_directory_tree(path: Path, label: str) -> None:
+    """Reject links and special files below a security-sensitive directory."""
+    nofollow, directory = require_nofollow_capabilities()
+    flags = os.O_RDONLY | directory | nofollow
+    try:
+        root_fd = os.open(path, flags)
+    except OSError as error:
+        raise ValueError(f"{label} cannot be opened safely") from error
+
+    def visit(directory_fd: int, prefix: str) -> None:
+        before = os.fstat(directory_fd)
+        try:
+            entries = sorted(
+                os.scandir(directory_fd),
+                key=lambda entry: entry.name.encode("utf-8"),
+            )
+        except (OSError, UnicodeEncodeError) as error:
+            raise ValueError(f"{label} cannot be traversed safely") from error
+        for entry in entries:
+            relative = f"{prefix}/{entry.name}" if prefix else entry.name
+            try:
+                metadata = entry.stat(follow_symlinks=False)
+            except OSError as error:
+                raise ValueError(
+                    f"{label} entry cannot be inspected: {relative}"
+                ) from error
+            if stat.S_ISLNK(metadata.st_mode):
+                raise ValueError(f"{label} must not contain symlinks: {relative}")
+            if stat.S_ISDIR(metadata.st_mode):
+                try:
+                    child_fd = os.open(entry.name, flags, dir_fd=directory_fd)
+                except OSError as error:
+                    raise ValueError(
+                        f"{label} directory cannot be opened safely: {relative}"
+                    ) from error
+                try:
+                    visit(child_fd, relative)
+                finally:
+                    os.close(child_fd)
+            elif not stat.S_ISREG(metadata.st_mode):
+                raise ValueError(
+                    f"{label} may contain only directories and regular files: "
+                    f"{relative}"
+                )
+        after = os.fstat(directory_fd)
+        if _stable_metadata(before) != _stable_metadata(after):
+            raise ValueError(f"{label} changed while being inspected")
+
+    try:
+        visit(root_fd, "")
+    finally:
+        os.close(root_fd)
 
 
 def require_trusted_git() -> None:
@@ -191,7 +263,17 @@ def require_repository_root(repo_root: Path) -> Path:
             raise ValueError(f"repository {label} cannot be verified")
         if Path(completed.stdout.strip()).resolve() != git_entry.resolve():
             raise ValueError("repository must not use an external or shared Git directory")
-    alternates = git_entry / "objects" / "info" / "alternates"
+    objects = git_entry / "objects"
+    try:
+        objects_metadata = os.lstat(objects)
+    except OSError as error:
+        raise ValueError(
+            f"repository object store cannot be inspected: {error}"
+        ) from error
+    if not stat.S_ISDIR(objects_metadata.st_mode):
+        raise ValueError("repository object store must be a local directory")
+    require_local_directory_tree(objects, "repository object store")
+    alternates = objects / "info" / "alternates"
     if alternates.exists() or alternates.is_symlink():
         raise ValueError("repository object store must not use alternates")
     return root
@@ -224,6 +306,14 @@ def require_clean_head(repo_root: Path, requested_head: str) -> str:
         raise ValueError("repository cleanliness cannot be verified")
     if status.stdout:
         raise ValueError("repository worktree must be clean")
+    actual_head_after_status = resolve_commit(
+        repo_root,
+        "HEAD",
+        "repository HEAD after status",
+        allow_head=True,
+    )
+    if actual_head_after_status != actual_head:
+        raise ValueError("repository HEAD changed while verifying cleanliness")
     return head_commit
 
 
@@ -278,29 +368,385 @@ def validate_explicit_path(raw_path: str) -> str:
     return path.as_posix()
 
 
-def validate_skill_folder(repo_root: Path, relative: str) -> dict[str, str]:
-    path = repo_root / relative
-    if path_uses_symlink(path):
-        raise ValueError(f"skill target must not contain symlinks: {relative}")
+def canonical_package_digest(
+    skill_path: str,
+    tree_oid: str,
+    files: list[dict[str, str]],
+) -> str:
+    """Digest the documented canonical JSON package representation."""
+    payload = json.dumps(
+        {
+            "files": files,
+            "format": PACKAGE_DIGEST_FORMAT,
+            "skillPath": skill_path,
+            "treeOid": tree_oid,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def head_package_snapshot(
+    repo_root: Path,
+    head_commit: str,
+    relative: str,
+) -> dict[str, Any]:
+    """Build a package manifest exclusively from the selected commit tree."""
+    root_entry = run_git(
+        repo_root,
+        "ls-tree",
+        "-z",
+        head_commit,
+        "--",
+        relative,
+        text=False,
+    )
+    if root_entry.returncode != 0:
+        raise ValueError(f"skill target tree cannot be read: {relative}")
+    entries = [entry for entry in root_entry.stdout.split(b"\0") if entry]
+    if not entries:
+        raise ValueError(f"skill target does not exist in HEAD tree: {relative}")
+    if len(entries) != 1:
+        raise ValueError(f"skill target tree is ambiguous: {relative}")
     try:
-        metadata = os.lstat(path)
-    except OSError as error:
-        raise ValueError(f"skill target does not exist: {relative}") from error
-    if not stat.S_ISDIR(metadata.st_mode):
-        raise ValueError(f"skill target must be a directory: {relative}")
-    for name in REQUIRED_FILES:
-        child = path / name
+        metadata, observed_path = entries[0].split(b"\t", 1)
+        mode, object_type, tree_oid = metadata.decode("ascii").split(" ")
+        decoded_path = observed_path.decode("utf-8", errors="strict")
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ValueError("skill target tree entry is malformed") from error
+    if mode == "120000":
+        raise ValueError(f"skill target must not contain symlinks: {relative}")
+    if (
+        decoded_path != relative
+        or mode != "040000"
+        or object_type != "tree"
+        or COMMIT_PATTERN.fullmatch(tree_oid) is None
+    ):
+        raise ValueError(f"skill target must be a directory in HEAD tree: {relative}")
+
+    listing = run_git(
+        repo_root,
+        "ls-tree",
+        "-r",
+        "-z",
+        "--full-tree",
+        head_commit,
+        "--",
+        relative,
+        text=False,
+    )
+    if listing.returncode != 0:
+        raise ValueError(f"skill target files cannot be read: {relative}")
+    prefix = relative + "/"
+    files: list[dict[str, str]] = []
+    package_bytes = 0
+    for raw_entry in listing.stdout.split(b"\0"):
+        if not raw_entry:
+            continue
         try:
-            child_metadata = os.lstat(child)
-        except OSError as error:
+            metadata, raw_path = raw_entry.split(b"\t", 1)
+            file_mode, object_type, blob_oid = metadata.decode("ascii").split(" ")
+            full_path = raw_path.decode("utf-8", errors="strict")
+        except (UnicodeDecodeError, ValueError) as error:
+            raise ValueError("skill target contains a malformed tree entry") from error
+        if not full_path.startswith(prefix):
+            raise ValueError("skill target tree escaped its package boundary")
+        package_path = full_path[len(prefix):]
+        package_parts = PurePosixPath(package_path).parts
+        if (
+            not package_path
+            or PurePosixPath(package_path).as_posix() != package_path
+            or any(part in {"", ".", ".."} for part in package_parts)
+        ):
+            raise ValueError("skill target contains a non-canonical file path")
+        if object_type != "blob" or file_mode not in {"100644", "100755"}:
+            raise ValueError(
+                "skill target HEAD tree may contain only regular files: "
+                f"{full_path}"
+            )
+        if COMMIT_PATTERN.fullmatch(blob_oid) is None:
+            raise ValueError(f"skill target blob OID is invalid: {full_path}")
+        if len(files) >= MAX_PACKAGE_FILES:
+            raise ValueError(
+                f"skill target exceeds maximum file count: {MAX_PACKAGE_FILES}"
+            )
+        size = run_git(
+            repo_root,
+            "cat-file",
+            "-s",
+            blob_oid,
+        )
+        try:
+            blob_size = int(size.stdout.strip())
+        except ValueError as error:
+            raise ValueError(
+                f"skill target blob size is invalid: {full_path}"
+            ) from error
+        if size.returncode != 0 or blob_size < 0:
+            raise ValueError(f"skill target blob size cannot be read: {full_path}")
+        if blob_size > MAX_FILE_BYTES:
+            raise ValueError(
+                f"skill target file exceeds maximum size: {full_path}"
+            )
+        package_bytes += blob_size
+        if package_bytes > MAX_PACKAGE_BYTES:
+            raise ValueError(
+                f"skill target exceeds maximum package size: {MAX_PACKAGE_BYTES}"
+            )
+        blob = run_git(
+            repo_root,
+            "cat-file",
+            "blob",
+            blob_oid,
+            text=False,
+        )
+        if blob.returncode != 0:
+            raise ValueError(f"skill target blob cannot be read: {full_path}")
+        files.append(
+            {
+                "path": package_path,
+                "mode": file_mode,
+                "blobOid": blob_oid,
+                "sha256": "sha256:" + hashlib.sha256(blob.stdout).hexdigest(),
+            }
+        )
+    files.sort(key=lambda item: item["path"].encode("utf-8"))
+    file_paths = {item["path"] for item in files}
+    for name in REQUIRED_FILES:
+        if name not in file_paths:
             raise ValueError(
                 f"skill target is missing required file {name}: {relative}"
-            ) from error
-        if not stat.S_ISREG(child_metadata.st_mode):
-            raise ValueError(
-                f"skill required path must be a regular file: {relative}/{name}"
             )
-    return {"slug": path.name, "path": relative}
+    return {
+        "treeOid": tree_oid,
+        "files": files,
+        "packageDigest": canonical_package_digest(relative, tree_oid, files),
+    }
+
+
+def _stable_metadata(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def worktree_package_evidence(
+    repo_root: Path,
+    relative: str,
+) -> tuple[dict[str, dict[str, str]], set[str]]:
+    """Walk without following links and hash every regular package file."""
+    nofollow, directory = require_nofollow_capabilities()
+    canonical = validate_explicit_path(relative)
+    flags = os.O_RDONLY | directory | nofollow
+    opened_directories: list[tuple[int, tuple[int, ...], str]] = []
+    try:
+        current_fd = os.open(repo_root, flags)
+    except OSError as error:
+        raise ValueError("repository root cannot be opened safely") from error
+    opened_directories.append(
+        (current_fd, _stable_metadata(os.fstat(current_fd)), ".")
+    )
+    try:
+        for component in PurePosixPath(canonical).parts:
+            try:
+                child_fd = os.open(
+                    component,
+                    flags,
+                    dir_fd=current_fd,
+                )
+            except OSError as error:
+                raise ValueError(
+                    f"skill target cannot be opened safely: {relative}"
+                ) from error
+            current_fd = child_fd
+            opened_directories.append(
+                (
+                    current_fd,
+                    _stable_metadata(os.fstat(current_fd)),
+                    component,
+                )
+            )
+        package_fd = current_fd
+    except BaseException:
+        for descriptor, _, _ in reversed(opened_directories):
+            os.close(descriptor)
+        raise
+    files: dict[str, dict[str, str]] = {}
+    directories: set[str] = set()
+    package_bytes = 0
+
+    def visit(directory_fd: int, prefix: str) -> None:
+        nonlocal package_bytes
+        before = os.fstat(directory_fd)
+        try:
+            entries = sorted(
+                os.scandir(directory_fd),
+                key=lambda entry: entry.name.encode("utf-8"),
+            )
+        except (OSError, UnicodeEncodeError) as error:
+            raise ValueError("skill worktree cannot be traversed safely") from error
+        for entry in entries:
+            package_path = f"{prefix}/{entry.name}" if prefix else entry.name
+            try:
+                metadata = entry.stat(follow_symlinks=False)
+            except OSError as error:
+                raise ValueError(
+                    f"skill worktree entry cannot be inspected: {package_path}"
+                ) from error
+            if stat.S_ISLNK(metadata.st_mode):
+                raise ValueError(
+                    f"skill target must not contain symlinks: {relative}/{package_path}"
+                )
+            if stat.S_ISDIR(metadata.st_mode):
+                directories.add(package_path)
+                try:
+                    child_fd = os.open(entry.name, flags, dir_fd=directory_fd)
+                except OSError as error:
+                    raise ValueError(
+                        f"skill directory cannot be opened safely: {package_path}"
+                    ) from error
+                try:
+                    visit(child_fd, package_path)
+                finally:
+                    os.close(child_fd)
+                continue
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError(
+                    f"skill target may contain only regular files: "
+                    f"{relative}/{package_path}"
+                )
+            if metadata.st_nlink != 1:
+                raise ValueError(
+                    f"skill target must not contain hardlinked files: "
+                    f"{relative}/{package_path}"
+                )
+            if len(files) >= MAX_PACKAGE_FILES:
+                raise ValueError(
+                    f"skill target exceeds maximum file count: {MAX_PACKAGE_FILES}"
+                )
+            if metadata.st_size > MAX_FILE_BYTES:
+                raise ValueError(
+                    f"skill target file exceeds maximum size: "
+                    f"{relative}/{package_path}"
+                )
+            package_bytes += metadata.st_size
+            if package_bytes > MAX_PACKAGE_BYTES:
+                raise ValueError(
+                    f"skill target exceeds maximum package size: "
+                    f"{MAX_PACKAGE_BYTES}"
+                )
+            file_flags = os.O_RDONLY | nofollow
+            try:
+                file_fd = os.open(entry.name, file_flags, dir_fd=directory_fd)
+            except OSError as error:
+                raise ValueError(
+                    f"skill file cannot be opened safely: {package_path}"
+                ) from error
+            digest = hashlib.sha256()
+            try:
+                opened = os.fstat(file_fd)
+                if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+                    raise ValueError(
+                        f"skill file changed type while reading: {package_path}"
+                    )
+                while True:
+                    chunk = os.read(file_fd, 1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                after = os.fstat(file_fd)
+            finally:
+                os.close(file_fd)
+            if (
+                _stable_metadata(metadata) != _stable_metadata(opened)
+                or _stable_metadata(opened) != _stable_metadata(after)
+            ):
+                raise ValueError(
+                    f"skill file changed while reading: {package_path}"
+                )
+            files[package_path] = {
+                "mode": "100755" if opened.st_mode & 0o111 else "100644",
+                "sha256": "sha256:" + digest.hexdigest(),
+            }
+        after = os.fstat(directory_fd)
+        if _stable_metadata(before) != _stable_metadata(after):
+            raise ValueError("skill directory changed while traversing")
+
+    try:
+        visit(package_fd, "")
+        for descriptor, before, component in opened_directories:
+            if _stable_metadata(os.fstat(descriptor)) != before:
+                raise ValueError(
+                    "skill path changed while traversing: "
+                    f"{component}"
+                )
+    finally:
+        for descriptor, _, _ in reversed(opened_directories):
+            os.close(descriptor)
+    return files, directories
+
+
+def compare_worktree_to_snapshot(
+    repo_root: Path,
+    relative: str,
+    snapshot: dict[str, Any],
+) -> None:
+    observed_files, observed_directories = worktree_package_evidence(
+        repo_root,
+        relative,
+    )
+    expected_files = {
+        item["path"]: {"mode": item["mode"], "sha256": item["sha256"]}
+        for item in snapshot["files"]
+    }
+    expected_directories = {
+        parent.as_posix()
+        for path in expected_files
+        for parent in PurePosixPath(path).parents
+        if parent.as_posix() != "."
+    }
+    extra_files = sorted(set(observed_files) - set(expected_files))
+    missing_files = sorted(set(expected_files) - set(observed_files))
+    extra_directories = sorted(observed_directories - expected_directories)
+    missing_directories = sorted(expected_directories - observed_directories)
+    if extra_files or extra_directories:
+        extras = extra_files + [f"{path}/" for path in extra_directories]
+        raise ValueError(
+            "skill worktree contains extra or ignored entries: "
+            + ", ".join(extras)
+        )
+    if missing_files or missing_directories:
+        missing = missing_files + [f"{path}/" for path in missing_directories]
+        raise ValueError(
+            "skill worktree is missing HEAD tree entries: " + ", ".join(missing)
+        )
+    for path, expected in expected_files.items():
+        if observed_files[path] != expected:
+            raise ValueError(
+                f"skill worktree file differs from HEAD tree: {relative}/{path}"
+            )
+
+
+def validate_skill_folder(
+    repo_root: Path,
+    head_commit: str,
+    relative: str,
+) -> dict[str, Any]:
+    snapshot = head_package_snapshot(repo_root, head_commit, relative)
+    compare_worktree_to_snapshot(repo_root, relative, snapshot)
+    return {
+        "slug": PurePosixPath(relative).name,
+        "path": relative,
+        "packageSnapshot": snapshot,
+    }
 
 
 def changed_skill_paths(repo_root: Path, base: str, head: str) -> list[str]:
@@ -341,6 +787,25 @@ def changed_skill_paths(repo_root: Path, base: str, head: str) -> list[str]:
             validate_explicit_path(relative)
             candidates.add(relative)
     return sorted(candidates)
+
+
+def head_tree_contains(
+    repo_root: Path,
+    head_commit: str,
+    relative: str,
+) -> bool:
+    entry = run_git(
+        repo_root,
+        "ls-tree",
+        "-z",
+        head_commit,
+        "--",
+        relative,
+        text=False,
+    )
+    if entry.returncode != 0:
+        raise ValueError(f"HEAD tree path cannot be inspected: {relative}")
+    return bool(entry.stdout)
 
 
 def evaluate(
@@ -434,7 +899,7 @@ def evaluate(
 
         if skill_path:
             relative = validate_explicit_path(skill_path)
-            target = validate_skill_folder(root, relative)
+            target = validate_skill_folder(root, head_commit, relative)
             if changed_paths is not None:
                 if relative not in changed_paths:
                     raise ValueError(
@@ -452,13 +917,24 @@ def evaluate(
             existing = [
                 relative
                 for relative in changed_paths
-                if (root / relative).exists()
+                if head_tree_contains(root, head_commit, relative)
             ]
             target = (
-                validate_skill_folder(root, existing[0])
+                validate_skill_folder(root, head_commit, existing[0])
                 if existing
                 else None
             )
+        require_clean_head(root, head_commit)
+        if target is not None:
+            repeated_target = validate_skill_folder(
+                root,
+                head_commit,
+                target["path"],
+            )
+            if repeated_target["packageSnapshot"] != target["packageSnapshot"]:
+                raise ValueError("skill package snapshot changed during validation")
+        require_clean_head(root, head_commit)
+        require_repository_root(root)
         return decision_result(
             valid=True,
             decision="single-target" if target is not None else "no-op",

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "research-only-not-wired",
   "guard": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
   "guardBaseline": {
@@ -8,6 +8,11 @@
     "mode": "100644",
     "blobOid": "fed36f10888bff6d08a35e57975260677aa9a052",
     "sha256": "sha256:dcc4a312c2a450ee765c9b270669411217c3a39ed38fca75fbe214fe326c34cb"
+  },
+  "guardDraft": {
+    "path": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
+    "mode": "100644",
+    "sha256": "sha256:2b45cbbc9f79765775027a77d4123691899cf0e44e2bdd55d583c83df2e4d3f9"
   },
   "formalWorkflowModified": false,
   "knownFormalRisks": [
@@ -76,7 +81,52 @@
       "SKILL.md",
       "CHANGELOG.md",
       ".clawhubignore"
-    ]
+    ],
+    "packageSnapshotSource": "HEAD-tree",
+    "packageSnapshotFields": [
+      "treeOid",
+      "files",
+      "packageDigest"
+    ],
+    "packageFileFields": [
+      "path",
+      "mode",
+      "blobOid",
+      "sha256"
+    ],
+    "packageDigestCanonicalJson": true,
+    "packageDigestFormat": "safe-publish-package-v1",
+    "packageDigestBinds": [
+      "format",
+      "skillPath",
+      "treeOid",
+      "files"
+    ],
+    "packageLimits": {
+      "maximumFiles": 1024,
+      "maximumFileBytes": 10485760,
+      "maximumPackageBytes": 52428800
+    },
+    "worktreeTraversal": "no-follow",
+    "requiredTraversalCapabilities": [
+      "O_NOFOLLOW",
+      "O_DIRECTORY"
+    ],
+    "worktreeExactMatchRequired": true,
+    "ignoredAndExtraEntries": "reject",
+    "symlinks": "reject",
+    "hardlinks": "reject",
+    "localObjectStoreRequired": true,
+    "objectStoreTraversal": "recursive-no-follow",
+    "successRevalidation": [
+      "head",
+      "cleanWorktree",
+      "packageWorktree",
+      "repositoryLayout"
+    ],
+    "atomicVerifiedPackageHandoffRequired": true,
+    "guardResultIsNotPackageHandoff": true,
+    "nonTargetPackageSnapshot": null
   },
   "evidenceBoundary": {
     "currentLevel": "E0",

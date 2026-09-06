@@ -138,7 +138,14 @@ workflow 还必须保证 control 与 candidate checkout 在整个 preflight 期�
 
 `safe_publish_target_guard.py` 是针对正式 workflow 当前手动触发、缺失 base
 回退全目录和多目标循环发布风险的纯离线草案。它固定系统 Git、要求干净 HEAD，
-并把事件、ref、base 与最多一个真实变化 Skill 绑定；研究合同和完整边界见
+并把事件、ref、base 与最多一个真实变化 Skill 绑定。schema v2 还从 HEAD tree
+生成含 tree OID、全文件 mode/blob/SHA-256 和规范 `packageDigest` 的包快照，
+摘要固定绑定格式版本、规范 Skill 路径、tree OID 与完整文件清单；再以
+逐组件 no-follow 遍历严格比对工作树，缺少必要平台能力时 fail-closed，并递归
+拒绝对象库中的 symlink，以及额外或 ignored 文件、hardlink 和特殊文件。包大小
+和文件数均有固定上限；成功返回前会在第二次包比对后再次确认 HEAD、clean 状态
+与仓库布局。guard 结果不是原子发布包，正式接线必须从已验证 Git 对象构造不可变
+staging，不能在返回后按普通路径重新打包。研究合同和完整边界见
 `safe-publish-target-contract.json` 与 `safe-publish-target-guard.md`。
 
 该 guard 未接入 `.github/workflows`，也不读取凭据、安装 Bun、调用 ClawHub 或

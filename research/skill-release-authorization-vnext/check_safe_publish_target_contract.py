@@ -20,7 +20,7 @@ WORKFLOW = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(WORKFLOW)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STATUS = "research-only-not-wired"
 GUARD_PATH = (
     "research/skill-release-authorization-vnext/"
@@ -31,6 +31,7 @@ TOP_LEVEL_FIELDS = {
     "status",
     "guard",
     "guardBaseline",
+    "guardDraft",
     "formalWorkflowModified",
     "knownFormalRisks",
     "formalBaselines",
@@ -74,6 +75,34 @@ EXPECTED_SELECTION_RULES = {
     "explicitTargetMustCoverChangedSkillsWhenBaseProvided": True,
     "explicitSkillPathPattern": "skills/<valid-slug>",
     "requiredSkillFiles": ["SKILL.md", "CHANGELOG.md", ".clawhubignore"],
+    "packageSnapshotSource": "HEAD-tree",
+    "packageSnapshotFields": ["treeOid", "files", "packageDigest"],
+    "packageFileFields": ["path", "mode", "blobOid", "sha256"],
+    "packageDigestCanonicalJson": True,
+    "packageDigestFormat": "safe-publish-package-v1",
+    "packageDigestBinds": ["format", "skillPath", "treeOid", "files"],
+    "packageLimits": {
+        "maximumFiles": 1024,
+        "maximumFileBytes": 10485760,
+        "maximumPackageBytes": 52428800,
+    },
+    "worktreeTraversal": "no-follow",
+    "requiredTraversalCapabilities": ["O_NOFOLLOW", "O_DIRECTORY"],
+    "worktreeExactMatchRequired": True,
+    "ignoredAndExtraEntries": "reject",
+    "symlinks": "reject",
+    "hardlinks": "reject",
+    "localObjectStoreRequired": True,
+    "objectStoreTraversal": "recursive-no-follow",
+    "successRevalidation": [
+        "head",
+        "cleanWorktree",
+        "packageWorktree",
+        "repositoryLayout",
+    ],
+    "atomicVerifiedPackageHandoffRequired": True,
+    "guardResultIsNotPackageHandoff": True,
+    "nonTargetPackageSnapshot": None,
 }
 EXPECTED_EVIDENCE_BOUNDARY = {
     "currentLevel": "E0",
@@ -86,12 +115,15 @@ EXPECTED_FORMAL_PATHS = {
     "local": ".github/workflows/clawhub-skill-publish-local.yml",
 }
 BASELINE_FIELDS = {"path", "commit", "mode", "blobOid", "sha256"}
+GUARD_DRAFT_FIELDS = {"path", "mode", "sha256"}
 
 
 def check_baseline(
     root: Path,
     value: Any,
     expected_path: str,
+    *,
+    require_worktree: bool = True,
 ) -> bool:
     if not isinstance(value, dict) or set(value) != BASELINE_FIELDS:
         return False
@@ -117,15 +149,17 @@ def check_baseline(
     }
     if observed != value:
         return False
-    working = WORKFLOW.working_file_evidence(
-        root,
-        expected_path,
-        f"baseline file {expected_path}",
-    )
-    return working == {
-        key: value[key]
-        for key in ("path", "mode", "sha256")
-    }
+    if require_worktree:
+        working = WORKFLOW.working_file_evidence(
+            root,
+            expected_path,
+            f"baseline file {expected_path}",
+        )
+        return working == {
+            key: value[key]
+            for key in ("path", "mode", "sha256")
+        }
+    return True
 
 
 def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
@@ -162,7 +196,7 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         "schema-version",
         type(contract.get("schemaVersion")) is int
         and contract.get("schemaVersion") == SCHEMA_VERSION,
-        "schemaVersion must equal 1",
+        "schemaVersion must equal 2",
     )
     add(
         "research-status",
@@ -208,6 +242,7 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
             root,
             contract.get("guardBaseline"),
             GUARD_PATH,
+            require_worktree=False,
         )
     except ValueError as error:
         guard_baseline_valid = False
@@ -215,7 +250,27 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
     add(
         "guard-baseline",
         guard_baseline_valid,
-        "guard baseline does not match its pinned Git blob and worktree",
+        "guard predecessor baseline does not match its pinned Git blob",
+    )
+    guard_draft = contract.get("guardDraft")
+    try:
+        guard_draft_valid = (
+            isinstance(guard_draft, dict)
+            and set(guard_draft) == GUARD_DRAFT_FIELDS
+            and guard_draft
+            == WORKFLOW.working_file_evidence(
+                root,
+                GUARD_PATH,
+                "safe publish target guard draft",
+            )
+        )
+    except ValueError as error:
+        guard_draft_valid = False
+        errors.append(str(error))
+    add(
+        "guard-draft",
+        guard_draft_valid,
+        "guard draft does not match the documented worktree source",
     )
 
     formal = contract.get("formalBaselines")

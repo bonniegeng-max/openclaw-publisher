@@ -162,13 +162,25 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
             contract["executionBoundary"]["gitTimeoutSeconds"],
             MODULE.GIT_TIMEOUT_SECONDS,
         )
+        self.assertEqual(
+            contract["selectionRules"]["packageSnapshotSource"],
+            "HEAD-tree",
+        )
+        self.assertEqual(
+            contract["selectionRules"]["worktreeTraversal"],
+            "no-follow",
+        )
+        self.assertEqual(
+            contract["selectionRules"]["nonTargetPackageSnapshot"],
+            None,
+        )
         self.assertEqual(contract["selectionRules"]["maximumTargets"], 1)
         self.assertFalse(contract["evidenceBoundary"]["deploymentReady"])
         self.assertIn("research-only-not-wired", guide)
         self.assertIn("不会访问网络", guide)
         self.assertIn("不构成 E1-E4", guide)
 
-    def test_guard_and_formal_baselines_match_git_and_worktree(self):
+    def test_guard_draft_and_formal_baselines_match_evidence(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         self.assertEqual(
             contract["guardBaseline"]["path"],
@@ -178,10 +190,14 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
             set(contract["formalBaselines"]),
             {"caller", "local"},
         )
-        baselines = {
-            "guard": contract["guardBaseline"],
-            **contract["formalBaselines"],
-        }
+        guard_draft = contract["guardDraft"]
+        current_guard = ROOT / guard_draft["path"]
+        self.assertEqual(guard_draft["mode"], "100644")
+        self.assertEqual(
+            guard_draft["sha256"],
+            "sha256:" + hashlib.sha256(current_guard.read_bytes()).hexdigest(),
+        )
+        baselines = contract["formalBaselines"]
         for label, baseline in baselines.items():
             with self.subTest(label=label):
                 entry = subprocess.check_output(
@@ -495,12 +511,18 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
         self.assertFalse(result["authorizationEligible"])
         self.assertEqual(result["targetCount"], 0)
         self.assertIsNone(result["skillPath"])
+        self.assertIsNone(result["packageSnapshot"])
 
     def test_exactly_one_changed_skill_is_selected(self):
         with tempfile.TemporaryDirectory() as directory:
             root, base = make_repo(directory)
             add_skill(root, "demo-skill")
             head = commit_all(root, "add one skill")
+            expected_tree = git(
+                root,
+                "rev-parse",
+                f"{head}:skills/demo-skill",
+            )
             result = MODULE.evaluate(
                 root,
                 event_name="push",
@@ -522,6 +544,105 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
         self.assertEqual(result["targetCount"], 1)
         self.assertEqual(result["skillPath"], "skills/demo-skill")
         self.assertEqual(result["slug"], "demo-skill")
+        snapshot = result["packageSnapshot"]
+        self.assertEqual(snapshot["treeOid"], expected_tree)
+        self.assertEqual(
+            [item["path"] for item in snapshot["files"]],
+            [".clawhubignore", "CHANGELOG.md", "SKILL.md"],
+        )
+        canonical = json.dumps(
+            {
+                "files": snapshot["files"],
+                "format": MODULE.PACKAGE_DIGEST_FORMAT,
+                "skillPath": "skills/demo-skill",
+                "treeOid": snapshot["treeOid"],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        self.assertEqual(
+            snapshot["packageDigest"],
+            "sha256:" + hashlib.sha256(canonical).hexdigest(),
+        )
+        self.assertEqual(
+            set(snapshot),
+            {"treeOid", "files", "packageDigest"},
+        )
+        self.assertTrue(
+            all(
+                set(item) == {"path", "mode", "blobOid", "sha256"}
+                for item in snapshot["files"]
+            )
+        )
+
+    def test_package_digest_binds_format_target_and_every_file_field(self):
+        tree_oid = "1" * 40
+        files = [
+            {
+                "path": "SKILL.md",
+                "mode": "100644",
+                "blobOid": "2" * 40,
+                "sha256": "sha256:" + "3" * 64,
+            }
+        ]
+        baseline = MODULE.canonical_package_digest(
+            "skills/demo-skill",
+            tree_oid,
+            files,
+        )
+        variants = [
+            (
+                "skillPath",
+                lambda: MODULE.canonical_package_digest(
+                    "skills/other-skill",
+                    tree_oid,
+                    files,
+                ),
+            ),
+            (
+                "treeOid",
+                lambda: MODULE.canonical_package_digest(
+                    "skills/demo-skill",
+                    "4" * 40,
+                    files,
+                ),
+            ),
+        ]
+        for field, replacement in (
+            ("path", "OTHER.md"),
+            ("mode", "100755"),
+            ("blobOid", "5" * 40),
+            ("sha256", "sha256:" + "6" * 64),
+        ):
+            mutated = [dict(files[0])]
+            mutated[0][field] = replacement
+            variants.append(
+                (
+                    field,
+                    lambda mutated=mutated: MODULE.canonical_package_digest(
+                        "skills/demo-skill",
+                        tree_oid,
+                        mutated,
+                    ),
+                )
+            )
+        for label, digest in variants:
+            with self.subTest(label=label):
+                self.assertNotEqual(digest(), baseline)
+        with mock.patch.object(
+            MODULE,
+            "PACKAGE_DIGEST_FORMAT",
+            "safe-publish-package-v2",
+        ):
+            self.assertNotEqual(
+                MODULE.canonical_package_digest(
+                    "skills/demo-skill",
+                    tree_oid,
+                    files,
+                ),
+                baseline,
+            )
 
     def test_multiple_changed_skills_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -656,6 +777,258 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
             "must not contain symlinks",
             result["blockingReasons"][0],
         )
+        self.assertIsNone(result["packageSnapshot"])
+
+    def test_head_tree_snapshot_rejects_nested_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            skill = add_skill(root, "demo-skill")
+            (skill / "linked.md").symlink_to("SKILL.md")
+            commit_all(root, "add package with symlink")
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["packageSnapshot"])
+        self.assertIn("only regular files", result["blockingReasons"][0])
+
+    def test_ignored_extra_file_is_rejected_by_exact_worktree_walk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            skill = add_skill(root, "demo-skill")
+            (skill / ".gitignore").write_text("ignored.tmp\n", encoding="utf-8")
+            commit_all(root, "add skill")
+            (skill / "ignored.tmp").write_text("not packaged\n", encoding="utf-8")
+            self.assertEqual(git(root, "status", "--porcelain"), "")
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["packageSnapshot"])
+        self.assertIn("extra or ignored entries", result["blockingReasons"][0])
+
+    def test_empty_directory_is_rejected_by_exact_worktree_walk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            skill = add_skill(root, "demo-skill")
+            commit_all(root, "add skill")
+            (skill / "empty").mkdir()
+            self.assertEqual(git(root, "status", "--porcelain"), "")
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["packageSnapshot"])
+        self.assertIn("extra or ignored entries", result["blockingReasons"][0])
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFO requires os.mkfifo")
+    def test_ignored_special_file_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            skill = add_skill(root, "demo-skill")
+            (skill / ".gitignore").write_text(
+                "ignored.pipe\n",
+                encoding="utf-8",
+            )
+            commit_all(root, "add skill")
+            os.mkfifo(skill / "ignored.pipe")
+            self.assertEqual(git(root, "status", "--porcelain"), "")
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["packageSnapshot"])
+        self.assertIn("only regular files", result["blockingReasons"][0])
+
+    def test_hardlinked_package_file_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            skill = add_skill(root, "demo-skill")
+            duplicate = skill / "duplicate.md"
+            duplicate.write_text("body\n", encoding="utf-8")
+            commit_all(root, "add skill")
+            duplicate.unlink()
+            os.link(skill / "SKILL.md", duplicate)
+            self.assertEqual(git(root, "status", "--porcelain"), "")
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["packageSnapshot"])
+        self.assertIn("hardlinked files", result["blockingReasons"][0])
+
+    def test_missing_no_follow_platform_capability_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            add_skill(root, "demo-skill")
+            for capability in ("O_NOFOLLOW", "O_DIRECTORY"):
+                with self.subTest(capability=capability), mock.patch.object(
+                    MODULE.os,
+                    capability,
+                    None,
+                ):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "lacks required O_NOFOLLOW",
+                    ):
+                        MODULE.worktree_package_evidence(
+                            root,
+                            "skills/demo-skill",
+                        )
+
+    def test_intermediate_skill_path_symlink_is_rejected_by_openat_walk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            add_skill(root, "demo-skill")
+            skills = root / "skills"
+            relocated = root / "skills-relocated"
+            skills.rename(relocated)
+            skills.symlink_to(relocated)
+            with self.assertRaisesRegex(
+                ValueError,
+                "cannot be opened safely",
+            ):
+                MODULE.worktree_package_evidence(
+                    root,
+                    "skills/demo-skill",
+                )
+
+    def test_symlinked_git_object_store_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            objects = root / ".git" / "objects"
+            relocated = root / "objects-relocated"
+            objects.rename(relocated)
+            objects.symlink_to(relocated)
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "object store must be a local directory",
+            result["blockingReasons"][0],
+        )
+
+    def test_symlink_below_git_object_store_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            pack = root / ".git" / "objects" / "pack"
+            relocated = root / ".git" / "pack-relocated"
+            pack.rename(relocated)
+            pack.symlink_to(relocated)
+            result = MODULE.evaluate(
+                root,
+                event_name="workflow_dispatch",
+                dry_run=True,
+                changed_only=True,
+                skill_path="skills/demo-skill",
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertIn(
+            "object store must not contain symlinks",
+            result["blockingReasons"][0],
+        )
+
+    def test_package_resource_limits_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            add_skill(root, "demo-skill")
+            commit_all(root, "add skill")
+            with mock.patch.object(MODULE, "MAX_FILE_BYTES", 1):
+                oversized = MODULE.evaluate(
+                    root,
+                    event_name="workflow_dispatch",
+                    dry_run=True,
+                    changed_only=True,
+                    skill_path="skills/demo-skill",
+                )
+            with mock.patch.object(MODULE, "MAX_PACKAGE_FILES", 2):
+                too_many = MODULE.evaluate(
+                    root,
+                    event_name="workflow_dispatch",
+                    dry_run=True,
+                    changed_only=True,
+                    skill_path="skills/demo-skill",
+                )
+
+        self.assertFalse(oversized["valid"])
+        self.assertIn(
+            "file exceeds maximum size",
+            oversized["blockingReasons"][0],
+        )
+        self.assertFalse(too_many["valid"])
+        self.assertIn(
+            "exceeds maximum file count",
+            too_many["blockingReasons"][0],
+        )
+
+    def test_final_clean_check_rejects_change_after_second_package_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = make_repo(directory)
+            add_skill(root, "demo-skill")
+            commit_all(root, "add skill")
+            original_validate = MODULE.validate_skill_folder
+            call_count = 0
+
+            def mutate_after_second_validation(*args, **kwargs):
+                nonlocal call_count
+                result = original_validate(*args, **kwargs)
+                call_count += 1
+                if call_count == 2:
+                    (root / "README.md").write_text(
+                        "changed after validation\n",
+                        encoding="utf-8",
+                    )
+                return result
+
+            with mock.patch.object(
+                MODULE,
+                "validate_skill_folder",
+                side_effect=mutate_after_second_validation,
+            ):
+                result = MODULE.evaluate(
+                    root,
+                    event_name="workflow_dispatch",
+                    dry_run=True,
+                    changed_only=True,
+                    skill_path="skills/demo-skill",
+                )
+
+        self.assertEqual(call_count, 2)
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["packageSnapshot"])
+        self.assertIn("worktree must be clean", result["blockingReasons"][0])
 
     def test_invalid_or_non_ancestor_base_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -814,6 +1187,7 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
                 "targetCount",
                 "skillPath",
                 "slug",
+                "packageSnapshot",
                 "baseCommit",
                 "headCommit",
                 "eventBefore",
@@ -823,6 +1197,84 @@ class SafeSkillPublishDraftTests(unittest.TestCase):
             },
         )
         self.assertEqual(completed.stderr, "")
+
+    def test_all_decisions_preserve_exact_result_schema_and_invariants(self):
+        fields = {
+            "schemaVersion",
+            "valid",
+            "decision",
+            "eventName",
+            "ref",
+            "dryRun",
+            "changedOnly",
+            "authorizationEligible",
+            "authorized",
+            "mutationAllowed",
+            "targetCount",
+            "skillPath",
+            "slug",
+            "packageSnapshot",
+            "baseCommit",
+            "headCommit",
+            "eventBefore",
+            "eventSha",
+            "eventRef",
+            "blockingReasons",
+        }
+        snapshot = {"treeOid": "1" * 40, "files": [], "packageDigest": "x"}
+        cases = (
+            MODULE.decision_result(
+                valid=False,
+                decision="blocked",
+                event_name="push",
+                ref="",
+                dry_run=True,
+                changed_only=True,
+                blocking_reasons=["blocked"],
+            ),
+            MODULE.decision_result(
+                valid=True,
+                decision="no-op",
+                event_name="push",
+                ref="",
+                dry_run=True,
+                changed_only=True,
+            ),
+            MODULE.decision_result(
+                valid=True,
+                decision="single-target",
+                event_name="push",
+                ref="",
+                dry_run=True,
+                changed_only=True,
+                target={
+                    "path": "skills/demo-skill",
+                    "slug": "demo-skill",
+                    "packageSnapshot": snapshot,
+                },
+            ),
+        )
+        for result in cases:
+            with self.subTest(decision=result["decision"]):
+                self.assertEqual(set(result), fields)
+                self.assertFalse(result["authorized"])
+                self.assertFalse(result["mutationAllowed"])
+                self.assertEqual(
+                    result["authorizationEligible"],
+                    result["valid"]
+                    and result["decision"] == "single-target"
+                    and result["eventName"] == "push"
+                    and result["ref"] == MODULE.PRODUCTION_REF
+                    and result["dryRun"] is False
+                    and result["changedOnly"] is True
+                    and result["baseCommit"] == result["eventBefore"]
+                    and result["headCommit"] == result["eventSha"]
+                    and result["ref"] == result["eventRef"],
+                )
+                if result["decision"] == "single-target":
+                    self.assertIs(result["packageSnapshot"], snapshot)
+                else:
+                    self.assertIsNone(result["packageSnapshot"])
 
     def test_guard_has_only_offline_standard_library_and_git_surface(self):
         source = GUARD.read_text(encoding="utf-8")

@@ -46,9 +46,13 @@ environment，届时使用该 environment 自己的 secret：
 4. 由 workflow 固定可信 Python 与 Git 可执行文件及 `PATH`，使用 `python -I`
    启动 checker，并清除候选可控的 Python/Git 环境变量；checker 内部的路径自检
    只能证明路径匹配，不能替代 launcher 的启动前信任。
-5. 在运行测试、编译或任何可能生成缓存的步骤之前，创建独立、干净、不可并发写入
-   的 candidate checkout；checker 会逐文件验证工作树与 HEAD 的 blob、类型和
-   执行位，但不把同主机恶意并发改写纳入 CLI 自证范围。
+   研究版启动合同位于
+   `research/skill-release-authorization-vnext/trusted_preflight_launcher.py`；
+   它尚未被正式 workflow 调用，因此不构成部署证据。
+5. 在运行测试、编译或任何可能生成缓存的步骤之前，创建相互独立、干净且不可并发
+   写入的 control 与 candidate checkout；launcher/checker 会验证 symlink、
+   hardlink、Git object store、blob、类型和执行位，但不把同主机恶意并发改写
+   纳入 CLI 自证范围。
 6. 受信任控制面显式接收候选仓库根目录，不能依赖导出路径推断 repo root。
 7. 验证 base、candidate commit、唯一授权提交、单 Skill 版本递增、完整摘要和
    `authorized: true`。
@@ -143,7 +147,8 @@ reviewer 审核：
 - 真实发布成功仍只代表 E2；E3 moderation 与 E4 隔离安装必须单独完成。
 
 只有 environment 配置、固定 SHA、workflow 合同测试和一次受控演练全部通过，
-才能把本目录状态从 `offline-ready-not-wired` 改为 `wired-and-protected`。
+才能把本目录状态从 `offline-contract-ready-not-wired` 改为
+`wired-and-protected`。
 
 仓内 `workflow-integration-contract.json` 只记录可复核事实和未完成 gate。其
 离线 checker 不解析 YAML，也不能证明 environment 的真实配置或 reviewer 身份；

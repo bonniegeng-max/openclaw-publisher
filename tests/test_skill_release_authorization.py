@@ -29,6 +29,12 @@ INTEGRATION_PLAN = (
     / "skill-release-authorization-vnext"
     / "workflow-integration-plan.md"
 )
+TRUSTED_LAUNCHER = (
+    ROOT
+    / "research"
+    / "skill-release-authorization-vnext"
+    / "trusted_preflight_launcher.py"
+)
 METRICS_WORKFLOW = ROOT / ".github" / "workflows" / "metrics-tools-ci.yml"
 PUBLISH_WORKFLOWS = (
     ROOT / ".github" / "workflows" / "clawhub-skill-publish.yml",
@@ -1610,6 +1616,46 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 set(result["trustedControl"]["files"]),
                 {"checker", "validator"},
             )
+            launched = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    str(TRUSTED_LAUNCHER),
+                    "--candidate-root",
+                    str(root),
+                    "--control-root",
+                    str(control_root),
+                    "--control-commit",
+                    control_commit,
+                    "--base",
+                    base_commit,
+                    "--mode",
+                    "publish",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            launched_result = json.loads(launched.stdout)
+            self.assertEqual(launched.returncode, 0, launched_result)
+            self.assertTrue(launched_result["authorized"])
+            self.assertEqual(
+                launched_result["candidateCommit"],
+                candidate_commit,
+            )
+            self.assertEqual(
+                launched_result["headCommit"],
+                subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=root,
+                    text=True,
+                ).strip(),
+            )
+            self.assertTrue(
+                launched_result["launcherObservations"][
+                    "checkerSnapshotBoundToControlCommit"
+                ]
+            )
 
             subprocess.run(
                 ["git", "commit", "--allow-empty", "-qm", "later empty commit"],
@@ -1881,7 +1927,10 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                 check=True,
             )
 
-            with self.assertRaisesRegex(ValueError, "Git common directory"):
+            with self.assertRaisesRegex(
+                ValueError,
+                "candidate root must not be a linked Git worktree",
+            ):
                 load_trusted_control(
                     candidate,
                     control,
@@ -2243,6 +2292,38 @@ class SkillReleaseAuthorizationTests(unittest.TestCase):
                     commit,
                     CHECK_MODULE.normalize_origin(str(origin)),
                 )
+
+    def test_trusted_control_rejects_object_store_alternates(self):
+        for affected in ("control", "candidate"):
+            with self.subTest(affected=affected), tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory).resolve()
+                candidate, _ = make_repo(workspace / "candidate")
+                initialize_git(candidate)
+                control, commit, origin = make_control_checkout(
+                    workspace / "control",
+                    workspace / "origin.git",
+                )
+                add_origin(candidate, origin)
+                external_objects = workspace / "external-objects"
+                external_objects.mkdir()
+                root = control if affected == "control" else candidate
+                alternates = root / ".git" / "objects" / "info" / "alternates"
+                alternates.parent.mkdir(parents=True, exist_ok=True)
+                alternates.write_text(
+                    str(external_objects) + "\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    f"{affected} root object store must not use alternates",
+                ):
+                    load_trusted_control(
+                        candidate,
+                        control,
+                        commit,
+                        origin,
+                    )
 
     def test_trusted_validator_snapshot_never_executes_candidate_copy(self):
         with tempfile.TemporaryDirectory() as directory:

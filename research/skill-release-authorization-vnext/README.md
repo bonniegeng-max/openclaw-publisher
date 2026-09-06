@@ -107,6 +107,21 @@ Git common directory、checker/validator mode、blob OID 和磁盘字节都会�
 `python -I`、固定解释器/Git 路径以及 `control-commit` 的仓外可信来源仍必须由
 受保护 launcher 提供，checker 自身不能用路径自检证明自己最初就是可信代码。
 
+研究版 launcher 位于：
+
+```text
+research/skill-release-authorization-vnext/trusted_preflight_launcher.py
+```
+
+它先把 control commit 中的 checker blob、磁盘字节和执行模式绑定，再以隔离
+Python 从该字节快照执行 checker；随后验证严格 JSON、退出码、slug、semver、
+releaseId、base/candidate/head、单目标以及 trusted-control 证据是否一致。它不
+接收 token、registry 或发布参数，也不执行 Bun、ClawHub、dry-run 或 publish。
+正式接线后必须从固定完整 SHA 的 reusable workflow 调用该逻辑；仅存在研究文件
+不能把 `trusted-control-execution` 改为已验证。
+workflow 还必须保证 control 与 candidate checkout 在整个 preflight 期间不被
+其他 job 或进程写入；静态路径检查不能独立消除同主机并发替换风险。
+
 退出码：
 
 - `0`：合同有效，且当前模式已获本次变更授权。

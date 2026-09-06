@@ -543,6 +543,27 @@ class TrustedControl:
                 "--git-common-dir",
             )
         ).resolve()
+        git_entry = root / ".git"
+        try:
+            git_entry_mode = os.lstat(git_entry).st_mode
+        except OSError as error:
+            raise ValueError(f"{label} Git entry cannot be inspected: {error}") from error
+        if not stat.S_ISDIR(git_entry_mode) or git_entry.is_symlink():
+            raise ValueError(f"{label} must not be a linked Git worktree")
+        if git_dir != git_entry.resolve() or common_dir != git_dir:
+            raise ValueError(f"{label} must use an independent local Git directory")
+        objects = git_dir / "objects"
+        try:
+            objects_mode = os.lstat(objects).st_mode
+        except OSError as error:
+            raise ValueError(
+                f"{label} object store cannot be inspected: {error}"
+            ) from error
+        if not stat.S_ISDIR(objects_mode) or objects.is_symlink():
+            raise ValueError(f"{label} object store must be a local directory")
+        alternates = objects / "info" / "alternates"
+        if alternates.exists() or alternates.is_symlink():
+            raise ValueError(f"{label} object store must not use alternates")
         return top_level, git_dir, common_dir
 
     def _verify_blob(self, relative: str, label: str) -> bytes:
@@ -1601,6 +1622,8 @@ def main(argv: list[str] | None = None) -> int:
             now,
             catalog_validator,
         )
+        result["candidateCommit"] = candidate_commit
+        result["headCommit"] = run_git(repo_root, "rev-parse", "HEAD").strip()
         result["trustedControl"] = trusted_control.evidence()
     except (OSError, TypeError, ValueError) as error:
         result = invalid_result(args.mode, now, error)

@@ -6,7 +6,13 @@
     "caller": ".github/workflows/clawhub-skill-publish.yml",
     "authorizedReusable": ".github/workflows/clawhub-skill-publish-authorized.yml",
     "wired": false,
-    "callerSha256": "sha256:cb48da64fc47ffda31e3838de846e91112dac5688e508c34c23d6aa87af92f68",
+    "callerBaseline": {
+      "path": ".github/workflows/clawhub-skill-publish.yml",
+      "commit": "c1607f241575765b0f7629112593b907d6130ad4",
+      "mode": "100644",
+      "blobOid": "2eae3b48f9a379a34aaa39be299baed2c89181a2",
+      "sha256": "sha256:cb48da64fc47ffda31e3838de846e91112dac5688e508c34c23d6aa87af92f68"
+    },
     "reusableSha256": null,
     "semanticReviewEvidence": null
   },

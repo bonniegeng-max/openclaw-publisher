@@ -288,6 +288,41 @@ def git_blob_evidence(
     }
 
 
+def working_file_evidence(
+    root: Path,
+    relative: str,
+    label: str,
+) -> dict[str, str]:
+    path = safe_repo_path(root, relative, label)
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise ValueError(f"{label} cannot be opened safely: {error}") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError(f"{label} must be a regular file")
+        if metadata.st_nlink != 1:
+            raise ValueError(f"{label} must not have multiple hard links")
+        chunks = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        content = b"".join(chunks)
+    finally:
+        os.close(descriptor)
+    return {
+        "path": relative,
+        "mode": "100755" if metadata.st_mode & 0o111 else "100644",
+        "sha256": digest_bytes(content),
+    }
+
+
 def origin_repository(root: Path) -> str:
     try:
         completed = run_git(
@@ -406,17 +441,27 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         "caller",
         "authorizedReusable",
         "wired",
-        "callerSha256",
+        "callerBaseline",
         "reusableSha256",
         "semanticReviewEvidence",
     }
     if formal_valid:
+        caller_baseline = formal["callerBaseline"]
         formal_valid = (
             formal["caller"] == EXPECTED_CALLER
             and formal["authorizedReusable"] == EXPECTED_REUSABLE
             and formal["wired"] is False
-            and isinstance(formal["callerSha256"], str)
-            and DIGEST_PATTERN.fullmatch(formal["callerSha256"]) is not None
+            and isinstance(caller_baseline, dict)
+            and set(caller_baseline)
+            == {"path", "commit", "mode", "blobOid", "sha256"}
+            and caller_baseline["path"] == EXPECTED_CALLER
+            and isinstance(caller_baseline["commit"], str)
+            and COMMIT_PATTERN.fullmatch(caller_baseline["commit"]) is not None
+            and caller_baseline["mode"] in {"100644", "100755"}
+            and isinstance(caller_baseline["blobOid"], str)
+            and COMMIT_PATTERN.fullmatch(caller_baseline["blobOid"]) is not None
+            and isinstance(caller_baseline["sha256"], str)
+            and DIGEST_PATTERN.fullmatch(caller_baseline["sha256"]) is not None
             and formal["reusableSha256"] is None
             and formal["semanticReviewEvidence"] is None
         )
@@ -427,23 +472,48 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         formal_valid,
         "formal workflow state must remain explicitly unwired and unverified",
     )
+    caller_baseline_consistent = False
     if formal_valid:
         try:
-            caller_path = safe_repo_path(root, formal["caller"], "caller workflow")
             reusable_path = safe_repo_path(
                 root,
                 formal["authorizedReusable"],
                 "authorized reusable workflow",
             )
-            caller_content = caller_path.read_bytes()
-            hold_intact = (
-                not reusable_path.exists()
-                and digest_bytes(caller_content) == formal["callerSha256"]
+            caller_baseline = formal["callerBaseline"]
+            observed_baseline = {
+                "commit": caller_baseline["commit"],
+                **git_blob_evidence(
+                    root,
+                    caller_baseline["commit"],
+                    caller_baseline["path"],
+                ),
+            }
+            caller_baseline_consistent = observed_baseline == caller_baseline
+            working_caller = working_file_evidence(
+                root,
+                formal["caller"],
+                "caller workflow",
             )
-        except (OSError, UnicodeError, ValueError):
+            hold_intact = (
+                caller_baseline_consistent
+                and not reusable_path.exists()
+                and working_caller
+                == {
+                    key: caller_baseline[key]
+                    for key in ("path", "mode", "sha256")
+                }
+            )
+        except (OSError, UnicodeError, ValueError) as error:
+            errors.append(str(error))
             hold_intact = False
     else:
         hold_intact = False
+    checks["caller-baseline-anchor"] = caller_baseline_consistent
+    if not caller_baseline_consistent:
+        errors.append(
+            "caller workflow baseline does not match the pinned local Git blob"
+        )
     add_check(
         checks,
         errors,
@@ -451,7 +521,7 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         hold_intact,
         "formal publish workflows changed before the deferred integration review",
     )
-    local_evidence["formalWorkflowWired"] = False
+    local_evidence["formalWorkflowBaselineIntact"] = hold_intact
     blockers.append("formal-workflow-wiring")
 
     control = contract.get("trustedControl")

@@ -28,6 +28,11 @@ lazy fetch 和候选环境注入，因此不会为补齐缺失对象访问远端
 workflow SHA、ClawHub CLI commit、两个 environment 配置和受控演练证据缺少
 任一项时，都不能切换为可发布状态。
 
+观察期内的正式 caller workflow 由 `formalWorkflows.callerBaseline` 绑定到固定
+commit 的 Git blob、文件模式与 SHA-256；检查器还要求当前工作树字节和执行位与
+该基线一致。单独更新摘要，或同时修改 caller 与合同中的摘要，都不能继续证明
+观察期冻结状态完好。
+
 ## 已确认断点
 
 当前 `ClawHub Skill Publish` 与 `Metrics Tools CI` 是彼此独立的 workflow。

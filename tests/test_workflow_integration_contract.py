@@ -86,13 +86,25 @@ def make_contract_repo(directory):
         check=True,
     )
     contract = load_contract()
-    contract["formalWorkflows"]["callerSha256"] = MODULE.digest_bytes(
-        (root / contract["formalWorkflows"]["caller"]).read_bytes()
-    )
+    bind_control_files(root, contract, head)
     return root, contract, head
 
 
 def bind_control_files(root, contract, commit):
+    baseline = contract["formalWorkflows"]["callerBaseline"]
+    baseline["commit"] = commit
+    entry = subprocess.check_output(
+        ["git", "ls-tree", commit, "--", baseline["path"]],
+        cwd=root,
+        text=True,
+    ).strip().split(maxsplit=3)
+    baseline["mode"] = entry[0]
+    baseline["blobOid"] = entry[2]
+    content = subprocess.check_output(
+        ["git", "show", f"{commit}:{baseline['path']}"],
+        cwd=root,
+    )
+    baseline["sha256"] = MODULE.digest_bytes(content)
     contract["trustedControl"]["commit"] = commit
     for item in contract["trustedControl"]["files"]:
         entry = subprocess.check_output(
@@ -134,7 +146,9 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             "offline-contract-ready-not-wired",
         )
         self.assertEqual(result["localEvidence"]["currentEvidenceLevel"], "E0")
-        self.assertFalse(result["localEvidence"]["formalWorkflowWired"])
+        self.assertTrue(
+            result["localEvidence"]["formalWorkflowBaselineIntact"]
+        )
         self.assertFalse(
             result["localEvidence"]["environmentConfigurationVerified"]
         )
@@ -194,6 +208,15 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIsNone(contract["trustedClawHubCli"]["commit"])
         self.assertFalse(contract["trustedClawHubCli"]["verified"])
+        caller = contract["formalWorkflows"]["callerBaseline"]
+        self.assertEqual(
+            caller["path"],
+            MODULE.EXPECTED_CALLER,
+        )
+        self.assertRegex(caller["commit"], r"^[0-9a-f]{40}$")
+        self.assertIn(caller["mode"], {"100644", "100755"})
+        self.assertRegex(caller["blobOid"], r"^[0-9a-f]{40}$")
+        self.assertRegex(caller["sha256"], r"^sha256:[0-9a-f]{64}$")
         launcher = contract["trustedControlExecution"]["launcherDraft"]
         self.assertEqual(
             launcher["path"],
@@ -613,9 +636,9 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
         self.assertFalse(result["deploymentReady"])
         self.assertTrue(result["errors"])
 
-    def test_observation_hold_is_bound_to_full_caller_digest(self):
+    def test_observation_hold_is_bound_to_pinned_caller_blob(self):
         contract = load_contract()
-        contract["formalWorkflows"]["callerSha256"] = (
+        contract["formalWorkflows"]["callerBaseline"]["sha256"] = (
             "sha256:" + "0" * 64
         )
 
@@ -626,7 +649,98 @@ class WorkflowIntegrationContractTests(unittest.TestCase):
             )
 
         self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["caller-baseline-anchor"])
         self.assertFalse(result["checks"]["observation-hold-intact"])
+
+    def test_caller_and_self_declared_digest_cannot_change_together(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, contract, _ = make_contract_repo(directory)
+            caller = root / contract["formalWorkflows"]["caller"]
+            caller.write_text(
+                caller.read_text(encoding="utf-8")
+                + "\n# unauthorized observation-window change\n",
+                encoding="utf-8",
+            )
+            contract["formalWorkflows"]["callerBaseline"]["sha256"] = (
+                MODULE.digest_bytes(caller.read_bytes())
+            )
+
+            result = MODULE.evaluate(
+                root,
+                write_contract(directory, contract),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["caller-baseline-anchor"])
+        self.assertFalse(result["checks"]["observation-hold-intact"])
+        self.assertFalse(
+            result["localEvidence"]["formalWorkflowBaselineIntact"]
+        )
+        self.assertNotIn("formalWorkflowWired", result["localEvidence"])
+
+    def test_worktree_caller_must_match_pinned_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, contract, _ = make_contract_repo(directory)
+            caller = root / contract["formalWorkflows"]["caller"]
+            caller.write_text(
+                caller.read_text(encoding="utf-8")
+                + "\n# uncommitted caller change\n",
+                encoding="utf-8",
+            )
+
+            result = MODULE.evaluate(
+                root,
+                write_contract(directory, contract),
+            )
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(result["checks"]["caller-baseline-anchor"])
+        self.assertFalse(result["checks"]["observation-hold-intact"])
+        self.assertFalse(
+            result["localEvidence"]["formalWorkflowBaselineIntact"]
+        )
+
+    def test_caller_worktree_links_are_rejected(self):
+        for link_type in ("symlink", "hardlink"):
+            with self.subTest(link_type=link_type), tempfile.TemporaryDirectory() as directory:
+                root, contract, _ = make_contract_repo(directory)
+                caller = root / contract["formalWorkflows"]["caller"]
+                replacement = root / f"{link_type}-caller.yml"
+                shutil.copy2(caller, replacement)
+                caller.unlink()
+                if link_type == "symlink":
+                    caller.symlink_to(replacement)
+                else:
+                    os.link(replacement, caller)
+
+                result = MODULE.evaluate(
+                    root,
+                    write_contract(directory, contract),
+                )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["checks"]["observation-hold-intact"])
+                self.assertFalse(
+                    result["localEvidence"]["formalWorkflowBaselineIntact"]
+                )
+
+    def test_caller_baseline_mode_and_blob_oid_are_bound(self):
+        for field, value in (
+            ("mode", "100755"),
+            ("blobOid", "0" * 40),
+        ):
+            with self.subTest(field=field):
+                contract = load_contract()
+                contract["formalWorkflows"]["callerBaseline"][field] = value
+                with tempfile.TemporaryDirectory() as directory:
+                    result = MODULE.evaluate(
+                        ROOT,
+                        write_contract(directory, contract),
+                    )
+
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["checks"]["caller-baseline-anchor"])
+                self.assertFalse(result["checks"]["observation-hold-intact"])
 
     def test_evidence_boundaries_cannot_be_downgraded(self):
         contract = load_contract()

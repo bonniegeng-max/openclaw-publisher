@@ -154,3 +154,8 @@ reviewer 审核：
 离线 checker 不解析 YAML，也不能证明 environment 的真实配置或 reviewer 身份；
 这些结论必须来自 GitHub API/受保护环境产生的外部证据，并在接线提交之外完成
 复核。缺少外部证据时，`deploymentReady` 必须保持 `false`。
+
+观察期冻结状态不能由 caller 当前文件与合同内可同步修改的裸摘要互相证明。
+合同必须记录 `callerBaseline` 的固定 commit、mode、blob OID 与 SHA-256；离线
+checker 同时核验该 Git 对象和当前工作树副本。任何 caller 变化都必须等到观察期
+结束后的 fresh review，不能通过同步更新合同摘要绕过。

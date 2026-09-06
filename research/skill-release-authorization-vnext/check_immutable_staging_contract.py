@@ -41,7 +41,7 @@ TOP_LEVEL_FIELDS = {
     "sourceAndVerification", "durabilityAndHandoff", "outcomes",
     "consumerBoundary", "executionBoundary", "evidenceBoundary",
 }
-BUILDER_BASELINE_REQUIRED = False
+BUILDER_BASELINE_REQUIRED = True
 BASELINE_FIELDS = {"path", "commit", "mode", "blobOid", "sha256"}
 DRAFT_FIELDS = {"path", "mode", "sha256"}
 EXPECTED_GUARD_INPUT = {

@@ -118,6 +118,32 @@ class ImmutableStagingBuilderTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertFalse(result["checks"]["builder-draft"])
 
+    def test_contract_auditor_requires_real_builder_baseline(self):
+        for label, replacement in (
+            ("missing", None),
+            (
+                "forged",
+                {
+                    "path": (
+                        "research/skill-release-authorization-vnext/"
+                        "immutable_staging_builder.py"
+                    ),
+                    "commit": "0" * 40,
+                    "mode": "100644",
+                    "blobOid": "0" * 40,
+                    "sha256": "sha256:" + "0" * 64,
+                },
+            ),
+        ):
+            contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+            contract["builderEvidence"]["baseline"] = replacement
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "contract.json"
+                path.write_text(json.dumps(contract), encoding="utf-8")
+                result = AUDITOR_MODULE.evaluate(ROOT, path)
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["checks"]["builder-baseline"])
+
     def test_complete_guard_schema_is_required(self):
         with tempfile.TemporaryDirectory() as directory:
             root, output, _, guard = make_fixture(Path(directory))

@@ -4,7 +4,13 @@
   "builder": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
   "auditor": "research/skill-release-authorization-vnext/check_immutable_staging_contract.py",
   "builderEvidence": {
-    "baseline": null,
+    "baseline": {
+      "path": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
+      "commit": "dfa2c9be6ac222c9b0bf7f274f3899cd6cd1002a",
+      "mode": "100644",
+      "blobOid": "83f259b5d47f9857b2bfac211870d0899aee7fe1",
+      "sha256": "sha256:9abc65607b5a6c93ee6738c5819f715372bef56c0d15881bfd0fbba5b5af735a"
+    },
     "draft": {
       "path": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
       "mode": "100644",

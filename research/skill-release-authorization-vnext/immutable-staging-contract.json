@@ -37,6 +37,7 @@
     "module": "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
     "contract": "research/skill-release-authorization-vnext/safe-publish-target-contract.json",
     "schemaVersion": 2,
+    "safeContractFullAuditRequired": true,
     "input": "complete-guard-result-json",
     "inputFileOwner": "current-user",
     "inputFileMode": "owner-only-no-group-or-world-bits",

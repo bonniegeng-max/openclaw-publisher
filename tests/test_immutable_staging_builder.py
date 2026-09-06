@@ -184,6 +184,24 @@ class ImmutableStagingBuilderTests(unittest.TestCase):
                 self.assertFalse(result["valid"])
                 self.assertFalse(result["checks"]["launcher-baseline"])
 
+    def test_contract_auditor_requires_complete_safe_contract_audit(self):
+        with mock.patch.object(
+            AUDITOR_MODULE.SAFE_CHECKER,
+            "evaluate",
+            return_value={
+                "valid": False,
+                "deploymentReady": False,
+                "contractStatus": "research-only-not-wired",
+            },
+        ):
+            result = AUDITOR_MODULE.evaluate(ROOT, CONTRACT)
+
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["checks"]["safe-contract-full-audit"])
+        self.assertTrue(
+            any("complete upstream audit" in error for error in result["errors"])
+        )
+
     def test_complete_guard_schema_is_required(self):
         with tempfile.TemporaryDirectory() as directory:
             root, output, _, guard = make_fixture(Path(directory))

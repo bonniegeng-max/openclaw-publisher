@@ -50,6 +50,7 @@ EXPECTED_GUARD_INPUT = {
     "module": SAFE_GUARD,
     "contract": SAFE_CONTRACT,
     "schemaVersion": 2,
+    "safeContractFullAuditRequired": True,
     "input": "complete-guard-result-json",
     "inputFileOwner": "current-user",
     "inputFileMode": "owner-only-no-group-or-world-bits",
@@ -397,6 +398,14 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         and safe_contract.get("formalWorkflowModified") is False
         and safe_contract.get("guard") == SAFE_GUARD,
         "safe guard contract is missing, incompatible, or no longer research-only",
+    )
+    safe_audit = SAFE_CHECKER.evaluate(root, root / SAFE_CONTRACT)
+    add(
+        "safe-contract-full-audit",
+        safe_audit.get("valid") is True
+        and safe_audit.get("deploymentReady") is False
+        and safe_audit.get("contractStatus") == STATUS,
+        "safe guard contract did not pass its complete upstream audit",
     )
     formal_valid = True
     formal = safe_contract.get("formalBaselines")

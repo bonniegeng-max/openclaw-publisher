@@ -2,8 +2,10 @@
 
 状态：`research-only-not-wired`
 
-`immutable_staging_builder.py` 是纯离线、未接线的研究原型。它不接收拆散的
-commit、Skill 路径或 package digest，而只消费 `safe_publish_target_guard.py`
+`immutable_staging_builder.py` 是纯离线、未接线的研究原型。它不再从工作树
+动态 import guard；模块加载时必须收到受信任 launcher 注入的 `GUARD` 快照和
+`_TRUSTED_GUARD_INJECTED` 标志，否则立即失败。它不接收拆散的 commit、Skill
+路径或 package digest，而只消费 `safe_publish_target_guard.py`
 输出的完整 schema v2 JSON。缺字段、多字段、重复 JSON key、非单目标结果、
 非 `valid` 结果、非空阻断原因、`authorized != false`、
 `mutationAllowed != false` 或字段间语义不一致都会 fail-closed。builder 还会从
@@ -21,9 +23,59 @@ guard JSON 文件必须由当前用户拥有、没有 group/world 权限位，�
 `artifactDigest`。除 `artifactDigest` 自身外，manifest 的所有安全声明均受该摘要
 保护；manifest 只是本地 artifact 证据，不是发布授权。
 
-机器合同的 `builderEvidence` 另行绑定 builder 源码本身。首阶段只记录工作树
-draft；提交推送后，第二阶段必须用远端可达提交的真实 mode、blob OID 与 SHA-256
-替换为强制 baseline，不能预先猜测 commit 或 blob。
+机器合同的 `builderEvidence` 与 `launcherEvidence` 另行绑定控制面源码本身。
+首阶段只记录工作树 draft；提交推送并从 GitHub 外部确认后，第二阶段必须用该
+提交的真实 mode、blob OID 与 SHA-256 替换为强制 baseline，不能预先猜测 commit
+或 blob。仓内本地 tracking ref 只能做一致性检查，不能单独证明 GitHub 远端状态。
+
+## 受信任 staging launcher
+
+`trusted_staging_launcher.py` 要求 candidate 与 control 是两个独立、无路径
+symlink、各自使用本地 `.git` 目录的 checkout。它只使用固定
+`/usr/bin/git`，要求 control checkout 的 HEAD 精确等于调用方提供的完整
+control commit，并从该同一 commit 读取 guard 与 builder 两个 blob；不会从
+candidate 或当前 control 工作树 import 代码。
+两个 checkout 的 origin 必须精确匹配
+`github.com/bonniegeng-max/openclaw-publisher`，禁止共享 Git/common
+directory、object alternates，以及对象库 symlink 与 hardlink；control commit
+必须可从本地 `origin/main` 到达，candidate HEAD 必须等于本地 `origin/main`。
+这些都是可由本地仓库所有者改写的一致性条件，不是远端真实性证据；正式调用者
+必须是受保护、固定完整 SHA 的 workflow，并从其可信上下文提供 control commit。
+两个 checkout 的 `.git` 与 objects identity 分别比较，任一共享都拒绝；对象库
+条目必须归当前用户所有、不可由 group/world 写入，目录 `stat` 与实际打开 FD 的
+inode 必须一致。
+
+launcher 用带 magic 和 64 位长度的内存 frame 分两次传递控制源码与规范请求
+JSON。第一个固定 Python `-I` 子进程只执行 guard；父进程严格验证完整 guard
+JSON、复核 candidate tree，并计算规范 `guardResultDigest`。第二个独立子进程才
+加载同一 control commit 的 builder 与 guard blob，通过 namespace 注入 guard
+module，并消费父进程冻结的 guard JSON。builder 顶层代码不能先于原始 guard
+决策执行；manifest 摘要不匹配父进程冻结值时拒绝。中间结果只走内存 frame，
+不落盘为可替换 JSON。两个 child 都使用仅含 locale、固定 PATH 和 Python 隔离
+开关的 allowlist 环境。
+
+launcher 对 child JSON、退出码、结果字段、manifest 字段、摘要和跨字段语义做
+严格验证。成功后，它从已验证 output parent FD 独立重新打开 artifact，要求根
+目录、package、manifest 与所有子目录/文件均为约定类型和 mode，文件集合、
+SHA-256、规范 manifest 字节及 `artifactDigest` 全部一致，并重新证明
+`candidate commit → skillPath → treeOid → path/mode/blobOid` 完整关系。
+candidate HEAD、本地 tracking ref 与 control sources 在 child 前后必须不变。
+child 从进程启动起限时 180 秒，stdin 非阻塞写入也包含在期限内；stdout/stderr
+合计限制 2 MiB。launcher 增量读取输出，达到上限或超时时终止整个子进程组。
+任何 stderr、超限或不一致均 fail-closed。
+
+异常后 launcher 不采信 child 自报的 `created`，而是从已验证 output parent FD
+探测父进程从冻结 guard 结果独立计算的规范内容寻址名称：目录不存在返回
+`absent`，目录存在但未通过完整复核返回 `present-unverified`，完整复核通过但
+launcher 整体因 child 输出或 tracking ref 等原因失败时返回
+`present-verified-snapshot`，无法安全解析名称或 parent 身份漂移时返回
+`unknown`。
+
+成功路径会在所有 Git/control 终态检查后再次完整验证 artifact，并只声明
+`present-verified-snapshot`。这不是稳定路径交接：同 UID 仍可在函数返回后改写
+父目录。正式消费者必须继承或重新打开同一已验证 FD 树，重复验证 manifest 与
+文件内容后直接消费，不能仅凭 `outputName` 信任路径。当前实现未提供 OS 级网络
+sandbox；源码 token 检查只作 lint，不能替代固定 Git blob 与行为故障注入证据。
 
 ## FD/no-follow 文件系统边界
 
@@ -72,8 +124,11 @@ python3 research/skill-release-authorization-vnext/check_immutable_staging_contr
 - `1`：合同有效，但仍不可部署；
 - `2`：合同、safe guard、正式 workflow 基线或实现边界不一致。
 
-builder CLI 仅接受 `--repo-root`、`--output-parent` 和 `--guard-result`。成功返回
-`0`，失败或 commit-uncertain 返回 `2`。它不读取目标 Skill 工作树，不访问网络、
+builder 的底层 CLI 仅接受 `--repo-root`、`--output-parent` 和
+`--guard-result`，但不能直接启动，必须由受信任 bootstrap 注入 guard。正式
+研究入口是 `trusted_staging_launcher.py`，且 launcher 自身也必须以 `python -I`
+启动。成功返回 `0`，失败或 commit-uncertain 返回 `2`。它不读取目标 Skill
+工作树，不访问网络、
 不接收凭据、不运行包代码、不调用 registry，也不修改正式 workflow。当前证据仅
 为 E0，不构成 E1-E4。
 

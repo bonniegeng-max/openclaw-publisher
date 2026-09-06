@@ -7,7 +7,6 @@ import argparse
 import ctypes
 import errno
 import hashlib
-import importlib.util
 import json
 import os
 import secrets
@@ -16,12 +15,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 
-RESEARCH = Path(__file__).resolve().parent
-GUARD_PATH = RESEARCH / "safe_publish_target_guard.py"
-SPEC = importlib.util.spec_from_file_location("safe_publish_target_guard", GUARD_PATH)
-GUARD = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-SPEC.loader.exec_module(GUARD)
+if (
+    globals().get("_TRUSTED_GUARD_INJECTED") is not True
+    or "GUARD" not in globals()
+):
+    raise RuntimeError(
+        "immutable staging builder requires an injected trusted guard snapshot"
+    )
 
 SCHEMA_VERSION = 2
 RESEARCH_STATUS = "research-only-not-wired"

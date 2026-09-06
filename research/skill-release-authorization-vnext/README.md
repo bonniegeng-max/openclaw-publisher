@@ -164,6 +164,39 @@ guard JSON 文件必须为当前用户所有且无 group/world 权限；提交�
 checkout HEAD 与仓库布局未漂移。结果只返回内容寻址 `outputName`，不暴露绝对
 输出路径。
 
+builder 不再从 control 工作树动态 import guard；缺少受信任的内存
+`GUARD` 注入会在模块加载时立即失败。新增研究入口
+`trusted_staging_launcher.py`，要求独立 control/candidate checkout 和完整
+control commit，只使用固定 `/usr/bin/git`，并从同一 control commit 读取 guard
+与 builder blob。launcher 先在独立 `-I` 子进程中只执行 guard；父进程严格验证
+完整结果、复核 candidate Git tree，并冻结 `guardResultDigest`，随后才启动第二个
+builder 子进程。builder bootstrap 从同一 control commit 的 guard blob 构造内存
+module 并注入 namespace，但只能消费父进程已经冻结的 guard JSON；manifest 必须
+重新绑定同一摘要。不生成可替换的源码或 guard-result 中间文件。child 环境为
+allowlist，不继承 token、Python 注入变量或任意 PATH。
+
+launcher 严格验证 child JSON、退出码、结果与 manifest 的完整 schema、字段关系
+和摘要；成功后从 output parent FD 独立重开 artifact，复核规范 manifest 字节、
+`artifactDigest`、目录/文件 mode、完整文件集合、每个 SHA-256，以及
+commit/tree/path/mode/blob 的 Git 关系。两个 checkout 必须配置预期 GitHub
+origin，并与各自本地 `origin/main` 保持一致；该检查只证明本地引用一致性，不能
+证明真实 GitHub 远端状态。正式信任必须由未来受保护、固定完整 SHA 的 workflow
+把 control commit 作为仓外可信输入。对象库禁止共享目录、alternates、symlink
+和 hardlink。candidate HEAD、tracking ref 与 control sources 在两个 child 前后
+必须一致。每个 child 有 180 秒全生命周期超时，stdin 写入也计时；stdout 与
+stderr 合计 2 MiB 增量上限，超时或超限时终止整个子进程组。异常后 launcher
+按父进程从冻结 guard 结果独立计算的内容寻址名称，在已验证 parent FD 下探测
+目标；即使 child 已完成 rename 但无法返回有效 JSON，也能区分 `absent`、
+`present-unverified`、`present-verified-snapshot` 与 `unknown`，不依赖 child
+自报的 `created`。成功路径在 Git/control 终态复核后再次完整验证 artifact，
+但该结果仍只是最终检查时的快照；同 UID 可改写父目录，正式消费者必须从同一
+已验证 FD 树重新验证并直接消费，不能信任随后重新解析的路径。
+
+源码与行为测试确认当前 control code 不发起网络调用，但 Python `-I` 和环境
+allowlist 不是 OS 级断网沙箱；机器合同明确记录 `osNetworkSandboxPresent:
+false`。合同审计器中的必需/禁止 token 仅作 lint，安全结论必须同时依赖固定 Git
+blob、行为测试和故障注入。
+
 最终交接仅用同一 parent FD 调用 macOS `renameatx_np(RENAME_EXCL)` 或 Linux
 `renameat2(RENAME_NOREPLACE)`。rename 前失败清理临时树；rename 后 parent
 `fsync` 失败返回 `commit-uncertain` 并保留目标。所有结果固定
@@ -177,6 +210,7 @@ rename 保持打开并在提交后复核；清理不完整时显式返回
 immutable-staging-contract.json
 check_immutable_staging_contract.py
 immutable-staging-builder.md
+trusted_staging_launcher.py
 ```
 
 该实现保持 `research-only-not-wired`，未修改正式 workflow、`skills/` 或

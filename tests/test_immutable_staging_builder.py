@@ -13,11 +13,21 @@ from unittest import mock
 ROOT = Path(__file__).parents[1]
 RESEARCH = ROOT / "research" / "skill-release-authorization-vnext"
 BUILDER = RESEARCH / "immutable_staging_builder.py"
+GUARD = RESEARCH / "safe_publish_target_guard.py"
 AUDITOR = RESEARCH / "check_immutable_staging_contract.py"
 CONTRACT = RESEARCH / "immutable-staging-contract.json"
 
+GUARD_SPEC = importlib.util.spec_from_file_location(
+    "safe_publish_target_guard_for_staging_test",
+    GUARD,
+)
+GUARD_MODULE = importlib.util.module_from_spec(GUARD_SPEC)
+assert GUARD_SPEC.loader is not None
+GUARD_SPEC.loader.exec_module(GUARD_MODULE)
 SPEC = importlib.util.spec_from_file_location("immutable_staging_builder", BUILDER)
 MODULE = importlib.util.module_from_spec(SPEC)
+MODULE.GUARD = GUARD_MODULE
+MODULE._TRUSTED_GUARD_INJECTED = True
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
 AUDITOR_SPEC = importlib.util.spec_from_file_location(
@@ -104,6 +114,10 @@ class ImmutableStagingBuilderTests(unittest.TestCase):
         self.assertTrue(result["checks"]["builder-forbidden-surface"])
         self.assertTrue(result["checks"]["builder-draft"])
         self.assertTrue(result["checks"]["builder-baseline"])
+        self.assertTrue(result["checks"]["launcher-draft"])
+        self.assertTrue(result["checks"]["launcher-baseline"])
+        self.assertTrue(result["checks"]["launcher-required-primitives"])
+        self.assertTrue(result["checks"]["launcher-forbidden-surface"])
 
     def test_contract_auditor_rejects_builder_draft_drift(self):
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
@@ -603,16 +617,15 @@ class ImmutableStagingBuilderTests(unittest.TestCase):
         self.assertNotIn("--commit", source)
         self.assertNotIn("--skill-path", source)
         self.assertNotIn("--package-digest", source)
+        self.assertNotIn("importlib", source)
+        self.assertNotIn("GUARD_PATH", source)
         completed = subprocess.run(
             [sys.executable, str(BUILDER)],
             check=False, capture_output=True, text=True,
         )
-        result = json.loads(completed.stdout)
-        self.assertEqual(completed.returncode, 2)
-        self.assertFalse(result["valid"])
-        self.assertEqual(result["status"], "failed")
-        self.assertFalse(result["authorizationGranted"])
-        self.assertEqual(completed.stderr, "")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("injected trusted guard snapshot", completed.stderr)
 
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory).resolve()
@@ -620,9 +633,33 @@ class ImmutableStagingBuilderTests(unittest.TestCase):
             guard_path = workspace / "guard-result.json"
             guard_path.write_text(json.dumps(guard), encoding="utf-8")
             guard_path.chmod(0o600)
+            bootstrap = """
+import pathlib
+import sys
+import types
+guard_path, builder_path = sys.argv[1:3]
+guard = types.ModuleType("_trusted_guard_test")
+guard.__file__ = guard_path
+guard.__package__ = None
+exec(compile(pathlib.Path(guard_path).read_bytes(), guard_path, "exec"), guard.__dict__)
+source = pathlib.Path(builder_path).read_bytes()
+sys.argv = [builder_path, *sys.argv[3:]]
+namespace = {
+    "__name__": "__main__",
+    "__file__": builder_path,
+    "__package__": None,
+    "GUARD": guard,
+    "_TRUSTED_GUARD_INJECTED": True,
+}
+exec(compile(source, builder_path, "exec"), namespace)
+""".strip()
             completed = subprocess.run(
                 [
                     sys.executable,
+                    "-I",
+                    "-c",
+                    bootstrap,
+                    str(GUARD),
                     str(BUILDER),
                     "--repo-root",
                     str(root),

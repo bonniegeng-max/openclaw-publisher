@@ -27,6 +27,7 @@ WORKFLOW = SAFE_CHECKER.WORKFLOW
 SCHEMA_VERSION = 2
 STATUS = "research-only-not-wired"
 BUILDER = "research/skill-release-authorization-vnext/immutable_staging_builder.py"
+LAUNCHER = "research/skill-release-authorization-vnext/trusted_staging_launcher.py"
 AUDITOR = (
     "research/skill-release-authorization-vnext/"
     "check_immutable_staging_contract.py"
@@ -36,9 +37,10 @@ SAFE_CONTRACT = (
     "research/skill-release-authorization-vnext/safe-publish-target-contract.json"
 )
 TOP_LEVEL_FIELDS = {
-    "schemaVersion", "status", "builder", "auditor", "formalWorkflowModified",
-    "builderEvidence", "guardInput", "twoStageAnchoring", "filesystemBoundary",
-    "sourceAndVerification", "durabilityAndHandoff", "outcomes",
+    "schemaVersion", "status", "builder", "launcher", "auditor",
+    "formalWorkflowModified", "builderEvidence", "launcherEvidence", "guardInput",
+    "twoStageAnchoring", "filesystemBoundary", "sourceAndVerification",
+    "durabilityAndHandoff", "outcomes",
     "consumerBoundary", "executionBoundary", "evidenceBoundary",
 }
 BUILDER_BASELINE_REQUIRED = True
@@ -143,16 +145,63 @@ EXPECTED_OUTCOMES = {
     "outputIdentifier": "content-addressed-name-only",
     "absoluteOutputPathReturned": False,
     "structuredResultRequired": True,
+    "launcherFailureArtifactState": "probe-actual-parent-entry",
+    "postChildVerificationFailureArtifactState": "probe-before-report",
+    "successfulArtifactState": "present-verified-snapshot",
 }
 EXPECTED_CONSUMER = {
     "currentFormalPublisherConsumesWorktree": True,
     "formalWiringBlocked": True,
     "futurePublisherMustConsumeVerifiedArtifact": True,
     "futurePublisherMustRevalidateManifest": True,
+    "futurePublisherMustConsumeSameVerifiedFdTree": True,
     "worktreePublishAfterStaging": "reject",
 }
 EXPECTED_EXECUTION = {
-    "networkAllowed": False,
+    "controlAndCandidateCheckouts": "independent-local-git-directories",
+    "expectedRepository": "github.com/bonniegeng-max/openclaw-publisher",
+    "remoteTrackingRef": "refs/remotes/origin/main",
+    "localTrackingRefConsistencyOnly": True,
+    "remoteAuthenticityClaimed": False,
+    "controlCommitMustBeLocallyReachable": True,
+    "candidateHeadMustEqualLocalTrackingMain": True,
+    "formalTrustedControlCommitSource": "fixed-sha-protected-workflow-input",
+    "sharedGitDirectoryAllowed": False,
+    "objectAlternatesAllowed": False,
+    "objectStoreSymlinksAllowed": False,
+    "objectStoreHardlinksAllowed": False,
+    "objectStoreOwner": "current-user",
+    "objectStoreGroupOrWorldWritable": False,
+    "objectDirectoryEntryIdentityRevalidation": True,
+    "trustedGitEntry": "/usr/bin/git",
+    "controlSources": [SAFE_GUARD, BUILDER],
+    "controlSourcesFromSameCommit": True,
+    "sourceTransport": "length-prefixed-in-memory-frame",
+    "builderGuardInjection": "bootstrap-module-namespace",
+    "guardAndBuilderSeparateProcesses": True,
+    "frozenGuardDigestCheckedByParent": True,
+    "pythonIsolatedMode": True,
+    "childEnvironment": "allowlist-only",
+    "strictChildResultValidation": True,
+    "strictManifestValidation": True,
+    "independentArtifactVerification": True,
+    "candidateTreePathBindingRequired": True,
+    "controlBlobSizeCheckedBeforeRead": True,
+    "artifactBlobSizeCheckedBeforeRead": True,
+    "gitCommandTimeoutSeconds": 30,
+    "maximumCombinedGitOutputBytes": 8388608,
+    "gitOutputLimitEnforcement": "incremental-before-process-exit",
+    "childTimeoutSeconds": 180,
+    "maximumChildOutputBytes": 2097152,
+    "childOutputLimitScope": "combined-stdout-and-stderr",
+    "childOutputLimitEnforcement": "incremental-before-process-exit",
+    "stdinWriteIncludedInTimeout": True,
+    "childProcessGroupTermination": True,
+    "childTerminationConfirmationTimeoutSeconds": 5,
+    "networkCallsPresent": False,
+    "osNetworkSandboxPresent": False,
+    "staticTokenChecksAreSecurityProof": False,
+    "behavioralFaultInjectionRequired": True,
     "credentialsAccepted": False,
     "packageRuntimeAllowed": False,
     "registryMutationAllowed": False,
@@ -218,10 +267,12 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
     add(
         "research-files",
         contract.get("builder") == BUILDER
+        and contract.get("launcher") == LAUNCHER
         and contract.get("auditor") == AUDITOR
         and regular_research_file(root, BUILDER)
+        and regular_research_file(root, LAUNCHER)
         and regular_research_file(root, AUDITOR),
-        "builder and auditor must remain regular mode-0644 research files",
+        "builder, launcher, and auditor must remain regular mode-0644 research files",
     )
     evidence = contract.get("builderEvidence")
     evidence_shape = (
@@ -270,6 +321,53 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         "builder-baseline",
         evidence_shape and baseline_valid,
         "builder baseline is missing or does not match its pinned Git blob",
+    )
+    launcher_evidence = contract.get("launcherEvidence")
+    launcher_evidence_shape = (
+        isinstance(launcher_evidence, dict)
+        and set(launcher_evidence) == {"baseline", "draft"}
+    )
+    launcher_draft_valid = False
+    launcher_baseline_valid = False
+    if launcher_evidence_shape:
+        launcher_draft = launcher_evidence["draft"]
+        try:
+            launcher_draft_valid = (
+                isinstance(launcher_draft, dict)
+                and set(launcher_draft) == DRAFT_FIELDS
+                and launcher_draft
+                == WORKFLOW.working_file_evidence(
+                    root, LAUNCHER, "trusted staging launcher draft"
+                )
+            )
+        except ValueError as error:
+            errors.append(str(error))
+        launcher_baseline = launcher_evidence["baseline"]
+        if launcher_baseline is None:
+            launcher_baseline_valid = True
+        else:
+            try:
+                launcher_baseline_valid = (
+                    isinstance(launcher_baseline, dict)
+                    and set(launcher_baseline) == BASELINE_FIELDS
+                    and SAFE_CHECKER.check_baseline(
+                        root,
+                        launcher_baseline,
+                        LAUNCHER,
+                        require_worktree=False,
+                    )
+                )
+            except ValueError as error:
+                errors.append(str(error))
+    add(
+        "launcher-draft",
+        launcher_evidence_shape and launcher_draft_valid,
+        "trusted staging launcher draft does not match the worktree source",
+    )
+    add(
+        "launcher-baseline",
+        launcher_evidence_shape and launcher_baseline_valid,
+        "trusted staging launcher baseline is malformed",
     )
     add("formal-workflows-unmodified",
         contract.get("formalWorkflowModified") is False,
@@ -352,6 +450,50 @@ def evaluate(repo_root: Path, contract_path: Path) -> dict[str, Any]:
             {"shutil", "tempfile", "requests", "urllib", "socket"}
         ),
         "builder imports a forbidden filesystem or network module")
+
+    try:
+        launcher_source = (root / LAUNCHER).read_text(encoding="utf-8")
+        launcher_tree = ast.parse(launcher_source)
+    except (OSError, UnicodeError, SyntaxError) as error:
+        launcher_source = ""
+        launcher_tree = ast.Module(body=[], type_ignores=[])
+        errors.append(f"launcher source cannot be parsed: {error}")
+    launcher_required = (
+        'TRUSTED_GIT_ENTRY = Path("/usr/bin/git")',
+        "CONTROL_FILES", "FRAME_MAGIC", "GUARD_BOOTSTRAP", "BUILDER_BOOTSTRAP",
+        '"-I"', "child_environment", "snapshot_control",
+        "validate_guard_result", "validate_child_result", "validate_manifest",
+        "verify_artifact", "require_tracking_ref_consistency",
+        "require_guard_tree_binding", "require_manifest_tree_binding",
+        "run_bounded_child", "start_new_session=True", "os.killpg",
+        "deadline = time.monotonic() + timeout_seconds",
+        "total_output > maximum_output_bytes", "MAX_GIT_OUTPUT_BYTES",
+        "selectors.EVENT_WRITE",
+        "metadata.st_nlink != 1", "probe_artifact_state",
+        "CHILD_REAP_TIMEOUT_SECONDS", "opened.st_ino",
+        '"formalWorkflowWired": False',
+    )
+    launcher_forbidden = (
+        "requests", "urllib", "socket.", "shell=True", "clawhub ",
+        "importlib", "PYTHONPATH", "CLAWHUB_TOKEN",
+    )
+    add(
+        "launcher-required-primitives",
+        all(token in launcher_source for token in launcher_required),
+        "launcher omits fixed Git, framing, isolation, validation, or limit primitives",
+    )
+    add(
+        "launcher-forbidden-surface",
+        all(token not in launcher_source for token in launcher_forbidden),
+        "launcher contains forbidden import, secret, network, or publish surface",
+    )
+    add(
+        "launcher-import-boundary",
+        imported_modules(launcher_tree).isdisjoint(
+            {"requests", "urllib", "socket", "importlib"}
+        ),
+        "launcher imports a forbidden dynamic-loading or network module",
+    )
 
     return {
         "valid": not errors,

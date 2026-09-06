@@ -2,6 +2,7 @@
   "schemaVersion": 2,
   "status": "research-only-not-wired",
   "builder": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
+  "launcher": "research/skill-release-authorization-vnext/trusted_staging_launcher.py",
   "auditor": "research/skill-release-authorization-vnext/check_immutable_staging_contract.py",
   "builderEvidence": {
     "baseline": {
@@ -14,7 +15,15 @@
     "draft": {
       "path": "research/skill-release-authorization-vnext/immutable_staging_builder.py",
       "mode": "100644",
-      "sha256": "sha256:9abc65607b5a6c93ee6738c5819f715372bef56c0d15881bfd0fbba5b5af735a"
+      "sha256": "sha256:669e78c484bdff09dbfc02a9275e7eb574e759311c667b4d369cd904ec9574c8"
+    }
+  },
+  "launcherEvidence": {
+    "baseline": null,
+    "draft": {
+      "path": "research/skill-release-authorization-vnext/trusted_staging_launcher.py",
+      "mode": "100644",
+      "sha256": "sha256:a988a2ceaddd2497eeb7358625f9eba680b0e42fddfea6a7dd23e7c70d8af672"
     }
   },
   "formalWorkflowModified": false,
@@ -127,17 +136,67 @@
     "authorizationGrantedAlwaysFalse": true,
     "outputIdentifier": "content-addressed-name-only",
     "absoluteOutputPathReturned": false,
-    "structuredResultRequired": true
+    "structuredResultRequired": true,
+    "launcherFailureArtifactState": "probe-actual-parent-entry",
+    "postChildVerificationFailureArtifactState": "probe-before-report",
+    "successfulArtifactState": "present-verified-snapshot"
   },
   "consumerBoundary": {
     "currentFormalPublisherConsumesWorktree": true,
     "formalWiringBlocked": true,
     "futurePublisherMustConsumeVerifiedArtifact": true,
     "futurePublisherMustRevalidateManifest": true,
+    "futurePublisherMustConsumeSameVerifiedFdTree": true,
     "worktreePublishAfterStaging": "reject"
   },
   "executionBoundary": {
-    "networkAllowed": false,
+    "controlAndCandidateCheckouts": "independent-local-git-directories",
+    "expectedRepository": "github.com/bonniegeng-max/openclaw-publisher",
+    "remoteTrackingRef": "refs/remotes/origin/main",
+    "localTrackingRefConsistencyOnly": true,
+    "remoteAuthenticityClaimed": false,
+    "controlCommitMustBeLocallyReachable": true,
+    "candidateHeadMustEqualLocalTrackingMain": true,
+    "formalTrustedControlCommitSource": "fixed-sha-protected-workflow-input",
+    "sharedGitDirectoryAllowed": false,
+    "objectAlternatesAllowed": false,
+    "objectStoreSymlinksAllowed": false,
+    "objectStoreHardlinksAllowed": false,
+    "objectStoreOwner": "current-user",
+    "objectStoreGroupOrWorldWritable": false,
+    "objectDirectoryEntryIdentityRevalidation": true,
+    "trustedGitEntry": "/usr/bin/git",
+    "controlSources": [
+      "research/skill-release-authorization-vnext/safe_publish_target_guard.py",
+      "research/skill-release-authorization-vnext/immutable_staging_builder.py"
+    ],
+    "controlSourcesFromSameCommit": true,
+    "sourceTransport": "length-prefixed-in-memory-frame",
+    "builderGuardInjection": "bootstrap-module-namespace",
+    "guardAndBuilderSeparateProcesses": true,
+    "frozenGuardDigestCheckedByParent": true,
+    "pythonIsolatedMode": true,
+    "childEnvironment": "allowlist-only",
+    "strictChildResultValidation": true,
+    "strictManifestValidation": true,
+    "independentArtifactVerification": true,
+    "candidateTreePathBindingRequired": true,
+    "controlBlobSizeCheckedBeforeRead": true,
+    "artifactBlobSizeCheckedBeforeRead": true,
+    "gitCommandTimeoutSeconds": 30,
+    "maximumCombinedGitOutputBytes": 8388608,
+    "gitOutputLimitEnforcement": "incremental-before-process-exit",
+    "childTimeoutSeconds": 180,
+    "maximumChildOutputBytes": 2097152,
+    "childOutputLimitScope": "combined-stdout-and-stderr",
+    "childOutputLimitEnforcement": "incremental-before-process-exit",
+    "stdinWriteIncludedInTimeout": true,
+    "childProcessGroupTermination": true,
+    "childTerminationConfirmationTimeoutSeconds": 5,
+    "networkCallsPresent": false,
+    "osNetworkSandboxPresent": false,
+    "staticTokenChecksAreSecurityProof": false,
+    "behavioralFaultInjectionRequired": true,
     "credentialsAccepted": false,
     "packageRuntimeAllowed": false,
     "registryMutationAllowed": false,

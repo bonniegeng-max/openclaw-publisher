@@ -1077,9 +1077,13 @@ class TrustedArtifactPublishConsumerTests(unittest.TestCase):
             contract["artifactBoundary"]["postCheckPreventsPriorMutation"]
         )
         self.assertFalse(contract["evidenceBoundary"]["consumerDeploymentAllowed"])
-        self.assertIsNone(contract["consumerEvidence"]["baseline"])
-        self.assertIsNone(contract["auditorEvidence"]["baseline"])
-        self.assertFalse(contract["twoStageAnchoring"]["localIntegrityPinned"])
+        self.assertIsNotNone(contract["consumerEvidence"]["baseline"])
+        self.assertIsNotNone(contract["auditorEvidence"]["baseline"])
+        self.assertTrue(contract["twoStageAnchoring"]["localIntegrityPinned"])
+        self.assertEqual(contract["evidenceBoundary"]["currentLevel"], "E0")
+        self.assertTrue(contract["evidenceBoundary"]["consumerBaselinePinned"])
+        self.assertTrue(contract["evidenceBoundary"]["auditorBaselinePinned"])
+        self.assertFalse(contract["twoStageAnchoring"]["remoteCommitVerified"])
         self.assertTrue(
             contract["twoStageAnchoring"][
                 "deploymentRemainsBlockedAfterStageTwo"
